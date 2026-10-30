@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NBA Parlay Builder — Confidence Picks</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+  :root{
+    --page-bg:#eef1f6; --surface:#fff; --grid:#e3e7ee; --grid-strong:#ccd3de;
+    --header-bg:linear-gradient(135deg,#1d428a 0%,#0f2757 100%); --header-fg:#fff;
+    --colhead-bg:#f2f4f8; --accent:#1d428a; --accent-soft:rgba(29,66,138,.09);
+    --live:#c8102e; --live-soft:rgba(200,16,46,.09); --win:#0a7d3f; --win-soft:rgba(10,125,63,.10);
+    --text:#14213b; --sub:#64708a; --radius:12px; --radius-sm:7px;
+    --shadow:0 1px 2px rgba(0,20,60,.05),0 8px 24px -12px rgba(0,20,60,.22);
+    --font-ui:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Arial,sans-serif;
+    --font-mono:'Consolas','SF Mono','Roboto Mono',monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--page-bg);font-family:var(--font-ui);color:var(--text);}
+  .titlebar{background:var(--header-bg);color:var(--header-fg);padding:16px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;box-shadow:0 2px 10px rgba(0,20,60,.3);border-bottom:3px solid var(--live);}
+  .titlebar h1{font-size:16px;margin:0;font-weight:700;}
+  .titlebar .sub{font-size:12px;color:#b4c4e6;margin-top:3px;}
+  .navlinks{display:flex;gap:16px;flex-wrap:wrap;}
+  .back-link{color:#d5e1ff;text-decoration:none;font-size:13px;font-weight:600;}
+  .back-link:hover{color:#fff;}
+  .page-wrap{max-width:1100px;margin:22px auto;padding:0 18px 40px;}
+  .disclaimer{background:var(--live-soft);border:1px solid rgba(200,16,46,.25);color:var(--live);border-radius:var(--radius-sm);padding:10px 14px;font-size:12.5px;margin-bottom:20px;line-height:1.5;}
+  .card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);border:1px solid var(--grid-strong);padding:20px;margin-bottom:20px;}
+  .card h2{font-size:14px;margin:0 0 14px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.4px;}
+  .status-line{font-size:13px;color:var(--sub);margin-bottom:14px;}
+  .controls{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start;}
+  .control-group{display:flex;flex-direction:column;gap:6px;}
+  .control-group label{font-size:12px;font-weight:600;color:var(--sub);text-transform:uppercase;letter-spacing:.3px;}
+  select,button{font-family:var(--font-ui);font-size:13px;padding:8px 12px;border:1px solid var(--grid-strong);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);}
+  .btn-primary{background:var(--live);color:#fff;border:none;font-weight:700;cursor:pointer;padding:10px 20px;}
+  .btn-primary:hover{background:#a50d26;}
+  .btn-primary:disabled{background:#c9ccd4;cursor:not-allowed;}
+  .btn-secondary{background:var(--surface);color:var(--accent);border:1px solid var(--accent);font-weight:700;cursor:pointer;padding:8px 16px;font-size:12.5px;}
+  .btn-secondary:hover{background:var(--accent-soft);}
+  .btn-secondary:disabled{color:var(--sub);border-color:var(--grid-strong);cursor:not-allowed;}
+  .game-picker{display:none;margin-top:14px;border-top:1px solid var(--grid);padding-top:14px;}
+  .game-picker.open{display:block;}
+  .game-picker .hint{font-size:12px;color:var(--sub);margin-bottom:10px;}
+  .game-checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;}
+  .game-check{display:flex;align-items:center;gap:8px;font-size:13px;padding:7px 10px;border:1px solid var(--grid);border-radius:var(--radius-sm);cursor:pointer;background:var(--colhead-bg);}
+  .game-check input{margin:0;}
+  .game-check.picked{border-color:var(--accent);background:var(--accent-soft);}
+  .pool-list{display:flex;flex-direction:column;gap:6px;}
+  .pool-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px;border:1px solid var(--grid);border-radius:var(--radius-sm);font-size:13px;flex-wrap:wrap;}
+  .pool-teams{font-weight:700;min-width:140px;}
+  .score-note{font-weight:500;font-size:11px;color:var(--sub);font-family:var(--font-mono);margin-left:4px;}
+  .status-badge{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;padding:2px 6px;border-radius:99px;margin-left:6px;vertical-align:middle;}
+  .status-badge.live{background:var(--live-soft);color:var(--live);}
+  .status-badge.pre{background:var(--accent-soft);color:var(--accent);}
+  .pool-info{font-size:11.5px;color:var(--sub);flex:1;min-width:220px;line-height:1.4;}
+  .pool-pick{color:var(--win);font-weight:700;font-size:12.5px;min-width:44px;}
+  .pool-conf{font-family:var(--font-mono);font-size:12px;color:var(--sub);min-width:44px;text-align:right;}
+  .conf-bar{height:5px;border-radius:3px;background:var(--grid);width:80px;overflow:hidden;}
+  .conf-bar-fill{height:100%;background:var(--win);}
+  .fav{color:var(--accent);font-weight:700;}
+  .parlay-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;}
+  .parlay-sections{display:flex;flex-direction:column;gap:24px;}
+  .parlay-size-heading{font-size:13px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.4px;margin:0 0 12px;}
+  .parlay-card{border:1px solid var(--grid-strong);border-radius:var(--radius);padding:16px;background:var(--colhead-bg);}
+  .parlay-card.best{border-color:var(--win);background:var(--win-soft);}
+  .parlay-rank{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--sub);margin-bottom:8px;}
+  .parlay-card.best .parlay-rank{color:var(--win);}
+  .parlay-legs{list-style:none;margin:0 0 12px;padding:0;display:flex;flex-direction:column;gap:6px;}
+  .parlay-legs li{font-size:13px;display:flex;justify-content:space-between;gap:8px;}
+  .parlay-legs .leg-teams{color:var(--sub);}
+  .parlay-legs .leg-pick{font-weight:700;}
+  .parlay-combined{display:flex;justify-content:space-between;align-items:center;padding-top:10px;border-top:1px dashed var(--grid-strong);font-size:13px;}
+  .parlay-combined .value{font-family:var(--font-mono);font-weight:700;font-size:16px;color:var(--accent);}
+  .parlay-card.best .parlay-combined .value{color:var(--win);}
+  .empty-state{color:var(--sub);font-size:13px;padding:20px;text-align:center;}
+  .footer-note{font-size:11px;color:#9aa3b5;text-align:right;margin-top:10px;}
+</style>
+</head>
+<body>
+<div class="titlebar">
+  <div>
+    <h1>NBA Parlay Builder</h1>
+    <div class="sub" id="rangeSub">Loading today's slate and season data…</div>
+  </div>
+  <div class="navlinks">
+    <a class="back-link" href="nba-live.html">← Live sheet</a>
+    <a class="back-link" href="nba-records.html">Schedule &amp; Records →</a>
+    <a class="back-link" href="../history.html?league=NBA">History →</a>
+  </div>
+</div>
+
+<div class="page-wrap">
+  <div class="disclaimer">
+    <strong>What this is:</strong> a confidence-ranked pick generator built from each team's season record, head-to-head results this season, a small home-court edge, and (when ESPN shows one) the sportsbook favorite. Confidence is an estimated chance of winning, not a payout, and not betting advice. Entertainment only.
+  </div>
+
+  <div class="card">
+    <h2>Build parlays</h2>
+    <div class="status-line" id="poolStatus">Loading…</div>
+    <div class="controls">
+      <div class="control-group">
+        <label>Pick basis</label>
+        <select id="basis">
+          <option value="blend" selected>Blend: records + sportsbook favorite</option>
+          <option value="records">Records &amp; head-to-head only</option>
+          <option value="book">Sportsbook favorite first</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Game pool</label>
+        <select id="poolMode">
+          <option value="all">All of today's games</option>
+          <option value="custom">Choose specific games</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Fewest legs</label>
+        <select id="minLegs">
+          <option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Most legs</label>
+        <select id="maxLegs">
+          <option value="4">4</option><option value="5">5</option><option value="6" selected>6</option><option value="8">8</option><option value="99">All games in pool</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Parlays per leg count</label>
+        <select id="parlayCount">
+          <option value="1">1</option><option value="3" selected>3</option><option value="5">5</option><option value="8">8</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>&nbsp;</label>
+        <button class="btn-primary" id="generateBtn" disabled>Generate parlays</button>
+      </div>
+    </div>
+    <div class="game-picker" id="gamePicker">
+      <div class="hint">Tick the games to build from (at least the fewest legs you chose).</div>
+      <div class="game-checks" id="gameChecks"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Today's games — picks &amp; confidence</h2>
+    <div class="pool-list" id="poolList"><div class="empty-state">Loading…</div></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <h2 style="margin:0;">Parlays</h2>
+      <button class="btn-secondary" id="downloadPdfBtn" disabled>Download PDF</button>
+    </div>
+    <div class="parlay-sections" id="parlayResults"><div class="empty-state">Press “Generate parlays” to build combinations.</div></div>
+  </div>
+  <div class="footer-note" id="versionLine"></div>
+</div>
+<div id="printArea" style="position:absolute;left:-9999px;top:0;width:720px;background:#fff;padding:24px;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="../cloud.js"></script>
+<script>
+const ABBR3 = { NY:"NYK", GS:"GSW", NO:"NOP", SA:"SAS", UTAH:"UTA", WSH:"WAS" };
+const abbr3 = a => (a && ABBR3[a]) || a;
+const SEASON_START = '2026-10-01';
+const SCOREBOARD_URL = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard';
+const CACHE_KEY = 'nba_records_season_cache_v3'; // shared with the Schedule & Records page, so it loads fast after that page has run
+const PROXIES = [
+  url => url,
+  url => "https://corsproxy.io/?url=" + encodeURIComponent(url),
+  url => "https://api.allorigins.win/raw?url=" + encodeURIComponent(url),
+  url => "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(url),
+  url => "https://cors.x2u.in/" + url,
+  url => "https://thingproxy.freeboard.io/fetch/" + url
+];
+
+let SEASON_DATA = [];
+let STANDINGS = {};
+let LAST10 = {};
+let POOL = [];
+let TODAY_GAMES = [];
+let LAST_PARLAYS = [];
+
+const HOME_EDGE = 0.035;     // NBA home teams win a bit more than half their games
+const PRIOR_GAMES = 10;      // shrinks early-season records toward .500 (counts as 5 wins + 5 losses)
+const SPREAD_SD = 12;        // typical NBA margin spread, used to turn a point spread into a win chance
+
+function todayStr(){ return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date()); }
+// NBA "game day": a late game that ends after midnight Eastern still belongs to the previous day.
+function sportsDay(){ return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(Date.now() - 4 * 3600 * 1000)); }
+function ymdCompact(s){ return s.replaceAll('-', ''); }
+function addDays(dateStr, n){
+  const d = new Date(dateStr + 'T00:00:00'); d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function todayLongStr(){
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).format(new Date());
+}
+
+// ---------- season data (same day-by-day cached approach as the Records page) ----------
+function loadCache(){ try{ return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); }catch(e){ return {}; } }
+function saveCache(c){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify(c)); }catch(e){} }
+
+async function fetchDateGames(dateStr){
+  const target = `${SCOREBOARD_URL}?dates=${ymdCompact(dateStr)}`;
+  for(const wrap of PROXIES){
+    try{
+      const res = await fetch(wrap(target), { cache: 'no-store' });
+      if(!res.ok) continue;
+      const json = await res.json();
+      const rows = [];
+      (json.events || []).forEach(ev => {
+        const comp = ev.competitions && ev.competitions[0];
+        if(!comp) return;
+        const state = comp.status && comp.status.type && comp.status.type.state;
+        if(state !== 'post') return;
+        const away = (comp.competitors || []).find(c => c.homeAway === 'away');
+        const home = (comp.competitors || []).find(c => c.homeAway === 'home');
+        if(!away || !home) return;
+        const awayAbbr = abbr3(away.team.abbreviation), homeAbbr = abbr3(home.team.abbreviation);
+        const awayScore = Number(away.score), homeScore = Number(home.score);
+        if(isNaN(awayScore) || isNaN(homeScore)) return;
+        const winner = awayScore > homeScore ? awayAbbr : (homeScore > awayScore ? homeAbbr : null);
+        if(!winner) return;
+        const st = ev.season && ev.season.type;
+        rows.push({ date: dateStr, preseason: st === 1, playoff: st === 3, eventTime: ev.date,
+          away: awayAbbr, home: homeAbbr, winner, awayScore, homeScore, record: '', h2h: '', h2h_winner: '—' });
+      });
+      return rows;
+    }catch(e){}
+  }
+  return null;
+}
+
+async function fetchFullSeason(){
+  const cache = loadCache(), today = todayStr(), results = [];
+  let cursor = SEASON_START, fetched = 0;
+  while(cursor < today){
+    if(cache[cursor] !== undefined){ results.push(...cache[cursor]); }
+    else {
+      const day = await fetchDateGames(cursor);
+      if(day !== null){ cache[cursor] = day; results.push(...day); fetched++; if(fetched % 10 === 0) saveCache(cache); }
+      document.getElementById('rangeSub').textContent = `Loading season… ${cursor} (${results.length} games so far)`;
+    }
+    cursor = addDays(cursor, 1);
+  }
+  saveCache(cache);
+  results.sort((a, b) => a.date.localeCompare(b.date) || (a.eventTime || '').localeCompare(b.eventTime || ''));
+  return results;
+}
+
+// regular-season games only
+const countable = r => !r.preseason && !r.playoff && r.winner;
+
+function computeStandings(){
+  const rec = {};
+  SEASON_DATA.filter(countable).forEach(r => {
+    const loser = r.winner === r.away ? r.home : r.away;
+    (rec[r.winner] = rec[r.winner] || { w:0, l:0 }).w++;
+    (rec[loser] = rec[loser] || { w:0, l:0 }).l++;
+  });
+  return rec;
+}
+function computeLast10(){
+  const by = {};
+  SEASON_DATA.filter(countable).forEach(r => [r.away, r.home].forEach(t => (by[t] = by[t] || []).push(r)));
+  const out = {};
+  Object.keys(by).forEach(t => {
+    const g = by[t].slice().sort((a,b) => a.date.localeCompare(b.date)).slice(-10);
+    let w = 0, l = 0; g.forEach(x => x.winner === t ? w++ : l++);
+    out[t] = { w, l };
+  });
+  return out;
+}
+function computeH2H(a, b){
+  let wa = 0, wb = 0;
+  SEASON_DATA.filter(countable).forEach(r => {
+    if(!((r.away === a && r.home === b) || (r.away === b && r.home === a))) return;
+    if(r.winner === a) wa++; else if(r.winner === b) wb++;
+  });
+  return { wa, wb, total: wa + wb };
+}
+
+// ---------- today's slate (with ESPN's favorite / spread when posted) ----------
+function erf(x){
+  const s = x < 0 ? -1 : 1; x = Math.abs(x);
+  const t = 1 / (1 + 0.3275911 * x);
+  const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return s * y;
+}
+const normCdf = x => 0.5 * (1 + erf(x / Math.SQRT2));
+function mlProb(ml){ ml = Number(ml); if(isNaN(ml) || ml === 0) return null; return ml < 0 ? (-ml) / (-ml + 100) : 100 / (ml + 100); }
+
+// Returns { favorite, spread, homeProb, text } from ESPN's odds block, or null when no line is posted.
+function parseOdds(odds, away, home){
+  if(!odds) return null;
+  let homeProb = null;
+  const hMl = (odds.homeTeamOdds && odds.homeTeamOdds.moneyLine) != null ? odds.homeTeamOdds.moneyLine
+    : (odds.moneyline && odds.moneyline.home && odds.moneyline.home.close && odds.moneyline.home.close.odds);
+  const aMl = (odds.awayTeamOdds && odds.awayTeamOdds.moneyLine) != null ? odds.awayTeamOdds.moneyLine
+    : (odds.moneyline && odds.moneyline.away && odds.moneyline.away.close && odds.moneyline.away.close.odds);
+  const ph = mlProb(hMl), pa = mlProb(aMl);
+  if(ph != null && pa != null) homeProb = ph / (ph + pa);   // remove the sportsbook's margin
+  let favorite = null, spread = null;
+  const m = String(odds.details || '').match(/^([A-Za-z]{2,4})\s+([+-]?\d+(?:\.\d+)?)/);
+  if(m){ favorite = abbr3(m[1].toUpperCase()); spread = Math.abs(parseFloat(m[2])); }
+  else if(/even|pick/i.test(String(odds.details || ''))){ spread = 0; }
+  if(!favorite){
+    if(odds.homeTeamOdds && odds.homeTeamOdds.favorite) favorite = home;
+    else if(odds.awayTeamOdds && odds.awayTeamOdds.favorite) favorite = away;
+  }
+  if(homeProb == null && spread != null){
+    const pFav = normCdf(spread / SPREAD_SD);
+    if(spread === 0) homeProb = 0.5 + HOME_EDGE;
+    else if(favorite === home) homeProb = pFav;
+    else if(favorite === away) homeProb = 1 - pFav;
+  }
+  if(homeProb == null && !favorite) return null;
+  if(!favorite && homeProb != null) favorite = homeProb >= 0.5 ? home : away;
+  const text = spread != null && spread > 0 ? `${favorite} -${spread}` : (favorite ? `${favorite} favored` : 'Pick’em');
+  return { favorite, spread, homeProb, text };
+}
+
+async function fetchTodayGames(){
+  const day = sportsDay();
+  const target = `${SCOREBOARD_URL}?dates=${ymdCompact(day)}`;
+  for(const wrap of PROXIES){
+    try{
+      const res = await fetch(wrap(target + `&_=${Date.now()}`), { cache: 'no-store' });
+      if(!res.ok) continue;
+      const json = await res.json();
+      const games = [];
+      (json.events || []).forEach(ev => {
+        const comp = ev.competitions && ev.competitions[0];
+        if(!comp) return;
+        const st = ev.season && ev.season.type;
+        if(st === 1) return; // skip preseason
+        const away = (comp.competitors || []).find(c => c.homeAway === 'away');
+        const home = (comp.competitors || []).find(c => c.homeAway === 'home');
+        if(!away || !home) return;
+        const state = comp.status && comp.status.type && comp.status.type.state;
+        const a = abbr3(away.team.abbreviation), h = abbr3(home.team.abbreviation);
+        let as = Number(away.score), hs = Number(home.score);
+        if(state === 'pre'){ as = null; hs = null; } else { if(isNaN(as)) as = 0; if(isNaN(hs)) hs = 0; }
+        games.push({ away: a, home: h, state, statusText: (comp.status && comp.status.type && comp.status.type.shortDetail) || '',
+          awayScore: as, homeScore: hs, odds: parseOdds(comp.odds && comp.odds[0], a, h), playoff: st === 3 });
+      });
+      return games;
+    }catch(e){}
+  }
+  return null;
+}
+
+// ---------- picking ----------
+const shrink = (w, l) => (w + PRIOR_GAMES / 2) / (w + l + PRIOR_GAMES);
+function recordsHomeProb(away, home){
+  const ra = STANDINGS[away] || { w:0, l:0 }, rh = STANDINGS[home] || { w:0, l:0 };
+  let pa = shrink(ra.w, ra.l), ph = shrink(rh.w, rh.l);
+  const h2h = computeH2H(away, home);
+  if(h2h.total > 0){
+    const ha = (h2h.wa + 1) / (h2h.total + 2), hh = (h2h.wb + 1) / (h2h.total + 2);
+    pa = pa * 0.7 + ha * 0.3; ph = ph * 0.7 + hh * 0.3;
+  }
+  // log5: chance the home team beats the away team, then the home-court edge
+  const base = (ph * (1 - pa)) / (ph * (1 - pa) + pa * (1 - ph));
+  return Math.min(0.95, Math.max(0.05, base + HOME_EDGE));
+}
+function buildGame(g, basis){
+  const recProb = recordsHomeProb(g.away, g.home);
+  const bookProb = g.odds && g.odds.homeProb != null ? g.odds.homeProb : null;
+  let homeProb = recProb, source = 'records';
+  if(bookProb != null){
+    if(basis === 'blend'){ homeProb = 0.5 * recProb + 0.5 * bookProb; source = 'blend'; }
+    else if(basis === 'book'){ homeProb = bookProb; source = 'book'; }
+  }
+  const pick = homeProb >= 0.5 ? g.home : g.away;
+  const confidence = Math.max(homeProb, 1 - homeProb);
+  const ra = STANDINGS[g.away] || { w:0, l:0 }, rh = STANDINGS[g.home] || { w:0, l:0 };
+  const h2h = computeH2H(g.away, g.home);
+  let h2hText = 'No meetings yet';
+  if(h2h.total > 0) h2hText = h2h.wa === h2h.wb ? `Tied ${h2h.wa}-${h2h.wb}` : (h2h.wa > h2h.wb ? `${g.away} leads ${h2h.wa}-${h2h.wb}` : `${g.home} leads ${h2h.wb}-${h2h.wa}`);
+  const la = LAST10[g.away] || { w:0, l:0 }, lh = LAST10[g.home] || { w:0, l:0 };
+  return { ...g, pick, confidence, source, h2hText, recA: `${ra.w}-${ra.l}`, recB: `${rh.w}-${rh.l}`,
+    l10Text: `${g.away} (${la.w}-${la.l}) / ${g.home} (${lh.w}-${lh.l})` };
+}
+function rebuildPool(){
+  const basis = document.getElementById('basis').value;
+  POOL = TODAY_GAMES.filter(g => g.state !== 'post').map(g => buildGame(g, basis));
+  renderPool(); renderGameChecks(); updateGenerateEnabled();
+  const withLine = TODAY_GAMES.filter(g => g.odds).length;
+  document.getElementById('poolStatus').textContent = TODAY_GAMES.length === 0
+    ? 'No NBA games on today’s slate.'
+    : `${POOL.length} live or upcoming game${POOL.length === 1 ? '' : 's'} (${TODAY_GAMES.length} on the slate) · sportsbook line shown for ${withLine}. ESPN only posts lines before tip-off.`;
+}
+
+function renderPool(){
+  const list = document.getElementById('poolList');
+  if(POOL.length === 0){ list.innerHTML = '<div class="empty-state">No live or upcoming games right now — everything on today’s slate is already final.</div>'; return; }
+  list.innerHTML = POOL.map(g => {
+    const pct = Math.round(g.confidence * 100);
+    const badge = g.state === 'in' ? `<span class="status-badge live">${g.statusText || 'Live'}</span>` : `<span class="status-badge pre">${g.statusText || 'Scheduled'}</span>`;
+    const score = g.state === 'in' ? `<span class="score-note">(${g.away} ${g.awayScore}-${g.homeScore} ${g.home})</span>` : '';
+    const fav = g.odds ? `<span class="fav">Fav: ${g.odds.text}</span> · ` : '';
+    return `<div class="pool-row">
+      <div class="pool-teams">${g.away} @ ${g.home}${score} ${badge}</div>
+      <div class="pool-info">${fav}${g.h2hText} · ${g.away} (${g.recA}) / ${g.home} (${g.recB}) · L10: ${g.l10Text}</div>
+      <div class="pool-pick">${g.pick}</div>
+      <div class="conf-bar"><div class="conf-bar-fill" style="width:${pct}%"></div></div>
+      <div class="pool-conf">${pct}%</div>
+    </div>`;
+  }).join('');
+}
+function renderGameChecks(){
+  const wrap = document.getElementById('gameChecks');
+  wrap.innerHTML = POOL.map((g, i) => `<label class="game-check"><input type="checkbox" value="${i}"><span>${g.away} @ ${g.home} <span style="color:var(--sub);font-size:11px;">(pick: ${g.pick})</span></span></label>`).join('');
+  wrap.querySelectorAll('.game-check').forEach(el => el.addEventListener('click', e => {
+    if(e.target.tagName !== 'INPUT'){ const cb = el.querySelector('input'); cb.checked = !cb.checked; }
+    el.classList.toggle('picked', el.querySelector('input').checked);
+    updateGenerateEnabled();
+  }));
+}
+const selectedIdx = () => Array.from(document.querySelectorAll('#gameChecks input:checked')).map(e => parseInt(e.value));
+const minLegs = () => parseInt(document.getElementById('minLegs').value);
+function updateGenerateEnabled(){
+  const mode = document.getElementById('poolMode').value;
+  document.getElementById('generateBtn').disabled = (mode === 'all' ? POOL.length : selectedIdx().length) < minLegs();
+}
+
+// ---------- parlays ----------
+function binom(n, k){ if(k < 0 || k > n) return 0; k = Math.min(k, n - k); let r = 1; for(let i = 0; i < k; i++) r = r * (n - i) / (i + 1); return Math.round(r); }
+function* combos(n, k){
+  const idx = Array.from({ length: k }, (_, i) => i);
+  while(true){
+    yield idx.slice();
+    let i = k - 1;
+    while(i >= 0 && idx[i] === n - k + i) i--;
+    if(i < 0) return;
+    idx[i]++;
+    for(let j = i + 1; j < k; j++) idx[j] = idx[j - 1] + 1;
+  }
+}
+function generateParlays(){
+  const mode = document.getElementById('poolMode').value;
+  const count = parseInt(document.getElementById('parlayCount').value);
+  const lo = minLegs(), hi = parseInt(document.getElementById('maxLegs').value);
+  const base = mode === 'all' ? POOL.map((_, i) => i) : selectedIdx();
+  if(base.length < lo){ document.getElementById('parlayResults').innerHTML = `<div class="empty-state">Need at least ${lo} games in the pool.</div>`; document.getElementById('downloadPdfBtn').disabled = true; return; }
+  const maxLegs = Math.min(base.length, Math.max(lo, hi));
+  const bySize = {};
+  for(let size = lo; size <= maxLegs; size++){
+    if(binom(base.length, size) > 200000) continue;
+    let list = [];
+    for(const idx of combos(base.length, size)){
+      const legs = idx.map(i => POOL[base[i]]);
+      list.push({ legs, combined: legs.reduce((p, g) => p * g.confidence, 1) });
+    }
+    list.sort((a, b) => b.combined - a.combined);
+    bySize[size] = list.slice(0, count);
+  }
+  LAST_PARLAYS = Object.keys(bySize).sort((a, b) => a - b).flatMap(s => bySize[s]);
+  renderParlays(bySize);
+  document.getElementById('downloadPdfBtn').disabled = LAST_PARLAYS.length === 0;
+}
+function renderParlays(bySize){
+  const wrap = document.getElementById('parlayResults');
+  const sizes = Object.keys(bySize).sort((a, b) => a - b);
+  if(!sizes.length){ wrap.innerHTML = '<div class="empty-state">Couldn’t build parlays from this pool.</div>'; return; }
+  wrap.innerHTML = sizes.map(size => `<div>
+    <h3 class="parlay-size-heading">${size}-Leg Parlays</h3>
+    <div class="parlay-grid">${bySize[size].map((p, i) => `
+      <div class="parlay-card ${i === 0 ? 'best' : ''}">
+        <div class="parlay-rank">${i === 0 ? 'Highest confidence' : `Parlay ${i + 1}`} · ${size} legs</div>
+        <ul class="parlay-legs">${p.legs.map(g => `<li><span class="leg-teams">${g.away} @ ${g.home}</span><span class="leg-pick">${g.pick}</span></li>`).join('')}</ul>
+        <div class="parlay-combined"><span>Combined confidence</span><span class="value">${(p.combined * 100).toFixed(1)}%</span></div>
+      </div>`).join('')}</div></div>`).join('');
+}
+
+function downloadPdf(){
+  if(!LAST_PARLAYS.length || !window.html2pdf) return;
+  const rows = LAST_PARLAYS.map((p, i) => `
+    <div style="margin-bottom:14px;padding:12px 14px;border:1px solid #d8dde6;border-radius:8px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64708a;margin-bottom:6px;">Parlay ${i + 1} · ${p.legs.length} legs</div>
+      ${p.legs.map(g => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;"><span style="color:#64708a;">${g.away} @ ${g.home}</span><b>${g.pick}</b></div>`).join('')}
+      <div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:1px dashed #d8dde6;font-size:13px;"><span>Combined confidence</span><b>${(p.combined * 100).toFixed(1)}%</b></div>
+    </div>`).join('');
+  const area = document.getElementById('printArea');
+  area.innerHTML = `<div style="border-bottom:3px solid #c8102e;padding-bottom:12px;margin-bottom:16px;"><div style="font-size:20px;font-weight:800;color:#1d428a;">NBA Parlay Builder</div><div style="font-size:13px;color:#64708a;margin-top:4px;">${todayLongStr()}</div></div>
+    <div style="font-size:11px;color:#64708a;margin-bottom:16px;">Confidence-ranked picks from season records, head-to-head, home court and (when posted) the sportsbook favorite. Not betting advice. Entertainment only.</div>${rows}`;
+  html2pdf().set({ margin: 10, filename: `nba-parlays-${sportsDay()}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' } }).from(area).save();
+}
+
+async function init(){
+  SEASON_DATA = await fetchFullSeason();
+  STANDINGS = computeStandings();
+  LAST10 = computeLast10();
+  const counted = SEASON_DATA.filter(countable).length;
+  document.getElementById('rangeSub').textContent = `${counted} regular-season games so far · live from ESPN`;
+  const games = await fetchTodayGames();
+  if(games === null){ document.getElementById('poolList').innerHTML = '<div class="empty-state">Couldn’t reach ESPN for today’s games. Try again in a moment.</div>'; document.getElementById('poolStatus').textContent = 'Live fetch failed.'; return; }
+  TODAY_GAMES = games;
+  rebuildPool();
+  // refresh scores/lines every 60 seconds while the page is open (parlays you generated stay as they are)
+  setInterval(async () => { const g = await fetchTodayGames(); if(g){ TODAY_GAMES = g; rebuildPool(); } }, 60000);
+}
+
+document.getElementById('basis').addEventListener('change', rebuildPool);
+document.getElementById('minLegs').addEventListener('change', updateGenerateEnabled);
+document.getElementById('poolMode').addEventListener('change', () => {
+  document.getElementById('gamePicker').classList.toggle('open', document.getElementById('poolMode').value === 'custom');
+  updateGenerateEnabled();
+});
+document.getElementById('generateBtn').addEventListener('click', generateParlays);
+document.getElementById('downloadPdfBtn').addEventListener('click', downloadPdf);
+(function(){
+  const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  const d = new Date(document.lastModified);
+  document.getElementById('versionLine').textContent = `version: ${d.getFullYear()}_${months[d.getMonth()]}_${String(d.getDate()).padStart(2,'0')} ${d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
+})();
+init();
+</script>
+</body>
+</html>
