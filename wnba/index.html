@@ -645,7 +645,10 @@ function ensureGameBlock(gid){
   eg(gid, "K5").addEventListener("change", ()=>{
     const st = gameState[gid];
     const manualEl = eg(gid, "K5manual");
-    if(manualEl) manualEl.value = eg(gid, "K5").value; // keep the display in sync with the pick
+    if(manualEl){
+      manualEl.value = eg(gid, "K5").value; // keep the display in sync with the pick
+      saveField(gid, "K5manual", manualEl.value); // ...and save it, so other devices get the same number
+    }
     if(st) st.k5Source = "select";
     recalcGame(gid);
   });
