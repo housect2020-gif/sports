@@ -48,7 +48,7 @@
 <div class="page">
   <div class="controls">
     <label>League
-      <select id="league"><option>NBA</option><option>WNBA</option><option>MLB</option><option>NFL</option></select>
+      <select id="league"><option>NBA</option><option>WNBA</option><option>NFL</option><option>MLB</option></select>
     </label>
     <label>From <input type="date" id="from"></label>
     <label>To <input type="date" id="to"></label>
@@ -183,7 +183,7 @@ $("league").addEventListener("change", load);
 $("csv").addEventListener("click", exportCsv);
 window.addEventListener("cloud-keys", () => { if(ROWS.length) render(); });
 const START = new URLSearchParams(location.search).get("league");
-if(START && ["NBA","WNBA","MLB","NFL"].includes(START.toUpperCase())) $("league").value = START.toUpperCase();
+if(START && ["NBA","WNBA","NFL","MLB"].includes(START.toUpperCase())) $("league").value = START.toUpperCase();
 const LIVE = Object.fromEntries(Object.entries(window.SITES).map(([k, v]) => [k, v.base + v.pages[0][1]]));
 function setLive(){ $("liveLink").href = LIVE[$("league").value] || "./"; }
 $("league").addEventListener("change", setLive); setLive();

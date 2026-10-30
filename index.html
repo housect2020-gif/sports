@@ -19,10 +19,12 @@
   header p{margin:6px 0 0;color:var(--sub);font-size:15px;}
   .grid{max-width:1000px;margin:18px auto 40px;padding:0 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;}
-  .card .top{padding:18px 18px 14px;color:#fff;}
+  .card .top{padding:18px 18px 14px;color:#fff;position:relative;}
+  .card .icon{position:absolute;right:14px;top:12px;width:58px;height:58px;opacity:.95;}
   .card.NBA .top{background:var(--nba);} .card.WNBA .top{background:var(--wnba);}
   .card.MLB .top{background:var(--mlb);} .card.NFL .top{background:var(--nfl);}
   .card h2{margin:0;font-size:24px;letter-spacing:.5px;}
+  .card .tag{display:inline-block;margin-left:8px;font-size:11px;font-weight:600;background:rgba(255,255,255,.22);border-radius:99px;padding:2px 8px;vertical-align:middle;letter-spacing:.2px;}
   .card .main{display:inline-block;margin-top:10px;background:#fff;color:#111;text-decoration:none;font-weight:700;font-size:14px;padding:8px 14px;border-radius:8px;}
   .links{padding:12px 18px 16px;display:flex;flex-wrap:wrap;gap:8px 14px;}
   .links a{color:var(--accent);text-decoration:none;font-size:14px;font-weight:600;}
@@ -34,23 +36,32 @@
 <body>
 <header>
   <h1>Sports Hub</h1>
-  <p>Pick a sport to open its live sheet. Your history is saved in the cloud, so it follows you across devices.</p>
+  <p>Pick a sport to open its live sheet. Your entries and history are saved in the cloud, so they follow you across devices.</p>
 </header>
 <div class="grid" id="grid"></div>
 <footer>
-  One sign-in covers every sport. You'll be asked to sign in the first time you open a sheet, and new accounts need approval.
+  One sign-in covers every sport, and new accounts need approval before they can see anything.
   For entertainment only. Not betting advice.
 </footer>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="cloud.js"></script>
 <script src="sites.js"></script>
 <script>
 const grid = document.getElementById("grid");
+// Original line icons (not league logos) — swap for your own images later.
+const ICONS = {
+  NBA: `<svg class="icon" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><circle cx="32" cy="32" r="26"/><path d="M32 6v52M6 32h52"/><path d="M13 13c10 8 10 30 0 38M51 13c-10 8-10 30 0 38"/></svg>`,
+  WNBA: `<svg class="icon" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><circle cx="32" cy="32" r="26"/><path d="M14 14c14 10 22 10 36 0M14 50c14-10 22-10 36 0"/><path d="M32 6v52"/></svg>`,
+  NFL: `<svg class="icon" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><ellipse cx="32" cy="32" rx="28" ry="17" transform="rotate(-35 32 32)"/><g transform="rotate(-35 32 32)"><path d="M20 32h24M25 27v10M32 27v10M39 27v10"/><path d="M10 26v12M54 26v12"/></g></svg>`,
+  MLB: `<svg class="icon" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><circle cx="32" cy="32" r="26"/><path d="M17 12c8 8 8 32 0 40M47 12c-8 8-8 32 0 40"/><path d="M19 20l5 2M19 28l6 1M19 36l6-1M19 44l5-2M45 20l-5 2M45 28l-6 1M45 36l-6-1M45 44l-5-2" stroke-width="2"/></svg>`
+};
 Object.entries(window.SITES).forEach(([key, s]) => {
   const card = document.createElement("div");
   card.className = "card " + key;
   const first = s.pages[0];
   const rest = s.pages.slice(1).map(p => `<a href="${s.base}${p[1]}">${p[0]}</a>`).join("");
   card.innerHTML = `
-    <div class="top"><h2>${s.name}</h2><a class="main" href="${s.base}${first[1]}">Open ${first[0].toLowerCase()} →</a></div>
+    <div class="top">${ICONS[key] || ""}<h2>${s.name}${key === "MLB" ? '<span class="tag">Off-season</span>' : ""}</h2><a class="main" href="${s.base}${first[1]}">Open ${first[0].toLowerCase()} →</a></div>
     <div class="links">${rest}<a class="hist" href="history.html?league=${key}">History</a></div>`;
   grid.appendChild(card);
 });
