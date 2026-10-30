@@ -1,0 +1,1674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WNBA Live Scores — Score Sheet</title>
+<style>
+  :root{
+    --grid-line:#d0d3d8;
+    --header-bg:#eef1f4;
+    --header-fg:#3c4043;
+    --cell-bg:#ffffff;
+    --yellow:#fff3b0;
+    --pink:#f8c9c9;
+    --green:#c8e9d1;
+    --accent:#1a5cff;
+    --live-dot:#e0473a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    padding:24px;
+    background:#f4f5f7;
+    font-family:"Segoe UI", Calibri, Arial, sans-serif;
+    color:#202124;
+  }
+  .wrap{max-width:1180px;margin:0 auto;}
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:12px;
+    margin-bottom:14px;
+  }
+  h1{
+    font-size:19px;
+    font-weight:600;
+    margin:0;
+    letter-spacing:.2px;
+  }
+  .status{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:13px;
+    color:#5f6368;
+    background:#fff;
+    border:1px solid var(--grid-line);
+    border-radius:20px;
+    padding:6px 12px;
+  }
+  .dot{
+    width:8px;height:8px;border-radius:50%;
+    background:#9aa0a6;
+  }
+  .dot.live{
+    background:var(--live-dot);
+    animation:pulse 1.4s infinite;
+  }
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(224,71,58,.5);}
+    70%{box-shadow:0 0 0 6px rgba(224,71,58,0);}
+    100%{box-shadow:0 0 0 0 rgba(224,71,58,0);}
+  }
+  .banner{
+    font-size:12.5px;
+    color:#8a5300;
+    background:#fff7e0;
+    border:1px solid #f0dca0;
+    border-radius:6px;
+    padding:8px 12px;
+    margin-bottom:14px;
+    display:none;
+  }
+  .sheet-scroll{
+    overflow-x:auto;
+    border:1px solid var(--grid-line);
+    border-radius:6px;
+    background:#fff;
+  }
+  table{
+    border-collapse:collapse;
+    width:100%;
+    table-layout:fixed;
+    font-size:11.5px;
+  }
+  th,td{
+    border:1px solid var(--grid-line);
+    padding:4px 3px;
+    text-align:center;
+    white-space:normal;
+    word-break:break-word;
+    overflow-wrap:break-word;
+  }
+  .colhead th{
+    background:var(--header-bg);
+    color:#5f6368;
+    font-weight:500;
+    font-size:10px;
+    height:18px;
+    padding:2px;
+  }
+  .corner{background:var(--header-bg);}
+  .rownum{
+    background:var(--header-bg);
+    color:#5f6368;
+    font-weight:500;
+    width:14px;
+    white-space:nowrap;
+    padding-left:2px;
+    padding-right:2px;
+  }
+  .hdr-row th{
+    background:#f7f8fa;
+    font-weight:600;
+    color:#3c4043;
+    font-size:10.5px;
+  }
+  td.team{
+    text-align:center;
+    font-weight:600;
+    background:#fafbfc;
+    font-size:10px;
+    line-height:1.2;
+  }
+  td.label{
+    text-align:center;
+    font-size:10px;
+    color:#5f6368;
+    font-style:italic;
+    background:#fafbfc;
+  }
+  td.fit-line{
+    white-space:nowrap !important;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    font-size:9px;
+    padding-left:1px;
+    padding-right:1px;
+  }
+  td.formula, td.avg{white-space:nowrap;}
+  td.formula{font-weight:600;}
+  td.avg{background:var(--yellow);}
+  td.pred-total{background:var(--pink) !important;font-weight:700;}
+  td.grand-total{background:var(--green) !important;font-weight:700;}
+  td.blank{background:#fbfbfc;}
+  .cell-label{
+    display:block;
+    font-size:8px;
+    font-weight:400;
+    letter-spacing:0.03em;
+    color:#9aa0a6;
+    text-transform:uppercase;
+    line-height:1.3;
+  }
+  td.k4-cell{
+    font-size:9.5px;
+    line-height:1.25;
+  }
+  .light-yellow{color:#d4b700 !important;}
+  select.light-yellow{color:#d4b700;}
+  .season-badge{display:inline-block; margin-right:8px; padding:0 6px; border-radius:3px; background:#e8eaed; color:#5f6368; font-size:10px; font-weight:700; letter-spacing:.4px; vertical-align:middle;}
+  td.matchup-label{
+    text-align:center;
+    font-weight:600;
+    font-size:11px;
+    background:#f0f3ff;
+    color:#26324a;
+  }
+  tr.spacer-row td{
+    background:#f4f5f7;
+    border-left:none;
+    border-right:none;
+    height:10px;
+    padding:2px;
+  }
+  input[type=number]{
+    width:100%;
+    max-width:38px;
+    border:1px solid #c7cad0;
+    border-radius:3px;
+    text-align:center !important;
+    font-size:11px;
+    padding:2px 1px;
+    font-family:inherit;
+    -moz-appearance:textfield;
+    -webkit-appearance:none;
+    appearance:none;
+    margin:0 auto;
+    display:block;
+  }
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button{
+    -webkit-appearance:none;
+    margin:0;
+  }
+  input[type=number]:disabled{
+    border:none;
+    background:transparent;
+    color:#202124;
+    font-weight:600;
+    text-align:center !important;
+    opacity:1;
+    -webkit-text-fill-color:#202124;
+  }
+  select{
+    border:1px solid #c7cad0;
+    border-radius:3px;
+    font-size:10.5px;
+    padding:2px;
+    font-family:inherit;
+    width:100%;
+    max-width:52px;
+    margin:0 auto;
+    display:block;
+    text-align:center !important;
+    text-align-last:center;
+  }
+  .k5-cell{
+    vertical-align:middle;
+  }
+  .k5-inner{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:3px;
+  }
+  .odds-5min{
+    margin-top:3px;
+    font-size:8px;
+    font-weight:400;
+    letter-spacing:0.03em;
+    color:#9aa0a6;
+    text-transform:uppercase;
+    line-height:1.3;
+    text-align:center;
+  }
+  .odds-5min .odds-5min-value{
+    display:block;
+    font-size:10px;
+    font-weight:700;
+    letter-spacing:0;
+    text-transform:none;
+    color:#3c4043;
+  }
+  .k5-manual{
+    display:inline-block !important;
+    width:44px !important;
+    max-width:44px;
+    flex:0 0 auto;
+    margin:0 !important;
+    border:1px solid #c7cad0;
+    border-radius:3px;
+    text-align:center;
+    font-size:11px;
+    padding:2px 1px;
+    font-family:inherit;
+  }
+  .k5-select{
+    display:inline-block !important;
+    width:18px !important;
+    max-width:18px;
+    flex:0 0 auto;
+    margin:0 !important;
+    border:1px solid #c7cad0;
+    border-radius:3px;
+    background:#f4f5f7;
+    font-size:9px;
+    padding:2px 0px 2px 2px;
+    font-family:inherit;
+    text-indent:-9999px; /* pushes the closed box's own selected-value text fully off-screen */
+    overflow:hidden;
+  }
+  .k5-select option{
+    color:#202124; /* the popup list itself still needs to be readable */
+    text-indent:0;
+  }
+  .k5-suffix{
+    flex:0 0 auto;
+    font-size:11px;
+    font-weight:600;
+    color:#3c4043;
+  }
+  .footer{
+    margin-top:12px;
+    font-size:11.5px;
+    color:#9aa0a6;
+    display:flex;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:6px;
+  }
+  button.refresh{
+    border:1px solid var(--grid-line);
+    background:#fff;
+    border-radius:6px;
+    padding:6px 12px;
+    font-size:12.5px;
+    cursor:pointer;
+    color:#3c4043;
+  }
+  button.refresh:hover{background:#f1f3f4;}
+  #reportDate{
+    font-weight:600;
+    color:#3c4043;
+  }
+
+  @media print{
+    /* Buttons, the debug fetch-attempt log, and the "click to refresh"
+       hint don't belong in a static export — everything else (title,
+       status badge, table, footer text incl. the date) stays exactly
+       as shown on screen. */
+    .no-print{ display:none !important; }
+    body{ background:#fff; margin:0; }
+    .sheet-scroll{ border:none; overflow:visible; }
+    table{ font-size:10px; }
+    tr{ break-inside:avoid; page-break-inside:avoid; }
+    thead, .colhead, .hdr-row{ break-after:avoid; }
+    @page{ size:landscape; margin:12mm; }
+
+    /* Chrome (and most browsers) strip background colors by default when
+       printing/saving to PDF, even though everything else renders as
+       shown — this is what was washing out the yellow Avg Q1-3 cells,
+       pink T=35min cells, green Total cells, and header shading. This
+       forces the browser to keep them, matching the on-screen colors
+       exactly rather than an approximation. */
+    *{
+      -webkit-print-color-adjust:exact !important;
+      print-color-adjust:exact !important;
+      color-adjust:exact !important;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <h1>WNBA Live Scores — Score Sheet</h1>
+    <span style="display:inline-flex;gap:14px;flex-wrap:wrap;"><a href="wnba-records.html" style="color:#1a5cff; text-decoration:none; font-size:13px; font-weight:600;">Schedule &amp; Records →</a><a href="../history.html?league=WNBA" style="color:#1a5cff; text-decoration:none; font-size:13px; font-weight:600;">History →</a></span>
+    <div class="status" id="statusPill">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">Connecting…</span>
+    </div>
+  </div>
+
+  <div class="banner" id="banner"></div>
+
+  <div class="sheet-scroll">
+    <table>
+      <colgroup id="mainColgroup">
+        <col style="width:1.5%"> <!-- rownum -->
+        <col style="width:18%">  <!-- Team -->
+        <col style="width:4%">   <!-- Q1 -->
+        <col style="width:4%">   <!-- Q2 -->
+        <col style="width:4%">   <!-- Q3 -->
+        <col style="width:5%">   <!-- Avg Q1-3 -->
+        <col style="width:4.5%"> <!-- Q4=5 min -->
+        <col style="width:5.5%"> <!-- T=35 min -->
+        <col style="width:4%">   <!-- Q4 -->
+        <col style="width:6%">   <!-- Total -->
+        <col style="width:6%">   <!-- O/U -->
+        <col style="width:15%">  <!-- Odds -->
+        <col style="width:10%">  <!-- Diff. -->
+        <col style="width:10.5%"><!-- Suggested Pick -->
+      </colgroup>
+      <tr class="colhead" id="colheadRow">
+        <th class="corner"></th>
+        <th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th>
+        <th>G</th><th>H</th><th>I</th><th>J</th><th>K</th><th>L</th><th>M</th>
+      </tr>
+      <tr class="hdr-row" id="hdrRow">
+        <td class="rownum">1</td>
+        <td>Team</td><td>Q1</td><td>Q2</td><td>Q3</td><td>Avg Q1-3</td>
+        <td>Q4=5 min</td><td>T=35 min</td><td>Q4</td><td>Total</td>
+        <td>O/U</td><td>Odds</td><td>Diff.</td><td>Suggested Pick</td>
+      </tr>
+      <tbody id="gamesBody"></tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    <span id="clockInfo">Auto-refreshing every 5s</span>
+    <span>
+      <button class="refresh no-print" id="refreshBtn">Refresh now</button>
+      <button class="refresh no-print" id="downloadPdfBtn">Download PDF</button>
+      &nbsp;Last updated: <span id="lastUpdated">—</span>
+      &nbsp;&nbsp;<span id="reportDate"></span>
+    </span>
+  </div>
+  <div id="versionLine" style="text-align:right;font-size:10.5px;color:#9aa0a6;margin-top:2px;">version: loading…</div>
+  <div id="debugLog" class="no-print" style="margin-top:6px;font-size:10.5px;color:#9aa0a6;word-break:break-all;"></div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="../cloud.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const eg = (gid, suffix) => document.getElementById(`${gid}-${suffix}`);
+
+let liveMode = false;
+let failCount = 0;
+let gameState = {};       // gid -> { q4Snapshot: {away, home} }
+let rowCounter = { n: 2 }; // continues across every game block, spreadsheet-style
+let extraOTCount = 0;      // number of overtime columns currently rendered (Q5, Q6, ...)
+
+function rebuildTableHeader(){
+  let colHtml = `
+    <col style="width:1.5%">
+    <col style="width:18%">
+    <col style="width:4%">
+    <col style="width:4%">
+    <col style="width:4%">
+    <col style="width:5%">
+    <col style="width:4.5%">
+    <col style="width:5.5%">
+    <col style="width:4%">
+  `;
+  for(let n=1;n<=extraOTCount;n++){ colHtml += `<col style="width:4%">`; }
+  colHtml += `
+    <col style="width:6%">
+    <col style="width:6%">
+    <col style="width:15%">
+    <col style="width:10%">
+    <col style="width:10.5%">
+  `;
+  $("mainColgroup").innerHTML = colHtml;
+
+  const totalDataCols = 13 + extraOTCount; // A..M plus any OT columns inserted after H
+  let colheadHtml = `<th class="corner"></th>`;
+  for(let i=0;i<totalDataCols;i++){
+    colheadHtml += `<th>${String.fromCharCode(65+i)}</th>`;
+  }
+  $("colheadRow").innerHTML = colheadHtml;
+
+  let hdrHtml = `
+    <td class="rownum">1</td>
+    <td>Team</td><td>Q1</td><td>Q2</td><td>Q3</td><td>Avg Q1-3</td>
+    <td>Q4=5 min</td><td>T=35 min</td><td>Q4</td>
+  `;
+  for(let n=1;n<=extraOTCount;n++){ hdrHtml += `<td>Q${4+n}</td>`; }
+  hdrHtml += `
+    <td>Total</td><td>O/U</td><td>Odds</td><td>Diff.</td><td>Suggested Pick</td>
+  `;
+  $("hdrRow").innerHTML = hdrHtml;
+}
+
+// Rebuilds the whole sheet with the wider column set needed for overtime.
+// Safe to do because K5/J5/J3 persist via localStorage and get restored by
+// ensureGameBlock, and F/Q4 snapshots re-derive themselves from live/backfill
+// data on the next applyGameData call for each game.
+function rebuildForOT(newCount){
+  extraOTCount = newCount;
+  gameState = {};
+  rowCounter = { n: 2 };
+  rebuildTableHeader();
+  $("gamesBody").innerHTML = "";
+}
+
+function neededOTCount(parsedList){
+  let maxPeriod = 4;
+  for(const g of parsedList){
+    if(g.status.period > maxPeriod) maxPeriod = g.status.period;
+  }
+  return Math.max(0, maxPeriod - 4);
+}
+
+function periodScore(team, period){
+  const entry = (team.linescores || []).find(l => l.period === period);
+  return entry ? num(entry.value) : null;
+}
+
+function setGlobalStatus(text, live){
+  $("statusText").textContent = text;
+  $("statusDot").classList.toggle("live", !!live);
+}
+
+function showBanner(msg){
+  const b = $("banner");
+  if(!msg){ b.style.display = "none"; return; }
+  b.style.display = "block";
+  b.textContent = msg;
+}
+
+function num(v){ const n = Number(v); return isNaN(n) ? 0 : n; }
+function round0(n){ return Math.round(n); }
+
+function saveField(gid, suffix, value){
+  try{ localStorage.setItem(`wnba_${suffix}_${gid}`, value); }catch(e){ /* storage unavailable — ignore */ }
+}
+function loadField(gid, suffix){
+  try{ return localStorage.getItem(`wnba_${suffix}_${gid}`); }catch(e){ return null; }
+}
+function round0AvgB4D4(B4, C4, D4){
+  const avg = (B4 + C4 + D4) / 3;
+  return Math.round(avg * 10) / 10;
+}
+function mround(value, multiple){
+  if(!multiple) return value;
+  return Math.round(value/multiple)*multiple;
+}
+function fmt(n, decimals){
+  if(n === null || n === undefined || isNaN(n)) return "–";
+  return decimals ? Number(n).toFixed(decimals) : String(round0(n));
+}
+
+function parseClockRemaining(clockStr){
+  if(!clockStr) return null;
+  const parts = clockStr.split(":");
+  if(parts.length !== 2) return null;
+  const m = parseFloat(parts[0]);
+  const s = parseFloat(parts[1]);
+  if(isNaN(m) || isNaN(s)) return null;
+  return m + s/60;
+}
+
+function makeGameRowsHtml(gid){
+  const r2 = rowCounter.n++;
+  const r3 = rowCounter.n++;
+  const r4 = rowCounter.n++;
+  const r5 = rowCounter.n++;
+
+  let otCellsRow2 = "", otCellsRow3 = "", otCellsRow4 = "";
+  for(let n=1;n<=extraOTCount;n++){
+    otCellsRow2 += `<td class="formula" id="${gid}-OT${n}_2">–</td>`;
+    otCellsRow3 += `<td class="formula" id="${gid}-OT${n}_3">–</td>`;
+    otCellsRow4 += `<td class="formula" id="${gid}-OT${n}_4">–</td>`;
+  }
+
+  return `
+    <tr>
+      <td class="rownum"></td>
+      <td colspan="${13 + extraOTCount}" class="matchup-label" id="${gid}-matchup">—</td>
+    </tr>
+    <tr>
+      <td class="rownum">${r2}</td>
+      <td class="team" id="${gid}-awayName">—</td>
+      <td><input type="number" id="${gid}-B2" disabled></td>
+      <td><input type="number" id="${gid}-C2" disabled></td>
+      <td><input type="number" id="${gid}-D2" disabled></td>
+      <td class="formula avg" id="${gid}-E2">–</td>
+      <td><input type="number" id="${gid}-F2" disabled></td>
+      <td class="formula" id="${gid}-G2">–</td>
+      <td><input type="number" id="${gid}-H2" disabled></td>
+      ${otCellsRow2}
+      <td class="formula" id="${gid}-I2">–</td>
+      <td class="label light-yellow" id="${gid}-J2">Time left</td>
+      <td class="label fit-line">(Tot Q1-3)+AVG</td>
+      <td class="label fit-line">Needed to score in Q4</td>
+      <td class="blank"></td>
+    </tr>
+    <tr>
+      <td class="rownum">${r3}</td>
+      <td class="team" id="${gid}-homeName">—</td>
+      <td><input type="number" id="${gid}-B3" disabled></td>
+      <td><input type="number" id="${gid}-C3" disabled></td>
+      <td><input type="number" id="${gid}-D3" disabled></td>
+      <td class="formula avg" id="${gid}-E3">–</td>
+      <td><input type="number" id="${gid}-F3" disabled></td>
+      <td class="formula" id="${gid}-G3">–</td>
+      <td><input type="number" id="${gid}-H3" disabled></td>
+      ${otCellsRow3}
+      <td class="formula" id="${gid}-I3">–</td>
+      <td>
+        <select id="${gid}-J3" class="light-yellow">
+          ${Array.from({length:40}, (_,i)=>i+1).map(n=>`<option value="${n}"${n===5?" selected":""}>${n}</option>`).join("")}
+        </select>
+      </td>
+      <td class="formula fit-line" id="${gid}-K3">–</td>
+      <td class="formula" id="${gid}-L3">–</td>
+      <td class="formula" id="${gid}-M3">–</td>
+    </tr>
+    <tr>
+      <td class="rownum">${r4}</td>
+      <td class="team">Total</td>
+      <td class="formula" id="${gid}-B4">–</td>
+      <td class="formula" id="${gid}-C4">–</td>
+      <td class="formula" id="${gid}-D4">–</td>
+      <td class="formula avg" id="${gid}-E4">–</td>
+      <td class="formula" id="${gid}-F4">–</td>
+      <td class="formula" id="${gid}-G4">–</td>
+      <td class="formula" id="${gid}-H4">–</td>
+      ${otCellsRow4}
+      <td class="blank"></td>
+      <td class="formula" id="${gid}-J4">–</td>
+      <td class="formula k4-cell" id="${gid}-K4">–</td>
+      <td class="formula light-yellow" id="${gid}-L4">–</td>
+      <td class="formula" id="${gid}-M4">–</td>
+    </tr>
+    <tr>
+      <td class="rownum">${r5}</td>
+      <td class="team">Predicted</td>
+      <td class="formula" id="${gid}-B5">–</td>
+      <td class="formula" id="${gid}-C5">–</td>
+      <td class="formula" id="${gid}-D5">–</td>
+      <td class="formula avg" id="${gid}-E5">–</td>
+      <td class="formula" id="${gid}-F5">–</td>
+      <td class="formula pred-total" id="${gid}-G5">–</td>
+      <td class="blank"></td>
+      ${extraOTCount > 0 ? `<td class="blank" colspan="${extraOTCount}"></td>` : ""}
+      <td class="formula grand-total" id="${gid}-I5">–</td>
+      <td>
+        <select id="${gid}-J5">
+          <option value="">–</option>
+          <option value="Under">Under</option>
+          <option value="Over">Over</option>
+        </select>
+      </td>
+      <td class="k5-cell">
+        <div class="k5-inner">
+          <input type="text" inputmode="numeric" pattern="[0-9]*" class="k5-manual" id="${gid}-K5manual" placeholder="Total" autocomplete="off">
+          <span class="k5-suffix">.5</span>
+          <select class="k5-select" id="${gid}-K5">
+            <option value="">–</option>
+          </select>
+        </div>
+        <div id="${gid}-oddsAt5min" class="odds-5min"></div>
+      </td>
+      <td class="formula" id="${gid}-L5">–</td>
+      <td class="formula k4-cell" id="${gid}-M5">–</td>
+    </tr>
+    <tr class="spacer-row"><td colspan="${14 + extraOTCount}"></td></tr>
+  `;
+}
+
+function ensureGameBlock(gid){
+  if(gameState[gid]) return;
+  gameState[gid] = { q4Snapshot: { away: null, home: null }, backfillAttempted: false, lastState: "pre" };
+  $("gamesBody").insertAdjacentHTML("beforeend", makeGameRowsHtml(gid));
+  ["B2","C2","D2","F2","H2","B3","C3","D3","F3","H3"].forEach(suffix=>{
+    eg(gid, suffix).addEventListener("input", ()=>recalcGame(gid));
+  });
+  // Whichever of these two the user touches most recently becomes the
+  // authoritative source for K5's centering (see recalcGame) — typing a
+  // new total should win immediately, but picking from the dropdown
+  // afterward (odds move fast mid-game) should just as immediately take
+  // back over, rather than a stale typed value permanently pinning it.
+  eg(gid, "K5manual").addEventListener("input", ()=>{
+    const st = gameState[gid];
+    if(st) st.k5Source = "manual";
+    recalcGame(gid);
+  });
+  eg(gid, "K5").addEventListener("change", ()=>{
+    const st = gameState[gid];
+    const manualEl = eg(gid, "K5manual");
+    if(manualEl) manualEl.value = eg(gid, "K5").value; // keep the display in sync with the pick
+    if(st) st.k5Source = "select";
+    recalcGame(gid);
+  });
+  eg(gid, "J5").addEventListener("change", ()=>recalcGame(gid));
+  eg(gid, "J3").addEventListener("change", ()=>recalcGame(gid));
+
+  // Persist the user's own entries (manual total, K5 pick, J5 pick, J3
+  // minutes) so they stick across page reloads/refreshes on this browser
+  // until changed again.
+  ["K5manual","K5","J5","J3"].forEach(suffix=>{
+    const elx = eg(gid, suffix);
+    const saved = loadField(gid, suffix);
+    if(saved !== null) elx.value = saved;
+    const evt = elx.tagName === "SELECT" ? "change" : "input";
+    elx.addEventListener(evt, ()=> saveField(gid, suffix, elx.value));
+  });
+
+  // J4 (pre-game odds) isn't a user input — restore its last known value on
+  // reload so it doesn't blank out to "–" while waiting for the next score
+  // fetch (odds now come bundled in that same fetch). Whether it keeps
+  // updating from here depends on the game's actual state, handled in
+  // applyGameData.
+  const savedJ4 = loadField(gid, "J4");
+  if(savedJ4 !== null){
+    eg(gid, "J4").innerHTML = `<span class="cell-label">PRE-ODDS</span>${savedJ4}`;
+  }
+}
+
+function enableManualFallbackBlock(){
+  if(gameState["manual"]) return;
+  ensureGameBlock("manual");
+  ["B2","C2","D2","F2","H2","B3","C3","D3","F3","H3"].forEach(suffix=>{
+    const elx = eg("manual", suffix);
+    elx.disabled = false;
+    if(elx.value === "") elx.value = 0;
+  });
+  eg("manual","awayName").textContent = "Away Team";
+  eg("manual","homeName").textContent = "Home Team";
+  eg("manual","matchup").textContent = "Manual entry — live lookup unavailable";
+  recalcGame("manual");
+}
+
+// Rebuilds K5's <select> options to span (center-20) to (center+20),
+// floored at 0. `center` is the manually-typed total when one's been
+// entered, else the market total from ESPN when available, else the live
+// running total as a last-resort fallback — see the call site in
+// recalcGame. When a manual value is typed, the dropdown always jumps to
+// start right on that value (overriding any earlier pick) — that's the
+// whole point of typing one in. Without a manual value, whatever was
+// previously selected is preserved across rebuilds as long as it's still
+// within the new range, so an unrelated score update doesn't reset an
+// existing choice.
+function rebuildK5Options(gid, center, preferredValue){
+  const st = gameState[gid];
+  const selectEl = eg(gid, "K5");
+  const displayEl = eg(gid, "K5manual");
+  if(!st || !selectEl) return;
+
+  let min = center - 20;
+  const max = center + 20;
+  if(min < 0) min = 0;
+
+  const key = `${min}:${max}`;
+  if(st.k5RangeKey === key) return;
+  st.k5RangeKey = key;
+
+  const previousValue = selectEl.value;
+  let html = `<option value="">–</option>`;
+  for(let v = min; v <= max; v++){
+    html += `<option value="${v}">${v}</option>`;
+  }
+  selectEl.innerHTML = html;
+
+  if(preferredValue !== null && preferredValue >= min && preferredValue <= max){
+    selectEl.value = String(preferredValue);
+  } else if(previousValue !== "" && Number(previousValue) >= min && Number(previousValue) <= max){
+    selectEl.value = previousValue;
+  } else {
+    selectEl.value = "";
+  }
+
+  // The left box is a pure read-only mirror of whatever K5 is currently
+  // set to — this is what stays visible; the select itself keeps its own
+  // text hidden via CSS and exists only as the picker mechanism.
+  if(displayEl) displayEl.value = selectEl.value;
+}
+
+// Required PPM + the resulting picks (both formulas) — live-only, always
+// computed fresh on every poll. K4 = (K5 - I5) / J3 conceptually, but
+// using the frozen T=35min base (g2+g3) instead of the live running
+// total. M5 three-tier logic: J3<=5 uses a flat 4.60 PPM threshold; J3
+// 6-39 uses clear-cut 4.20/5.20 extremes with a self-referential pace
+// tiebreaker in between; J3>=40 or J3<=0 is out of range. Consensus =
+// average of E5/G5/L4 vs K5.
+// Both prediction formulas, computed and locked together — same moment
+// of commitment, two different methods:
+//   - PPM (k4raw/m5Ppm): Required PPM vs a tiered threshold. Backtested
+//     at 14/18 (77.8%) on real games — see earlier notes for the
+//     4.60/4.20/5.20 numbers and the pace tiebreaker.
+//   - Consensus (m5Consensus): average of E5/G5/L4 (three independent
+//     full-game projections) vs K5. Backtested at 12/18 (66.7%) with NO
+//     margin/blowout adjustment — a margin-based override was tested
+//     and made accuracy WORSE (down to 9/18, 50%), so it was
+//     deliberately left out despite being intuitively appealing.
+function computeDecision(k5, g2, g3, j3, e5, g5, l4){
+  if(k5 === null) return { k4raw: null, m5Ppm: "", m5Consensus: "" };
+  const requiredPPM = (k5 - (g2 + g3)) / j3;
+  let m5Ppm;
+  if(j3 >= 40 || j3 <= 0){
+    m5Ppm = "";
+  } else if(j3 <= 5){
+    m5Ppm = requiredPPM <= 4.60 ? "Over" : "Under";
+  } else if(requiredPPM <= 4.20){
+    m5Ppm = "Over";
+  } else if(requiredPPM >= 5.20){
+    m5Ppm = "Under";
+  } else {
+    const currentPace = (g2 + g3) / (40 - j3);
+    m5Ppm = currentPace >= requiredPPM ? "Over" : "Under";
+  }
+  const consensus = (e5 + g5 + l4) / 3;
+  const m5Consensus = consensus > k5 ? "Over" : "Under";
+  return { k4raw: requiredPPM, m5Ppm, m5Consensus };
+}
+
+function recalcGame(gid){
+  const st = gameState[gid] || {};
+  const otAway = st.otSumAway || 0;
+  const otHome = st.otSumHome || 0;
+
+  const B2=num(eg(gid,"B2").value), C2=num(eg(gid,"C2").value), D2=num(eg(gid,"D2").value);
+  const F2=num(eg(gid,"F2").value), H2=num(eg(gid,"H2").value);
+  const B3=num(eg(gid,"B3").value), C3=num(eg(gid,"C3").value), D3=num(eg(gid,"D3").value);
+  const F3=num(eg(gid,"F3").value), H3=num(eg(gid,"H3").value);
+
+  // Row 2 (Away)
+  const E2 = D2===0 ? (B2+C2)/2 : (B2+C2+D2)/3;
+  const G2 = B2+C2+D2+F2;
+  const I2 = B2+C2+D2+H2+otAway;
+  eg(gid,"E2").textContent = fmt(E2);
+  eg(gid,"G2").textContent = fmt(G2);
+  eg(gid,"I2").textContent = fmt(I2);
+
+  // Row 3 (Home)
+  const E3 = D3===0 ? (B3+C3)/2 : (B3+C3+D3)/3;
+  const G3 = B3+C3+D3+F3;
+  const I3 = B3+C3+D3+H3+otHome;
+  eg(gid,"E3").textContent = fmt(E3);
+  eg(gid,"G3").textContent = fmt(G3);
+  eg(gid,"I3").textContent = fmt(I3);
+
+  // Row 4 (Total)
+  const B4=B2+B3, C4=C2+C3, D4=D2+D3, F4=F2+F3, H4=H2+H3;
+  const E4 = D4===0 ? (B4+C4)/2 : (B4+C4+D4)/3;
+  const G4 = G2+G3;
+  eg(gid,"B4").textContent = fmt(B4);
+  eg(gid,"C4").textContent = fmt(C4);
+  eg(gid,"D4").textContent = fmt(D4);
+  eg(gid,"E4").textContent = fmt(E4);
+  eg(gid,"F4").textContent = fmt(F4);
+  eg(gid,"G4").textContent = fmt(G4);
+  eg(gid,"H4").textContent = fmt(H4);
+
+  // K3/L3 reference the Total row
+  const sumQ13 = B4+C4+D4;
+  const avgQ13 = D4===0 ? (B4+C4)/2 : (B4+C4+D4)/3;
+  const avgRounded = round0(avgQ13);
+  const combined = round0(sumQ13 + avgRounded);
+  eg(gid,"K3").textContent = `${round0(sumQ13)} (Avg: ${avgRounded}) = ${combined}`;
+
+  // L4 = MROUND((G2+G3)*(40/(40-J3)), 0.5)
+  const J3 = Number(eg(gid,"J3").value) || 5;
+  const timeLeftDenom = 40 - J3;
+  const L4 = timeLeftDenom !== 0 ? mround((G2+G3)*(40/timeLeftDenom), 0.5) : NaN;
+  eg(gid,"L4").textContent = fmt(L4, 1);
+
+  // Row 5 (Predicted) — Q4 window is 5 min, full-game basis is 40 min
+  const B5 = (B4/10)*40;
+  const C5 = (C4/10)*40;
+  const D5 = (D4/10)*40;
+  const E5 = (B5+C5+D5)/3;
+  const F5 = (F4/5)*40;
+  const validQtrs = [B5,C5,D5].filter(v => !isNaN(v)).length;
+  const G5 = (B5+C5+D5 + ((F4*2)/10)*40) / (validQtrs + 1);
+  const I5 = I2+I3;
+
+  eg(gid,"B5").textContent = fmt(B5);
+  eg(gid,"C5").textContent = fmt(C5);
+  eg(gid,"D5").textContent = fmt(D5);
+  eg(gid,"E5").textContent = fmt(E5);
+  eg(gid,"F5").textContent = fmt(F5);
+  eg(gid,"G5").textContent = fmt(G5);
+  eg(gid,"I5").textContent = fmt(I5);
+  // Center K5's dropdown on whichever of manual/select was most recently
+  // touched (see the "input"/"change" listeners in ensureGameBlock) — a
+  // fresh dropdown pick should immediately take over from an older typed
+  // value (odds move fast mid-game, picking is faster than retyping),
+  // and a freshly typed value should likewise immediately override
+  // whatever was previously picked. Before either has ever been touched,
+  // fall back to the real sportsbook total when ESPN provides one
+  // (typically 150-200 for a WNBA game); the live running score (I5) is
+  // only a fraction of that until very late in the game, so it's used
+  // only as a last resort.
+  const k5ManualRaw = eg(gid,"K5manual").value.trim();
+  const k5Manual = k5ManualRaw === "" ? null : Number(k5ManualRaw);
+  const k5ManualValid = k5Manual !== null && !isNaN(k5Manual);
+
+  const k5CurrentRaw = eg(gid,"K5").value;
+  const k5Current = k5CurrentRaw === "" ? null : Number(k5CurrentRaw);
+  const k5CurrentValid = k5Current !== null && !isNaN(k5Current);
+
+  let preferredValue = null;
+  if(st.k5Source === "manual" && k5ManualValid){
+    preferredValue = k5Manual;
+  } else if(st.k5Source === "select" && k5CurrentValid){
+    preferredValue = k5Current;
+  } else if(k5CurrentValid){
+    preferredValue = k5Current;
+  } else if(k5ManualValid){
+    preferredValue = k5Manual;
+  }
+
+  const k5Center = preferredValue !== null ? preferredValue : (st.marketTotal !== undefined ? st.marketTotal : I5);
+  rebuildK5Options(gid, k5Center, preferredValue);
+
+  // M3
+  const avgB4D4 = round0AvgB4D4(B4, C4, D4);
+  let M3;
+  if(F4 === 0){
+    M3 = "";
+  } else if(F4 >= 23){
+    M3 = (avgB4D4 > (F4*2)) ? "Below Avg" : "Above Avg";
+  } else {
+    M3 = (avgB4D4 > (F4*2)) ? "Below Avg" : "Above Avg";
+  }
+  eg(gid,"M3").textContent = M3 === "" ? "–" : M3;
+
+  const k5Raw = eg(gid,"K5").value;
+  const K5 = k5Raw === "" ? null : Number(k5Raw) + 0.5;
+  const L3 = K5 === null ? "–" : fmt(Math.abs(sumQ13 - K5), 1);
+  eg(gid,"L3").textContent = L3;
+
+  // Auto-capture K5 the first time the real Q4=5:00 snapshot is
+  // confirmed (st.q4Snapshot.away !== null) — same readiness check that
+  // protects the F2/F3 backfill from the premature-freeze bug we found
+  // earlier, so this can't grab a still-moving value from before the
+  // snapshot actually settled. Captured once, saved permanently, never
+  // updated again — a simple record of "what was my pick around the
+  // 5-minute mark," independent of any prediction formula.
+  if(st.oddsAt5min === undefined){
+    const saved5min = loadField(gid, "oddsAt5min");
+    st.oddsAt5min = saved5min !== null ? Number(saved5min) : null;
+  }
+  if(st.oddsAt5min === null && st.q4Snapshot.away !== null && K5 !== null && K5 >= 100){ // ignore half-typed values
+    st.oddsAt5min = K5;
+    saveField(gid, "oddsAt5min", String(K5));
+  }
+  const odds5minEl = eg(gid, "oddsAt5min");
+  if(odds5minEl){
+    odds5minEl.innerHTML = st.oddsAt5min !== null
+      ? `5min Odds<span class="odds-5min-value">${fmt(st.oddsAt5min, 1)}</span>`
+      : "";
+  }
+
+  const L5 = K5 === null ? "–" : fmt(Math.abs(K5 - I5), 1);
+  eg(gid,"L5").textContent = L5;
+
+  // M4 — ported from the given Excel formula:
+  // IF(OR(ISBLANK(F2),ISBLANK(F3)),"",
+  //   IF(M3="Above Avg","Under",
+  //   IF(M3="Below Avg","Over",
+  //   IF(F4<=9,"Over",
+  //   IF(K5>G5,"Over","Under")))))
+  // The ISBLANK(F2)/ISBLANK(F3) gate doesn't work as intended here: on
+  // this site F2/F3 are pre-filled with 0 (not left truly empty) before
+  // Q4 even starts, and ISBLANK(0) is false in Excel too — a 0 isn't
+  // blank, it's zero. So the literal check never gates anything here.
+  // Replaced with period>=4 instead, matching what the check clearly
+  // intended (no result until Q4 actually has real data), same gate
+  // K4/M5 already use.
+  // This is a separate, independent formula from K4/M5 (PPM and
+  // Consensus) — a third opinion shown side by side for comparison, not
+  // a replacement for either.
+  let M4;
+  if((st.period || 0) < 4){
+    M4 = "";
+  } else if(M3 === "Above Avg"){
+    M4 = "Under";
+  } else if(M3 === "Below Avg"){
+    M4 = "Over";
+  } else if(F4 <= 9){
+    M4 = "Over";
+  } else if(K5 !== null && K5 > G5){
+    M4 = "Over";
+  } else {
+    M4 = "Under";
+  }
+  if(M4 === ""){
+    eg(gid,"M4").textContent = "–";
+  } else {
+    const m4Color = M4 === "Over" ? "#2e7d32" : "#c62828";
+    eg(gid,"M4").innerHTML = `<span style="color:${m4Color}">${M4}</span>`;
+  }
+
+  // K4/M5 are live-only — always computed fresh on every poll from
+  // whatever G2/G3/J3/K5 currently are (no locking/freezing mechanism;
+  // that was tried and removed since it wasn't earning its complexity).
+  // G2/G3 naturally evolve from "score so far" during Q1-Q3 into the
+  // true T=35min snapshot once Q4 hits 5:00, so K4/M5 are meaningful
+  // the whole game, not just from Q4 on. See computeDecision above
+  // (module scope) for the shared formula.
+
+  const live = computeDecision(K5, G2, G3, J3, E5, G5, L4);
+
+  function k4Span(raw, pick, label){
+    let color, suffix;
+    if(pick === "Over"){ color = "#2e7d32"; suffix = "(O)"; }
+    else if(pick === "Under"){ color = "#c62828"; suffix = "(U)"; }
+    else { color = "#9aa0a6"; suffix = "(–)"; } // no valid pick signal (J3 out of range)
+    return `<span style="color:${color}">${fmt(raw, 2)} ${suffix}</span><span class="cell-label">${label}</span>`;
+  }
+
+  if(live.k4raw === null){
+    eg(gid,"K4").innerHTML = "–";
+  } else {
+    eg(gid,"K4").innerHTML = k4Span(live.k4raw, live.m5Ppm, "LIVE PPM");
+  }
+
+  function m5Span(pick, label){
+    if(pick === "") return "";
+    const color = pick === "Over" ? "#2e7d32" : "#c62828";
+    return `<span style="color:${color}">${pick}</span><span class="cell-label">${label}</span>`;
+  }
+
+  // M5 shows both formulas' live picks side by side: PPM (77.8%
+  // backtested) and Consensus — average of E5/G5/L4 vs K5, 66.7%
+  // backtested, no margin rule (one was tested and made accuracy worse,
+  // so it was left out despite being intuitively appealing — see
+  // project notes).
+  if(live.m5Ppm === "" && live.m5Consensus === ""){
+    eg(gid,"M5").innerHTML = "–";
+  } else {
+    const parts = [m5Span(live.m5Ppm, "LIVE PICK (PPM)"), m5Span(live.m5Consensus, "LIVE PICK (CONSENSUS)")];
+    eg(gid,"M5").innerHTML = parts.filter(p => p).join("<br>") || "–";
+  }
+
+  // L5 background: green (same as I5) when the J5/K5 pick is currently
+  // winning against the live total (I5); pink (same as G5) otherwise.
+  const J5val = eg(gid,"J5").value;
+  const pickWinning =
+    (J5val === "Over" && K5 !== null && K5 < I5) ||
+    (J5val === "Under" && K5 !== null && K5 > I5);
+  const l5El = eg(gid,"L5");
+  l5El.classList.remove("grand-total", "pred-total");
+  l5El.classList.add(pickWinning ? "grand-total" : "pred-total");
+}
+
+function applyGameData(gid, away, home, status, overUnder, seasonType, cloudPreOdds){
+  ensureGameBlock(gid);
+  const st = gameState[gid];
+  // Stash the market total (if ESPN has one for this game) so recalcGame
+  // can center K5's suggested range on a realistic full-game total
+  // instead of the live in-progress score, which is only ever a fraction
+  // of a typical final total until very late in the game.
+  if(typeof overUnder === "number") st.marketTotal = overUnder;
+
+  eg(gid,"awayName").textContent = away.name;
+  eg(gid,"homeName").textContent = home.name;
+
+  eg(gid,"B2").value = away.q1; eg(gid,"C2").value = away.q2; eg(gid,"D2").value = away.q3;
+  eg(gid,"B3").value = home.q1; eg(gid,"C3").value = home.q2; eg(gid,"D3").value = home.q3;
+
+  const period = status.period;
+  const state = status.state; // 'pre' | 'in' | 'post'
+  st.lastState = state;
+  st.period = period;
+
+  const awayQ4Live = period >= 4 ? away.q4 : 0;
+  const homeQ4Live = period >= 4 ? home.q4 : 0;
+  eg(gid,"H2").value = awayQ4Live;
+  eg(gid,"H3").value = homeQ4Live;
+
+  // F column: live Q4 score (same as H) until the clock hits <=5:00 remaining,
+  // at which point it freezes and stops updating for the rest of the game.
+  if(period === 4 && state === "in"){
+    const remaining = parseClockRemaining(status.clock);
+    if(remaining !== null && remaining <= 5 && st.q4Snapshot.away === null && !st.backfillAttempted){
+      // Always reconstruct from real play-by-play, never grab whatever the
+      // live score happens to be at this exact poll — the live score can
+      // be off by a play depending on 5s-polling timing, which used to
+      // freeze an approximate value that reconstruction would then quietly
+      // correct moments later. For a value that has to be right the first
+      // time, only the reconstructed value should ever get frozen; until
+      // it's ready, F2/F3 keep mirroring the live score below (visibly
+      // still moving, not yet frozen) rather than committing to a guess.
+      st.backfillAttempted = true;
+      runQ4Backfill(gid, away, home, true);
+    }
+  }
+  if(period > 4 || state === "post"){
+    if(st.q4Snapshot.away === null && !st.backfillAttempted){
+      st.backfillAttempted = true;
+      runQ4Backfill(gid, away, home, false);
+    }
+  }
+
+  if(st.q4Snapshot.away !== null){
+    eg(gid,"F2").value = st.q4Snapshot.away;
+    eg(gid,"F3").value = st.q4Snapshot.home;
+  } else {
+    // Not frozen yet — mirror the live score just like H, so F reads live
+    // during the run-up to the 5-minute mark instead of sitting at 0.
+    eg(gid,"F2").value = awayQ4Live;
+    eg(gid,"F3").value = homeQ4Live;
+  }
+
+  // Overtime columns (Q5, Q6, ...) — only show real values for a given game
+  // once it actually reaches that OT period; otherwise show a dash, since
+  // most games never need these columns at all.
+  let otSumAway = 0, otSumHome = 0;
+  for(let n=1; n<=extraOTCount; n++){
+    const periodNum = 4 + n;
+    const reached = period >= periodNum;
+    if(reached){
+      const aVal = periodScore(away, periodNum) ?? 0;
+      const hVal = periodScore(home, periodNum) ?? 0;
+      eg(gid, `OT${n}_2`).textContent = fmt(aVal);
+      eg(gid, `OT${n}_3`).textContent = fmt(hVal);
+      eg(gid, `OT${n}_4`).textContent = fmt(aVal + hVal);
+      otSumAway += aVal;
+      otSumHome += hVal;
+    } else {
+      eg(gid, `OT${n}_2`).textContent = "–";
+      eg(gid, `OT${n}_3`).textContent = "–";
+      eg(gid, `OT${n}_4`).textContent = "–";
+    }
+  }
+  st.otSumAway = otSumAway;
+  st.otSumHome = otSumHome;
+
+  // matchup/status label
+  let statusText;
+  if(state === "pre"){
+    statusText = status.detail || "Scheduled";
+  } else if(state === "in"){
+    statusText = `Q${period} · ${status.clock || ""} remaining`;
+  } else {
+    statusText = "Final";
+  }
+  const matchupEl = eg(gid,"matchup");
+  matchupEl.textContent = `${away.name} @ ${home.name} — ${statusText}`;
+  const badgeText = seasonType === 1 ? "PRE" : (seasonType === 3 ? "PLAYOFFS" : "");
+  if(badgeText){
+    const badge = document.createElement("span");
+    badge.className = "season-badge";
+    badge.textContent = badgeText;
+    badge.title = seasonType === 1 ? "Preseason game" : "Playoff game";
+    matchupEl.insertBefore(badge, matchupEl.firstChild);
+  }
+
+  // J4: ESPN embeds the pre-game betting total directly in the same
+  // payload we already poll for scores — no separate odds API/key/quota
+  // needed. Keeps updating while the game is still pre-game, then
+  // freezes automatically once it goes live. (K4 used to mirror the
+  // live version of this same value — it's now repurposed as Required
+  // PPM, computed in recalcGame instead; see there.)
+  if(typeof overUnder === "number" && state === "pre"){
+    const j4El = eg(gid, "J4");
+    const j4Text = fmt(overUnder, 1);
+    if(j4El) j4El.innerHTML = `<span class="cell-label">PRE-ODDS</span>${j4Text}`;
+    saveField(gid, "J4", j4Text);
+
+    // Seed K5 with the pre-game line as a convenient starting point.
+    // Only while still pre-game, and only if the user hasn't set their
+    // own K5 value yet (manually, or restored from a previous session)
+    // — once the game goes live, J4 stops updating (state !== "pre"
+    // above) and K5 is freely editable from then on regardless.
+    const k5ManualEl = eg(gid, "K5manual");
+    if(k5ManualEl && k5ManualEl.value.trim() === ""){
+      k5ManualEl.value = String(Math.floor(overUnder));
+      saveField(gid, "K5manual", k5ManualEl.value);
+    }
+  }
+
+  // Game already started (or finished) before this page saw the pre-game line:
+  // use the closing pre-game total the server job saved in the database.
+  if(typeof cloudPreOdds === "number" && state !== "pre"){
+    const j4El = eg(gid, "J4");
+    if(j4El && !/\d/.test(j4El.textContent)){
+      const j4Text = fmt(cloudPreOdds, 1);
+      j4El.innerHTML = `<span class="cell-label">PRE-ODDS</span>${j4Text}`;
+      saveField(gid, "J4", j4Text);
+    }
+    if(st.marketTotal === undefined) st.marketTotal = cloudPreOdds;
+  }
+
+  recalcGame(gid);
+}
+
+const SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/scoreboard";
+
+const PROXIES = [
+  url => url,
+  url => "https://corsproxy.io/?url=" + encodeURIComponent(url),
+  url => "https://api.allorigins.win/raw?url=" + encodeURIComponent(url),
+  url => "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(url),
+  url => "https://cors.x2u.in/" + url,
+  url => "https://thingproxy.freeboard.io/fetch/" + url
+];
+
+function ymd(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const day = String(d.getDate()).padStart(2,"0");
+  return `${y}${m}${day}`;
+}
+
+// Plain default endpoint (ESPN's "today") is primary since we want tonight's
+// games specifically; the narrow ±1 day window is only a timezone-mismatch fallback.
+// A cache-busting timestamp is appended so proxies (many of which cache by
+// exact URL) and the browser can't serve back a stale response.
+// The "sports day" in US Eastern time: rolls over at 4 AM ET so late
+// West-coast games (ending after midnight ET) still belong to the night
+// they started. ESPN's un-dated default can jump to the next day's slate
+// as soon as the evening's games finish, which hid tonight's games.
+function sportsDayET(){
+  const shifted = new Date(Date.now() - 4*60*60*1000);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" })
+    .format(shifted).replaceAll("-", "");
+}
+
+function targetUrls(){
+  const today = new Date();
+  const start = new Date(today); start.setDate(start.getDate() - 1);
+  const end = new Date(today); end.setDate(end.getDate() + 1);
+  const bust = `_=${Date.now()}`;
+  return [
+    `${SCOREBOARD_URL}?dates=${sportsDayET()}&${bust}`,
+    `${SCOREBOARD_URL}?${bust}`,
+    `${SCOREBOARD_URL}?dates=${ymd(start)}-${ymd(end)}&${bust}`
+  ];
+}
+
+function scoreboardUrls(){
+  const attempts = [];
+  for(const target of targetUrls()){
+    for(const wrap of PROXIES){
+      attempts.push(wrap(target));
+    }
+  }
+  return attempts;
+}
+
+// Reconstructs the Q4 score exactly as it stood when the clock hit 5:00
+// remaining, using ESPN's per-game scoringPlays feed. Needed when the page
+// loads (or first sees this game) after that moment has already passed —
+// the scoreboard endpoint only ever gives the CURRENT score, not history.
+// allowRetry=true (the live, just-crossed-5:00 case) means: if ESPN's
+// play-by-play hasn't published a qualifying play yet (a brief lag is
+// normal for a still-live game), don't commit to the fallback value —
+// leave the snapshot unset and retry on the next poll instead, since the
+// real data typically shows up within seconds. allowRetry=false (game
+// already well past that point, or finished) means the data should
+// already be complete, so it's safe to use the fallback immediately
+// rather than retry forever.
+async function backfillQ4Snapshot(gid, away, home, allowRetry){
+  const st = gameState[gid];
+  if(!st) return;
+  const eventId = gid.slice(1); // strip leading "g"
+  const summaryTarget = `https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/summary?event=${eventId}`;
+  const awayQ13 = away.q1 + away.q2 + away.q3;
+  const homeQ13 = home.q1 + home.q2 + home.q3;
+
+  for(const wrap of PROXIES){
+    const bust = `_=${Date.now()}`;
+    const sep = summaryTarget.includes("?") ? "&" : "?";
+    const url = wrap(summaryTarget + sep + bust);
+    try{
+      const res = await fetch(url, { cache: "no-store" });
+      if(!res.ok){
+        console.warn(`[Q4 backfill] ${gid}: ${shortUrl(url)} -> HTTP ${res.status}`);
+        continue;
+      }
+      const data = await res.json();
+      // NOTE: ESPN's summary payload does NOT reliably populate
+      // `scoringPlays` — confirmed via debug logging on the companion
+      // Python script that the real, populated field is `plays` (full
+      // play-by-play, ~400+ entries per game, each still carrying
+      // awayScore/homeScore/period/clock). Using `scoringPlays` here was
+      // silently returning an empty array every time, so `candidate`
+      // below was always null and this was quietly falling through to
+      // the final-Q4-score fallback on every single game.
+      const scoringPlays = data.plays || [];
+
+      // If the sheet was rebuilt (e.g. a new OT column appeared) while this
+      // request was in flight, this game's state object is now orphaned —
+      // bail out rather than writing into a stale/disconnected game.
+      if(gameState[gid] !== st) return;
+
+      // Find the last scoring play at/before the 5:00 mark of Q4.
+      let candidate = null;
+      for(const p of scoringPlays){
+        const per = p.period && p.period.number;
+        if(per !== 4) continue;
+        const remaining = parseClockRemaining(p.clock && p.clock.displayValue);
+        if(remaining === null) continue;
+        if(remaining >= 5 && p.awayScore !== undefined && p.homeScore !== undefined){
+          candidate = p;
+        }
+      }
+
+      // Coerce with Number() rather than a strict typeof === "number" check —
+      // if ESPN ever serializes these as numeric strings instead of raw
+      // JSON numbers, a strict check would silently fail every time and
+      // fall straight to the less-precise fallback below with no visible
+      // error at all. Number() handles either case.
+      const awayScore = candidate ? Number(candidate.awayScore) : NaN;
+      const homeScore = candidate ? Number(candidate.homeScore) : NaN;
+
+      if(candidate && !isNaN(awayScore) && !isNaN(homeScore)){
+        st.q4Snapshot.away = awayScore - awayQ13;
+        st.q4Snapshot.home = homeScore - homeQ13;
+        console.log(`[Q4 backfill] ${gid}: reconstructed from ${scoringPlays.length} plays -> away=${st.q4Snapshot.away}, home=${st.q4Snapshot.home} (raw scores ${awayScore}/${homeScore} at clock ${candidate.clock && candidate.clock.displayValue})`);
+      } else if(allowRetry){
+        // Still live and no qualifying play yet — ESPN's feed likely just
+        // hasn't caught up to the current clock. Don't guess; leave the
+        // snapshot unset and retry on the next poll.
+        console.warn(`[Q4 backfill] ${gid}: no usable Q4 candidate yet (${scoringPlays.length} total plays) — live game, will retry on next poll instead of guessing`);
+        st.backfillAttempted = false;
+        return;
+      } else {
+        // Play-by-play reconstruction didn't find a usable data point (ESPN's
+        // schema isn't consistently documented, so this can legitimately
+        // fail). Falling back to a hardcoded 0-0 was almost always wrong —
+        // a team virtually never scores exactly 0 points in the first 5
+        // minutes of a quarter. Use the team's actual final Q4 score
+        // instead: a real, always-available number that's a far more
+        // reasonable stand-in than a guaranteed-wrong zero.
+        console.warn(`[Q4 backfill] ${gid}: no usable Q4 candidate found (${scoringPlays.length} total plays returned, candidate=${candidate ? "found but non-numeric score" : "none matched period/clock"}) — falling back to final Q4 score`);
+        st.q4Snapshot.away = away.q4;
+        st.q4Snapshot.home = home.q4;
+      }
+
+      // recalcGame() only updates formula/text cells — F2/F3 are live <input>
+      // elements, so they need to be written directly or the reconstructed
+      // value never actually appears on screen (this was the bug).
+      const f2El = eg(gid, "F2");
+      const f3El = eg(gid, "F3");
+      if(f2El) f2El.value = st.q4Snapshot.away;
+      if(f3El) f3El.value = st.q4Snapshot.home;
+
+      recalcGame(gid);
+      return;
+    } catch(e){
+      console.warn(`[Q4 backfill] ${gid}: ${shortUrl(url)} -> threw: ${e.message || e}`);
+    }
+  }
+  // All proxies failed — leave snapshot unset; it'll retry on the next poll
+  // since backfillAttempted only blocks re-triggering within this attempt cycle.
+  console.error(`[Q4 backfill] ${gid}: all proxies failed, will retry on next poll`);
+  st.backfillAttempted = false;
+}
+
+// Reconstructs the Q4 score exactly as it stood when the clock hit 5:00
+// remaining, using ESPN's own play-by-play/scoringPlays feed. This used to
+// be a fallback for a WNBA.com-based primary lookup, but that endpoint
+// (cdn.wnba.com/.../playbyplay_<id>.json) has been discontinued — as of
+// Aug 2026 it returns the wnba.com site's HTML shell instead of JSON for
+// every game ID, confirmed via debug logging. ESPN's summary endpoint is
+// now the only source for this, which also means no more ScrapingBee
+// dependency (and no exposed API key) for the whole site.
+// gids currently showing simulated (not real) data, mapped to an optional
+// explicit Q4=5min snapshot override ({away, home}) — see simulateGames
+// below. Used to skip the real-ESPN Q4 backfill attempt for them, since a
+// fake game ID can never match a real ESPN event.
+const simulatedGids = new Map();
+
+async function runQ4Backfill(gid, away, home, allowRetry){
+  if(simulatedGids.has(gid)){
+    const override = simulatedGids.get(gid);
+    const st = gameState[gid];
+    if(st){
+      if(override){
+        // A real, known Q4=5min snapshot was supplied (e.g. reconstructing
+        // an actual past game from a saved export) — use it exactly,
+        // rather than the fallback guess below.
+        st.q4Snapshot.away = override.away;
+        st.q4Snapshot.home = override.home;
+        console.log(`[Q4 backfill] ${gid}: simulated game — using supplied real snapshot (away=${override.away}, home=${override.home}).`);
+      } else {
+        st.q4Snapshot.away = away.q4;
+        st.q4Snapshot.home = home.q4;
+        console.log(`[Q4 backfill] ${gid}: simulated game — no snapshot supplied, falling back to final Q4 score.`);
+      }
+      const f2El = eg(gid, "F2");
+      const f3El = eg(gid, "F3");
+      if(f2El) f2El.value = st.q4Snapshot.away;
+      if(f3El) f3El.value = st.q4Snapshot.home;
+      recalcGame(gid);
+    }
+    return;
+  }
+  await backfillQ4Snapshot(gid, away, home, allowRetry);
+}
+
+function shortUrl(url){
+  if(url.includes("scrapingbee")) return "scrapingbee";
+  if(url.includes("corsproxy.io")) return "corsproxy.io";
+  if(url.includes("allorigins")) return "allorigins.win";
+  if(url.includes("codetabs")) return "codetabs.com";
+  if(url.includes("cors.x2u.in")) return "cors.x2u.in";
+  if(url.includes("thingproxy")) return "thingproxy";
+  return "direct";
+}
+
+function quarterPoints(linescores, period){
+  if(!Array.isArray(linescores)) return 0;
+  const entry = linescores.find(l => l.period === period);
+  return entry ? num(entry.value) : 0;
+}
+
+function parseEvent(ev){
+  const comp = ev.competitions[0];
+  const competitors = comp.competitors || [];
+  const awayC = competitors.find(c => c.homeAway === "away");
+  const homeC = competitors.find(c => c.homeAway === "home");
+
+  const toTeam = c => ({
+    name: (c.team && c.team.displayName) || "Team",
+    q1: quarterPoints(c.linescores, 1),
+    q2: quarterPoints(c.linescores, 2),
+    q3: quarterPoints(c.linescores, 3),
+    q4: quarterPoints(c.linescores, 4),
+    linescores: c.linescores || []
+  });
+
+  const statusBlock = comp.status || ev.status || {};
+  const type = statusBlock.type || {};
+  const state = type.state || "pre";
+  const period = statusBlock.period || 0;
+  const clock = state === "in" ? (statusBlock.displayClock || null) : null;
+  const detail = type.detail || type.shortDetail || null;
+
+  // ESPN embeds betting odds (spread, moneyline, total) directly in this
+  // same scoreboard payload when available — no separate odds API needed.
+  const oddsBlock = (comp.odds && comp.odds[0]) || null;
+  const overUnder = oddsBlock && typeof oddsBlock.overUnder === "number" ? oddsBlock.overUnder : null;
+
+  return {
+    id: ev.id,
+    date: ev.date,
+    away: toTeam(awayC),
+    home: toTeam(homeC),
+    status: { period, clock, state, detail },
+    overUnder,
+    // ESPN season type: 1 = preseason, 2 = regular season, 3 = playoffs
+    seasonType: (ev.season && ev.season.type) || null
+  };
+}
+
+async function fetchScores(){
+  try{
+    let events = null;
+    let lastErr = null;
+    const attemptLog = [];
+    for(const url of scoreboardUrls()){
+      try{
+        const res = await fetch(url, { cache: "no-store" });
+        if(!res.ok){
+          attemptLog.push(`${shortUrl(url)} → HTTP ${res.status}`);
+          throw new Error("API error " + res.status);
+        }
+        const data = await res.json();
+        events = data.events || [];
+        attemptLog.push(`${shortUrl(url)} → OK, ${events.length} events`);
+        if(events.length === 0) continue; // nothing for that day — try the next URL
+        break;
+      } catch(e){
+        attemptLog.push(`${shortUrl(url)} → FAILED: ${e.message || e}`);
+        lastErr = e;
+      }
+    }
+    $("debugLog").textContent = attemptLog.join("  |  ");
+
+    if(events === null) throw (lastErr || new Error("no successful fetch"));
+
+    const parsedList = events.map(parseEvent).sort((a,b)=> new Date(a.date) - new Date(b.date));
+
+    if(parsedList.length === 0){
+      setGlobalStatus("No games found", false);
+      showBanner("No WNBA games found for today's date window yet. Retrying automatically — you can also enter scores manually below.");
+      failCount++;
+      if(failCount >= 2 && Object.keys(gameState).length === 0) enableManualFallbackBlock();
+      return;
+    }
+
+    showBanner(null);
+    liveMode = true;
+    failCount = 0;
+    updateReportDate(parsedList[0].date);
+
+    const liveCount = parsedList.filter(g => g.status.state === "in").length;
+    const allFinal = parsedList.every(g => g.status.state === "post");
+
+    const needed = neededOTCount(parsedList);
+    if(needed > extraOTCount){
+      rebuildForOT(needed);
+    }
+
+    let cloudOdds = {};
+    try{ if(window.cloud) cloudOdds = await window.cloud.fetchPreOdds("WNBA", parsedList.map(g => g.id)); }catch(e){ cloudOdds = {}; }
+
+    for(const g of parsedList){
+      const gid = "g" + g.id;
+      ensureGameBlock(gid); // safe no-op if the block already exists
+      applyGameData(gid, g.away, g.home, g.status, g.overUnder, g.seasonType, cloudOdds[g.id]);
+    }
+
+    $("lastUpdated").textContent = new Date().toLocaleTimeString();
+
+    if(allFinal){
+      stopAutoRefresh();
+      setGlobalStatus(`${parsedList.length} game${parsedList.length>1?"s":""} — all final`, false);
+      $("clockInfo").textContent = "All games final — auto-refresh stopped";
+    } else if(liveCount > 0){
+      setGlobalStatus(`${parsedList.length} game${parsedList.length>1?"s":""} found — ${liveCount} live`, true);
+      $("clockInfo").textContent = "Auto-refreshing every 5s";
+      scheduleAutoRefresh(5000);
+    } else {
+      // Every game is still pre-game — no need to hammer the API every 5s
+      // hours before tip-off. Check back every 10 minutes instead, and this
+      // will automatically switch to 5s the moment any game goes live.
+      setGlobalStatus(`${parsedList.length} game${parsedList.length>1?"s":""} found — pre-game`, false);
+      $("clockInfo").textContent = "Pre-game — refreshing every 10 min";
+      scheduleAutoRefresh(10 * 60 * 1000);
+    }
+
+  } catch(err){
+    failCount++;
+    console.error("Score fetch failed:", err);
+    if(!liveMode && Object.keys(gameState).length === 0){
+      setGlobalStatus("Live fetch unavailable", false);
+      showBanner("Live score lookup failed. See attempt log below for details. You can enter scores manually below.");
+      if(failCount >= 2) enableManualFallbackBlock();
+    } else {
+      showBanner("Refresh failed — showing last known data. Will retry automatically.");
+    }
+    // Keep retrying at a moderate pace until a fetch succeeds and we know
+    // the real game state (which will then pick the right interval itself).
+    if(!refreshTimer){
+      scheduleAutoRefresh(30000);
+    }
+  }
+}
+
+let refreshTimer = null;
+let currentIntervalMs = null;
+function scheduleAutoRefresh(intervalMs){
+  if(refreshTimer && currentIntervalMs === intervalMs) return; // already running at the right pace
+  if(refreshTimer){ clearInterval(refreshTimer); refreshTimer = null; }
+  currentIntervalMs = intervalMs;
+  refreshTimer = setInterval(fetchScores, intervalMs);
+}
+function stopAutoRefresh(){
+  if(refreshTimer){
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+  currentIntervalMs = null;
+}
+
+// --- Live over/under totals ---
+// ESPN embeds betting odds directly in the same scoreboard payload we
+// already poll every 5s for scores (parsed in parseEvent, applied in
+// applyGameData) — no separate odds API/key/polling loop needed at all.
+
+$("refreshBtn").addEventListener("click", fetchScores);
+
+// --- Game simulator (for testing look-and-feel without waiting for a
+// real game in that state — call from the browser console) ---
+//
+// Builds a synthetic ESPN-shaped event and runs it through the exact
+// same parseEvent -> rebuildForOT -> applyGameData pipeline fetchScores
+// uses for real data, so what renders is a true test of the actual
+// code, not a separate mockup that could drift out of sync with it.
+function buildSyntheticEvent(cfg){
+  const toLinescores = arr => (arr || []).map((v, i) => ({ period: i + 1, value: v }));
+  return {
+    id: String(cfg.id),
+    date: cfg.date || new Date().toISOString(),
+    competitions: [{
+      competitors: [
+        {
+          homeAway: "away",
+          team: { displayName: cfg.awayName, abbreviation: cfg.awayAbbr || cfg.awayName.slice(0, 3).toUpperCase() },
+          linescores: toLinescores(cfg.awayQ)
+        },
+        {
+          homeAway: "home",
+          team: { displayName: cfg.homeName, abbreviation: cfg.homeAbbr || cfg.homeName.slice(0, 3).toUpperCase() },
+          linescores: toLinescores(cfg.homeQ)
+        }
+      ],
+      status: {
+        period: cfg.period,
+        displayClock: cfg.clock || null,
+        type: {
+          state: cfg.state || "post",
+          shortDetail: cfg.statusText || (cfg.state === "post" ? "Final" : ""),
+          detail: cfg.statusText || null
+        }
+      },
+      odds: cfg.overUnder != null ? [{ overUnder: cfg.overUnder }] : []
+    }]
+  };
+}
+
+function simulateGames(configs){
+  stopAutoRefresh(); // otherwise the next 5s poll overwrites this with real data
+
+  const configById = {};
+  configs.forEach(c => { configById[String(c.id)] = c; });
+
+  const rawEvents = configs.map(buildSyntheticEvent);
+  const parsedList = rawEvents.map(parseEvent).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const needed = neededOTCount(parsedList);
+  rebuildForOT(needed); // always rebuilds fresh, so each simulation run starts clean
+
+  updateReportDate(parsedList[0].date);
+
+  simulatedGids.clear();
+  for(const g of parsedList){
+    const gid = "g" + g.id;
+    const cfg = configById[g.id];
+    const hasOverride = cfg && cfg.awayF !== undefined && cfg.homeF !== undefined;
+    simulatedGids.set(gid, hasOverride ? { away: cfg.awayF, home: cfg.homeF } : null);
+    ensureGameBlock(gid);
+    applyGameData(gid, g.away, g.home, g.status, g.overUnder, g.seasonType);
+  }
+
+  const liveCount = parsedList.filter(g => g.status.state === "in").length;
+  const allFinal = parsedList.every(g => g.status.state === "post");
+  const suffix = allFinal ? " — all final" : (liveCount > 0 ? ` — ${liveCount} live` : " — pre-game");
+  setGlobalStatus(`${parsedList.length} game${parsedList.length > 1 ? "s" : ""} (SIMULATED)${suffix}`, liveCount > 0);
+  $("clockInfo").textContent = "Simulated data — auto-refresh paused. Reload the page to return to live scores.";
+  $("lastUpdated").textContent = new Date().toLocaleTimeString() + " (simulated)";
+
+  console.log(`[simulateGame] Loaded ${parsedList.length} simulated game(s). `
+    + `Auto-refresh is paused — reload the page to return to live data.`);
+}
+
+function simulateGame(cfg){
+  simulateGames([cfg]);
+}
+
+window.simulateGame = simulateGame;
+window.simulateGames = simulateGames;
+
+// Date stamp shown bottom-right, day/month/year format (e.g. "2 August
+// 2026") — this is the DATE OF THE GAME(S) currently displayed (taken
+// from the first game in the sorted list, since a single page load is
+// always one day's slate), not the viewer's own current date. Those two
+// can differ if the page is left open past midnight, or opened again
+// later to review a finished slate. Also keeps document.title updated
+// continuously to the same dated filename format (rather than only
+// setting it right before printing) — desktop Chrome's print-to-PDF
+// reads document.title live at the moment window.print() fires, but
+// iOS's print pipeline hands off to a separate system process that
+// appears to snapshot the title earlier, missing a last-second change.
+// Keeping it updated at the source instead means iOS's snapshot,        
+// whenever it happens, still catches the right value.
+function updateReportDate(isoDateStr){
+  // Always the US Eastern calendar date, wherever the viewer is.
+  const d = isoDateStr ? new Date(isoDateStr) : new Date(Date.now() - 4*60*60*1000);
+  const et = { timeZone: "America/New_York" };
+  const day = Number(d.toLocaleString("en-US", { ...et, day: "numeric" }));
+  const month = d.toLocaleString("en-US", { ...et, month: "long" });
+  const monthShort = d.toLocaleString("en-US", { ...et, month: "short" });
+  const year = Number(d.toLocaleString("en-US", { ...et, year: "numeric" }));
+  $("reportDate").textContent = `${day} ${month} ${year}`;
+  document.title = `WNBA Live Score -- Score Sheet_${day}${monthShort}${year}`;
+}
+updateReportDate(); // placeholder (today) until the first successful fetch sets the real game date
+
+$("downloadPdfBtn").addEventListener("click", ()=> window.print());
+
+// Version tag from the file's own last-modified time, same format as the
+// records page: version: 2026_october_06 10:49 PM
+(function renderVersionTag(){
+  const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  const d = new Date(document.lastModified);
+  const stamp = `${d.getFullYear()}_${months[d.getMonth()]}_${String(d.getDate()).padStart(2,'0')} ${d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
+  const el = document.getElementById('versionLine');
+  if(el) el.textContent = `version: ${stamp}`;
+})();
+
+// Live sync: when cloud.js pulls entries another device saved, show them here.
+window.addEventListener("cloud-keys", e => {
+  const order = ["K5manual","K5","J5","J3"];
+  const items = [];
+  (e.detail.keys || []).forEach(k => {
+    const m = k.match(/^wnba_(K5manual|K5|J5|J3)_(.+)$/);
+    if(m) items.push({ suffix: m[1], gid: m[2] });
+  });
+  items.sort((a,b) => order.indexOf(a.suffix) - order.indexOf(b.suffix));
+  const gids = new Set();
+  items.forEach(({suffix, gid}) => {
+    const el = eg(gid, suffix);
+    if(!el || document.activeElement === el) return;
+    const v = loadField(gid, suffix);
+    if(v === null) return;
+    const st = gameState[gid];
+    if(suffix === "K5manual"){ el.value = v; if(st) st.k5Source = "manual"; }
+    else if(suffix === "K5"){
+      if([...el.options].some(o => o.value === v)){ el.value = v; if(st) st.k5Source = "select"; }
+    } else { el.value = v; }
+    gids.add(gid);
+  });
+  gids.forEach(g => recalcGame(g));
+});
+
+fetchScores();
+</script>
+</body>
+</html>

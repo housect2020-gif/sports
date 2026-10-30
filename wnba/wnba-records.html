@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WNBA Schedule & Records — Live Sheet</title>
+<style>
+  :root{
+    --page-bg:#f4f5f7;
+    --surface:#ffffff;
+    --grid:#e3e7ee;
+    --grid-strong:#d0d3d8;
+    --header-bg:#1a5cff;
+    --header-fg:#ffffff;
+    --colhead-bg:#eef1f4;
+    --row-alt:#f8f9fc;
+    --row-hover:#eaf0fb;
+    --accent:#1a5cff;
+    --live:#e0473a;
+    --live-soft:rgba(224,71,58,.09);
+    --win:#1a8a4a;
+    --win-soft:#c8e9d1;
+    --today-soft:#fff3b0;
+    --text:#202124;
+    --sub:#5f6368;
+    --radius:10px;
+    --radius-sm:6px;
+    --shadow:0 1px 2px rgba(0,0,0,.05), 0 8px 24px -12px rgba(0,0,0,.18);
+    --font-ui:"Segoe UI", Calibri, Arial, sans-serif;
+    --font-mono:"Consolas","SF Mono","Roboto Mono",monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--page-bg);font-family:var(--font-ui);color:var(--text);}
+
+  .titlebar{
+    background:var(--header-bg); color:var(--header-fg);
+    padding:16px 22px; display:flex; align-items:center; justify-content:space-between;
+    flex-wrap:wrap; gap:10px; box-shadow:0 2px 10px rgba(0,0,0,.15);
+  }
+  .titlebar h1{font-size:16px; margin:0; font-weight:700;}
+  .titlebar .sub{font-size:12px; color:#dbe6ff; margin-top:3px;}
+  .live-pill{
+    display:inline-flex; align-items:center; gap:6px;
+    background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.35);
+    color:#fff; padding:6px 12px; border-radius:99px; font-size:12px; font-weight:600;
+  }
+  .live-dot{width:7px;height:7px;border-radius:50%;background:#ffb3a8;animation:pulse 1.4s infinite;}
+  @keyframes pulse{0%{opacity:1;transform:scale(1);}50%{opacity:.35;transform:scale(1.4);}100%{opacity:1;transform:scale(1);}}
+  .refresh-note{font-size:11px; color:#dbe6ff;}
+  .titlebar a.navlink{color:#dbe6ff; text-decoration:none; font-size:13px; font-weight:600;}
+  .titlebar a.navlink:hover{color:#fff;}
+
+  .page-wrap{max-width:1400px; margin:18px auto; padding:0 18px 28px;}
+  .sheet-card{background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; border:1px solid var(--grid-strong);}
+
+  .formula-bar{
+    background:var(--surface); border-bottom:1px solid var(--grid);
+    display:flex; align-items:center; padding:9px 16px; gap:10px; font-size:13px; flex-wrap:wrap;
+    position:sticky; top:0; z-index:30;
+  }
+  .cell-ref{
+    font-family:var(--font-mono); background:var(--colhead-bg); border:1px solid var(--grid-strong);
+    border-radius:var(--radius-sm); padding:4px 10px; min-width:64px; text-align:center; color:var(--sub); font-size:12px; font-weight:600;
+  }
+  .fx{color:var(--sub); font-style:italic; font-size:12px; user-select:none;}
+  .formula-content{
+    flex:1; font-family:var(--font-mono); font-size:13px; color:var(--text);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:120px;
+  }
+  .h2h-stat-box{
+    font-family:var(--font-mono); font-size:12px; font-weight:600; color:var(--text);
+    background:var(--colhead-bg); border:1px solid var(--grid-strong); border-radius:var(--radius-sm);
+    padding:5px 12px; white-space:nowrap; flex-shrink:0;
+  }
+  .h2h-stat-box .stat-label{
+    font-family:var(--font-ui); font-size:9.5px; font-weight:700; color:var(--sub);
+    text-transform:uppercase; letter-spacing:.3px; margin-right:5px;
+  }
+  .h2h-stat-box .stat-pct{font-weight:800; margin-left:4px;}
+  .h2h-stat-box .stat-pct.good{color:var(--win);}
+  .h2h-stat-box .stat-pct.bad{color:var(--live);}
+
+  .toolbar{
+    background:var(--colhead-bg); border-bottom:1px solid var(--grid);
+    display:flex; align-items:center; gap:16px; padding:10px 16px; flex-wrap:wrap;
+    position:sticky; top:39px; z-index:29; font-size:13px;
+  }
+  .toolbar label{color:var(--sub); font-size:12px; margin-right:5px; font-weight:500;}
+  .toolbar select{
+    font-family:var(--font-ui); font-size:13px; padding:6px 10px; border:1px solid var(--grid-strong);
+    border-radius:var(--radius-sm); background:var(--surface); color:var(--text);
+  }
+  .toolbar .count{margin-left:auto; color:var(--sub); font-size:12px; font-weight:500;}
+  .legend{display:flex; align-items:center; gap:14px; font-size:12px; color:var(--sub);}
+  .legend-item{display:inline-flex; align-items:center; gap:5px;}
+  .swatch{width:11px; height:11px; border-radius:3px; display:inline-block; border:1px solid rgba(0,0,0,.08);}
+  .swatch-today{background:var(--today-soft);}
+  .swatch-live{background:var(--live-soft);}
+  .swatch-final{background:var(--win-soft);}
+  .swatch-dateband{background:#e7ecf8; border-color:#c3ceec;}
+
+  .sheet-wrap{overflow:auto; max-height:calc(100vh - 130px);}
+  table{border-collapse:collapse; width:100%; background:var(--surface); font-size:13px;}
+  thead th{
+    position:sticky; top:0; z-index:20;
+    background:var(--colhead-bg); border:1px solid var(--grid);
+    padding:9px 12px; text-align:left; font-weight:700; color:var(--text);
+    white-space:nowrap;
+  }
+  thead tr.colletters th{
+    background:#eaeef5; color:var(--sub); font-family:var(--font-mono); font-weight:500;
+    font-size:11px; padding:4px 12px; top:0; z-index:21;
+  }
+  thead tr.headers th{top:23px;}
+  tbody th.rownum{
+    position:sticky; left:0; z-index:10;
+    background:#eaeef5; color:var(--sub); font-family:var(--font-mono); font-weight:500;
+    border:1px solid var(--grid); text-align:center; font-size:11px; min-width:36px;
+  }
+  tbody td{border:1px solid var(--grid); padding:8px 12px; white-space:nowrap; vertical-align:middle;}
+  tbody tr:nth-child(even){background:var(--row-alt);}
+  tr.date-band{background:#e7ecf8 !important;}
+  tr.date-band:hover{background:#d7dff2 !important;}
+  tbody tr:hover{background:var(--row-hover);}
+  .stage-badge{display:inline-block; margin-left:6px; padding:0 5px; border-radius:3px; font-size:10px; font-weight:700; letter-spacing:.4px; vertical-align:middle; background:#e8eaed; color:#5f6368;}
+  .stage-badge.playoff{background:#fde8c8; color:#9a5b00;}
+  td.date{font-family:var(--font-mono); color:var(--sub); font-size:12px;}
+  .game-time{color:var(--accent); font-size:10.5px; opacity:.8;}
+  .hist-score{font-size:10.5px; color:var(--sub); font-family:var(--font-mono); font-weight:400;}
+  .h2h-actual-winner{font-size:10.5px; color:var(--sub); opacity:.85;}
+  td.team{font-weight:700; letter-spacing:.2px;}
+  td.winner.dash{color:var(--sub); font-weight:400;}
+  td.record{font-family:var(--font-mono); font-size:12px; color:var(--sub);}
+  td.h2h{font-size:12px; color:var(--sub);}
+  .badge-win{color:var(--win);}
+  tr.today-row{background:var(--today-soft) !important;}
+  tr.today-row:hover{background:#fbe89a !important;}
+  tr.live-row{background:var(--live-soft) !important;}
+  tr.live-row:hover{background:rgba(224,71,58,.16) !important;}
+  .score-live{font-family:var(--font-mono); font-weight:700; color:var(--live);}
+  .status-tag{
+    font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; margin-left:6px;
+    background:var(--live-soft); color:var(--live); vertical-align:middle;
+  }
+  .status-final{background:var(--win-soft); color:var(--win);}
+  .status-pre{background:rgba(95,99,104,.12); color:var(--sub);}
+  .h2h-match{background:var(--win-soft) !important; color:var(--win) !important; font-weight:700;}
+  .h2h-mismatch{background:var(--live-soft) !important; color:var(--live) !important; font-weight:700;}
+  .h2h-loc{font-weight:400; font-size:11px; color:var(--sub); opacity:.85;}
+  .h2h-actual-loser{font-weight:400; font-size:10.5px; color:var(--sub); opacity:.7;}
+  .h2h-tier-tag{font-weight:600; font-size:10px; color:var(--accent); opacity:.75;}
+  .h2h-pretied{font-weight:400; font-size:9.5px; color:var(--sub); opacity:.65; font-style:italic;}
+
+  footer{padding:12px 18px; font-size:11px; color:#8189a0; background:var(--colhead-bg); border-top:1px solid var(--grid);}
+  footer a{color:var(--accent);}
+
+  ::-webkit-scrollbar{height:10px; width:10px;}
+  ::-webkit-scrollbar-thumb{background:#c3cadb; border-radius:6px;}
+  ::-webkit-scrollbar-track{background:var(--page-bg);}
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <div>
+    <h1>WNBA Games — Schedule, Results, Records &amp; Head-to-Head</h1>
+    <div class="sub" id="rangeSub">Loading range…</div>
+  </div>
+  <div style="display:flex; align-items:center; gap:12px;">
+    <a href="index.html" class="navlink">Live Scores →</a>
+    <span class="refresh-note" id="lastUpdated">—</span>
+    <span class="live-pill" id="livePill"><span class="live-dot"></span>Loading…</span>
+  </div>
+</div>
+
+<div class="page-wrap">
+<div class="sheet-card">
+
+<div class="formula-bar">
+  <div class="cell-ref" id="cellRef">A1</div>
+  <div class="fx">fx</div>
+  <div class="formula-content" id="cellContent">WNBA Games - Schedule, Results, Records &amp; Head-to-Head Analysis</div>
+  <div class="h2h-stat-box" id="prevDayStatBox">Loading…</div>
+  <div class="h2h-stat-box" id="last5StatBox">Loading…</div>
+  <div class="h2h-stat-box" id="seasonStatBox">Loading…</div>
+</div>
+
+<div class="toolbar">
+  <div>
+    <label>Team</label>
+    <select id="teamFilter"><option value="">All teams</option></select>
+  </div>
+  <div>
+    <label>Date</label>
+    <select id="dateFilter"><option value="">All dates</option></select>
+  </div>
+  <div>
+    <label>Show</label>
+    <select id="viewFilter">
+      <option value="all">All games</option>
+      <option value="today" selected>Today &amp; live</option>
+      <option value="finished">Completed only</option>
+    </select>
+  </div>
+  <div class="legend">
+    <span class="legend-item"><span class="swatch swatch-today"></span>Scheduled today</span>
+    <span class="legend-item"><span class="swatch swatch-live"></span>Live now</span>
+    <span class="legend-item"><span class="swatch swatch-final"></span>Final</span>
+    <span class="legend-item"><span class="swatch swatch-dateband"></span>Alternating by date</span>
+  </div>
+  <button id="exportCsvBtn" style="font-family:var(--font-ui); font-size:12.5px; font-weight:700; padding:6px 14px; border:1px solid var(--accent); border-radius:var(--radius-sm); background:var(--surface); color:var(--accent); cursor:pointer;">Export CSV</button>
+  <div class="count" id="countLabel">0 rows</div>
+</div>
+
+<div class="sheet-wrap">
+<table id="sheet">
+  <thead>
+    <tr class="colletters">
+      <th></th>
+      <th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th><th>G</th>
+    </tr>
+    <tr class="headers">
+      <th></th>
+      <th id="dateHeader" style="cursor:pointer; user-select:none;" title="Click to sort by game time (only active in Today &amp; Live view)">Date <span id="dateSortArrow"></span></th>
+      <th>Away</th>
+      <th>Home</th>
+      <th>Winner</th>
+      <th>Current / Winner Record</th>
+      <th>Head-to-Head Record</th>
+      <th>H2H Outcome Winner</th>
+    </tr>
+  </thead>
+  <tbody id="sheetBody"></tbody>
+</table>
+</div>
+
+<footer>
+  Season history is pulled live from ESPN's public WNBA scoreboard, one day at a time from the season start through today, and cached in this browser so it only has to happen once. Today's games refresh automatically while this page is open. No API key required.
+  <div style="margin-top:6px; color:#a7b2c2;" id="versionTag">version: loading…</div>
+</footer>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="../cloud.js"></script>
+<script>
+// --- Config -----------------------------------------------------------
+// WNBA regular seasons have historically opened mid-May; this is a
+// reasonable starting assumption, not a confirmed date — if the actual
+// 2026 opener was different, update this one line and the cache will
+// naturally backfill the corrected range on next load.
+const SEASON_START = '2026-05-16';
+const SCOREBOARD_URL = 'https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/scoreboard';
+const CACHE_KEY = 'wnba_records_season_cache_v1';
+
+// Same proxy fallback list, in the same direct-first order, already
+// confirmed reliable on the live-scores page — ESPN's WNBA endpoint
+// allows direct browser CORS, so "direct" succeeds virtually every time
+// and the rest exist purely as a safety net if that ever changes.
+const PROXIES = [
+  url => url,
+  url => "https://corsproxy.io/?url=" + encodeURIComponent(url),
+  url => "https://api.allorigins.win/raw?url=" + encodeURIComponent(url),
+  url => "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(url),
+  url => "https://cors.x2u.in/" + url,
+  url => "https://thingproxy.freeboard.io/fetch/" + url
+];
+
+let SEASON_DATA = [];       // completed games, oldest to newest
+let STANDINGS = {};         // team -> {w, l} — final cumulative record
+let STANDINGS_BY_DATE = {}; // date -> {team -> {w, l}} — record as of that date, for the H2H tiebreak
+let LIVE_MAP = {};          // "AWAY@HOME" -> live game info for today
+let allRows = [];
+let CURRENT_FILTERED = [];
+let TODAY_SORT_DIR = 'asc';
+
+// Computes "today" in US Eastern time — where ESPN's own game dates are
+// anchored — rather than the viewer's local browser timezone. A viewer
+// well ahead of US Eastern (e.g. Europe) would otherwise get a "today"
+// that doesn't match ESPN's actual day boundary: a 7:30 PM EDT game
+// shows as roughly 1:30 AM the NEXT calendar day in Europe, so if the
+// page's own idea of "today" is also computed in the viewer's timezone,
+// dates and highlighting stop lining up with what ESPN actually means
+// by "today's games" — exactly the confusing "everything looks like
+// today" symptom this fixes.
+function todayStr(){
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+}
+function ymdCompact(dateStr){ return dateStr.replaceAll('-', ''); }
+function addDays(dateStr, n){
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// Always shows the game's start time in US Eastern, labeled explicitly,
+// regardless of the viewer's own timezone — so the displayed time always
+// matches the date it's shown next to (both anchored to the same US
+// Eastern day), instead of silently converting to the viewer's local
+// time and rolling into a different calendar day. WNBA's regular season
+// (May-October) runs entirely within Eastern DAYLIGHT time, so "EDT" is
+// always correct for it — no need to detect EST here.
+function formatGameTime(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) + ' EDT';
+}
+
+// Small tag shown next to the date: PRE for preseason, PLAYOFFS for
+// playoff games, nothing for regular-season games.
+function stageBadge(r){
+  if(r.playoff) return ' <span class="stage-badge playoff" title="Playoff game">PLAYOFFS</span>';
+  if(r.preseason) return ' <span class="stage-badge" title="Preseason game">PRE</span>';
+  return '';
+}
+
+function loadCache(){
+  try{ return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); }
+  catch(e){ return {}; }
+}
+function saveCache(cache){
+  try{ localStorage.setItem(CACHE_KEY, JSON.stringify(cache)); }
+  catch(e){ console.error('Could not save WNBA records cache', e); }
+}
+
+// Fetches ESPN's scoreboard for ONE specific date, trying each proxy in
+// order until one succeeds. Returns only completed (state === 'post')
+// games as plain row objects — a date with no games (all-star break,
+// off day) just comes back as an empty array, not an error.
+async function fetchDateGames(dateStr){
+  const target = `${SCOREBOARD_URL}?dates=${ymdCompact(dateStr)}`;
+  for(const wrap of PROXIES){
+    try{
+      const res = await fetch(wrap(target), { cache: 'no-store' });
+      if(!res.ok) continue;
+      const json = await res.json();
+      const events = json.events || [];
+      const rows = [];
+      events.forEach(ev => {
+        const comp = ev.competitions && ev.competitions[0];
+        if(!comp) return;
+        const state = comp.status && comp.status.type && comp.status.type.state;
+        if(state !== 'post') return; // completed games only
+        const competitors = comp.competitors || [];
+        const away = competitors.find(c => c.homeAway === 'away');
+        const home = competitors.find(c => c.homeAway === 'home');
+        if(!away || !home) return;
+        const awayAbbr = away.team.abbreviation;
+        const homeAbbr = home.team.abbreviation;
+        const awayScore = Number(away.score);
+        const homeScore = Number(home.score);
+        if(isNaN(awayScore) || isNaN(homeScore)) return;
+        const winner = awayScore > homeScore ? awayAbbr : (homeScore > awayScore ? homeAbbr : null);
+        if(!winner) return; // guards against an unresolved tie/no-decision
+        const seasonType = ev.season && ev.season.type;
+        const preseason = seasonType === 1;
+        const playoff = seasonType === 3;
+        rows.push({
+          date: dateStr,
+          preseason, playoff,
+          eventTime: ev.date,
+          away: awayAbbr,
+          home: homeAbbr,
+          winner,
+          awayScore, homeScore,
+          record: '', h2h: '', h2h_winner: '—'
+        });
+      });
+      return rows;
+    } catch(e){
+      // try next proxy
+    }
+  }
+  console.warn(`[records] all proxies failed for ${dateStr}`);
+  return null; // genuine failure (not "no games") — caller should NOT cache this
+}
+
+// Walks the season day by day from SEASON_START through yesterday,
+// using the cache for any date already fetched (completed days never
+// change, so once cached they're never re-fetched). Today is handled
+// separately by fetchLiveToday(), since it can still be in progress.
+async function fetchFullSeason(){
+  const cache = loadCache();
+  const today = todayStr();
+  const results = [];
+  let cursor = SEASON_START;
+  let fetchedCount = 0;
+
+  while(cursor < today){
+    if(cache[cursor] !== undefined){
+      results.push(...cache[cursor]);
+    } else {
+      const dayGames = await fetchDateGames(cursor);
+      if(dayGames === null){
+        // Genuine fetch failure — don't cache, so it's retried next load.
+        console.warn(`[records] skipping cache for ${cursor} (fetch failed)`);
+      } else {
+        cache[cursor] = dayGames;
+        results.push(...dayGames);
+        fetchedCount++;
+        if(fetchedCount % 10 === 0) saveCache(cache); // save progress periodically, not just at the end
+      }
+      document.getElementById('rangeSub').textContent = `Loading season… ${cursor} (${results.length} games so far)`;
+    }
+    cursor = addDays(cursor, 1);
+  }
+  saveCache(cache);
+  results.sort((a, b) => a.date.localeCompare(b.date) || (a.eventTime || '').localeCompare(b.eventTime || ''));
+  return results;
+}
+
+function backfillSeasonRecords(rows){
+  const record = {};
+  const byDate = {};
+  rows.forEach(r => { (byDate[r.date] = byDate[r.date] || []).push(r); });
+  Object.keys(byDate).sort().forEach(date => {
+    const gamesToday = byDate[date];
+    gamesToday.forEach(r => {
+      if(!r.winner || r.preseason || r.playoff) return; // preseason/playoffs never count toward regular-season records
+      const loser = r.winner === r.away ? r.home : r.away;
+      record[r.winner] = record[r.winner] || { w: 0, l: 0 };
+      record[loser] = record[loser] || { w: 0, l: 0 };
+      record[r.winner].w++;
+      record[loser].l++;
+    });
+    gamesToday.forEach(r => {
+      const awayRec = record[r.away] ? `${record[r.away].w}-${record[r.away].l}` : '0-0';
+      const homeRec = record[r.home] ? `${record[r.home].w}-${record[r.home].l}` : '0-0';
+      r.record = r.preseason ? `${r.away} @ ${r.home} (Preseason)` : r.playoff ? `${r.away} @ ${r.home} (Playoffs)` : `${r.away} (${awayRec}) @ ${r.home} (${homeRec})`;
+    });
+    const snapshot = {};
+    Object.keys(record).forEach(team => { snapshot[team] = { w: record[team].w, l: record[team].l }; });
+    STANDINGS_BY_DATE[date] = snapshot;
+  });
+  STANDINGS = record;
+}
+
+function deriveH2HLeader(h2hText){
+  if(!h2hText) return '—';
+  const m = h2hText.match(/^([A-Z]{2,4})\s+leads/);
+  if(m) return m[1];
+  if(/^Tied/i.test(h2hText)) return 'Tied';
+  return '—';
+}
+function extractH2HTeam(displayVal){
+  if(!displayVal || displayVal === '—' || displayVal === 'Tied') return null;
+  const m = displayVal.match(/^Tied - (.+)$/);
+  return m ? m[1] : displayVal;
+}
+
+// WNBA teams typically only meet 2-3 times a SEASON (vs. MLB divisional
+// rivals meeting 13+ times), so MLB's "3+ game margin = Strong" threshold
+// is nearly unreachable here — adapted down to fit WNBA's much smaller
+// head-to-head sample sizes. This is a starting assumption, not a
+// validated number; worth revisiting once real WNBA H2H data accumulates
+// the same way the PPM threshold on the live-scores site was tuned
+// against real outcomes rather than left as an initial guess.
+function classifyTierFromH2HText(h2hText){
+  if(!h2hText) return null;
+  if(h2hText === 'No meetings yet') return 'nodata';
+  if(h2hText.startsWith('Tied')) return 'coinflip';
+  const m = h2hText.match(/^.+ leads (\d+)-(\d+)$/);
+  if(!m) return null;
+  const margin = parseInt(m[1], 10) - parseInt(m[2], 10);
+  return margin >= 2 ? 'strong' : 'moderate';
+}
+const TIER_DISPLAY_NAME = { strong: 'Strong', moderate: 'Moderate', coinflip: 'Coinflip', nodata: 'No data' };
+
+function computeH2H(teamA, teamB, asOfDate){
+  let winsA = 0, winsB = 0;
+  SEASON_DATA.forEach(r => {
+    if(!r.winner || r.preseason || r.playoff) return; // preseason/playoffs excluded from H2H
+    const pair = new Set([r.away, r.home]);
+    if(!pair.has(teamA) || !pair.has(teamB)) return;
+    if(asOfDate && r.date >= asOfDate) return;
+    if(r.winner === teamA) winsA++;
+    else if(r.winner === teamB) winsB++;
+  });
+  if(winsA === 0 && winsB === 0) return { text: 'No meetings yet', leader: '—' };
+  if(winsA === winsB){
+    const text = `Tied ${winsA}-${winsB}`;
+    const pointInTime = asOfDate ? STANDINGS_BY_DATE[asOfDate] : null;
+    const standingsSource = pointInTime || STANDINGS;
+    const recA = standingsSource[teamA], recB = standingsSource[teamB];
+    if(recA && recB){
+      const gamesA = recA.w + recA.l, gamesB = recB.w + recB.l;
+      const pctA = gamesA > 0 ? recA.w / gamesA : 0;
+      const pctB = gamesB > 0 ? recB.w / gamesB : 0;
+      if(pctA > pctB) return { text, leader: `Tied - ${teamA}` };
+      if(pctB > pctA) return { text, leader: `Tied - ${teamB}` };
+    }
+    return { text, leader: 'Tied' };
+  }
+  return winsA > winsB
+    ? { text: `${teamA} leads ${winsA}-${winsB}`, leader: teamA }
+    : { text: `${teamB} leads ${winsB}-${winsA}`, leader: teamB };
+}
+
+function buildKey(away, home){ return `${away}@${home}`; }
+
+async function fetchLiveToday(){
+  const dateStr = todayStr();
+  const target = `${SCOREBOARD_URL}?dates=${ymdCompact(dateStr)}`;
+  for(const wrap of PROXIES){
+    try{
+      const res = await fetch(wrap(target + `&_=${Date.now()}`), { cache: 'no-store' });
+      if(!res.ok) continue;
+      const json = await res.json();
+      const map = {};
+      (json.events || []).forEach(ev => {
+        const comp = ev.competitions && ev.competitions[0];
+        if(!comp) return;
+        const status = comp.status || {};
+        const state = status.type && status.type.state;
+        const shortDetail = status.type && status.type.shortDetail;
+        const competitors = comp.competitors || [];
+        const away = competitors.find(c => c.homeAway === 'away');
+        const home = competitors.find(c => c.homeAway === 'home');
+        if(!away || !home) return;
+        const awayAbbr = away.team.abbreviation, homeAbbr = home.team.abbreviation;
+        let awayScore = Number(away.score), homeScore = Number(home.score);
+        if(state === 'pre'){ awayScore = null; homeScore = null; }
+        else { if(isNaN(awayScore)) awayScore = 0; if(isNaN(homeScore)) homeScore = 0; }
+        let winner = '—';
+        if(state === 'post'){
+          if(awayScore > homeScore) winner = awayAbbr;
+          else if(homeScore > awayScore) winner = homeAbbr;
+        }
+        const awayRec = away.records && away.records[0] ? away.records[0].summary : '';
+        const homeRec = home.records && home.records[0] ? home.records[0].summary : '';
+        map[buildKey(awayAbbr, homeAbbr)] = {
+          state, shortDetail, awayScore, homeScore, winner, awayAbbr, homeAbbr, awayRec, homeRec,
+          eventTime: ev.date,
+          preseason: !!(ev.season && ev.season.type === 1),
+          playoff: !!(ev.season && ev.season.type === 3)
+        };
+      });
+      LIVE_MAP = map;
+      document.getElementById('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+      return;
+    } catch(e){
+      // try next proxy
+    }
+  }
+  document.getElementById('lastUpdated').textContent = 'Live fetch failed — showing last known data';
+}
+
+function mergeRows(){
+  const today = todayStr();
+  const rows = SEASON_DATA.filter(r => r.date !== today).map(r => ({...r}));
+  const liveEntries = Object.values(LIVE_MAP);
+  liveEntries.forEach(live => {
+    const h2h = computeH2H(live.awayAbbr, live.homeAbbr, today);
+    rows.push({
+      date: today,
+      away: live.awayAbbr,
+      home: live.homeAbbr,
+      winner: live.state === 'post' ? live.winner : '—',
+      preseason: !!live.preseason, playoff: !!live.playoff,
+      record: live.preseason ? `${live.awayAbbr} @ ${live.homeAbbr} (Preseason)` : live.playoff ? `${live.awayAbbr} @ ${live.homeAbbr} (Playoffs)` : `${live.awayAbbr} (${live.awayRec}) @ ${live.homeAbbr} (${live.homeRec})`,
+      h2h: h2h.text,
+      h2h_winner: live.state === 'post' ? h2h.leader : '—',
+      eventTime: live.eventTime,
+      _live: live
+    });
+  });
+  rows.sort((a,b) => a.date.localeCompare(b.date));
+  return rows;
+}
+
+function populateFilters(rows){
+  const teamSel = document.getElementById('teamFilter');
+  const dateSel = document.getElementById('dateFilter');
+  const teams = new Set();
+  const dates = new Set();
+  rows.forEach(r => { teams.add(r.away); teams.add(r.home); dates.add(r.date); });
+  const prevTeam = teamSel.value, prevDate = dateSel.value;
+  teamSel.innerHTML = '<option value="">All teams</option>' + [...teams].sort().map(t => `<option value="${t}">${t}</option>`).join('');
+  dateSel.innerHTML = '<option value="">All dates</option>' + [...dates].sort().reverse().map(d => `<option value="${d}">${d}</option>`).join('');
+  teamSel.value = prevTeam; dateSel.value = prevDate;
+}
+
+function render(){
+  const rows = allRows;
+  const teamFilter = document.getElementById('teamFilter').value;
+  const dateFilter = document.getElementById('dateFilter').value;
+  const viewFilter = document.getElementById('viewFilter').value;
+  const today = todayStr();
+
+  let filtered = rows.filter(r => {
+    if(teamFilter && r.away !== teamFilter && r.home !== teamFilter) return false;
+    if(dateFilter && r.date !== dateFilter) return false;
+    if(viewFilter === 'today' && r.date !== today) return false;
+    if(viewFilter === 'finished' && (r.winner === '—' || !r.winner)) return false;
+    return true;
+  });
+
+  if(viewFilter === 'today'){
+    filtered = filtered.slice().sort((a, b) => {
+      const ta = a.eventTime || '', tb = b.eventTime || '';
+      return TODAY_SORT_DIR === 'asc' ? ta.localeCompare(tb) : tb.localeCompare(ta);
+    });
+  } else {
+    filtered = filtered.slice().reverse();
+  }
+  CURRENT_FILTERED = filtered;
+
+  const dateHeader = document.getElementById('dateHeader');
+  const dateSortArrow = document.getElementById('dateSortArrow');
+  if(viewFilter === 'today'){
+    dateHeader.style.opacity = '1';
+    dateSortArrow.textContent = TODAY_SORT_DIR === 'asc' ? '▲' : '▼';
+  } else {
+    dateHeader.style.opacity = '.55';
+    dateSortArrow.textContent = '';
+  }
+
+  const tbody = document.getElementById('sheetBody');
+  tbody.innerHTML = '';
+
+  filtered.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    const isToday = r.date === today;
+    const live = r._live;
+    const isLiveInProgress = live && live.state === 'in';
+
+    if(isLiveInProgress) tr.classList.add('live-row');
+    else if(isToday) tr.classList.add('today-row');
+    else {
+      const dayOfMonth = parseInt(r.date.split('-')[2], 10);
+      if(!isNaN(dayOfMonth) && dayOfMonth % 2 === 0) tr.classList.add('date-band');
+    }
+
+    let winnerHtml, recordHtml;
+    if(live){
+      if(live.state === 'in'){
+        winnerHtml = `<span class="score-live">${live.awayAbbr} ${live.awayScore} – ${live.homeScore} ${live.homeAbbr}</span><span class="status-tag">${live.shortDetail || 'LIVE'}</span>`;
+        recordHtml = `${live.awayAbbr} (${live.awayRec}) @ ${live.homeAbbr} (${live.homeRec})`;
+      } else if(live.state === 'post'){
+        winnerHtml = `<span class="badge-win">${live.winner}</span><span class="status-tag status-final">FINAL ${live.awayScore}-${live.homeScore}</span>`;
+        recordHtml = `${live.awayAbbr} (${live.awayRec}) @ ${live.homeAbbr} (${live.homeRec})`;
+      } else {
+        winnerHtml = `<span style="color:var(--sub); font-weight:400;">—</span><span class="status-tag status-pre">${live.shortDetail || 'Scheduled'}</span>`;
+        recordHtml = `${live.awayAbbr} (${live.awayRec}) @ ${live.homeAbbr} (${live.homeRec})`;
+      }
+    } else {
+      const isDash = (r.winner === '—' || !r.winner);
+      if(isDash){
+        winnerHtml = '—';
+      } else {
+        winnerHtml = r.winner + ` <span class="hist-score">(${r.awayScore}-${r.homeScore})</span>`;
+      }
+      recordHtml = r.record || '';
+    }
+
+    const actualWinner = (live && live.state === 'post') ? live.winner : (r.winner && r.winner !== '—' ? r.winner : null);
+    const h2hDisplay = (!r.h2h_winner || r.h2h_winner === '—') ? deriveH2HLeader(r.h2h) : r.h2h_winner;
+    const h2hTeam = extractH2HTeam(h2hDisplay);
+    let h2hCellClass = '';
+    if(actualWinner && h2hTeam) h2hCellClass = (h2hTeam === actualWinner) ? 'h2h-match' : 'h2h-mismatch';
+
+    const actualLoser = actualWinner ? (actualWinner === r.away ? r.home : r.away) : null;
+    const wasPreGameTied = !!(r.h2h && r.h2h.startsWith('Tied'));
+    const preTiedTag = wasPreGameTied ? ' <span class="h2h-pretied">(pre-tied)</span>' : '';
+    const tierLabel = TIER_DISPLAY_NAME[classifyTierFromH2HText(r.h2h)];
+    const tierTag = tierLabel ? ` <span class="h2h-tier-tag">(${tierLabel})</span>` : '';
+
+    let g2hMainText;
+    if(actualWinner){
+      const winnerLoc = actualWinner === r.home ? ' <span class="h2h-loc">(H)</span>' : ' <span class="h2h-loc">(A)</span>';
+      g2hMainText = `${actualWinner}${winnerLoc}${tierTag}${actualLoser ? ' <span class="h2h-actual-loser">(' + actualLoser + ')</span>' : ''}${preTiedTag}`;
+    } else {
+      let pendingTag = '';
+      if(h2hTeam === r.home) pendingTag = ' <span class="h2h-loc">(H)</span>';
+      else if(h2hTeam === r.away) pendingTag = ' <span class="h2h-loc">(A)</span>';
+      g2hMainText = `${h2hDisplay}${pendingTag}${tierTag}`;
+    }
+
+    tr.innerHTML = `
+      <th class="rownum">${i+1}</th>
+      <td class="date">${r.date}${stageBadge(r)}${r.eventTime ? ' <span class="game-time">' + formatGameTime(r.eventTime) + '</span>' : ''}</td>
+      <td class="team">${r.away}</td>
+      <td class="team">${r.home}</td>
+      <td class="winner ${(r.winner==='—'&&!live)?'dash':''}">${winnerHtml}</td>
+      <td class="record">${recordHtml}</td>
+      <td class="h2h">${r.h2h || ''}${actualWinner ? ' <span class="h2h-actual-winner">(' + actualWinner + ')</span>' : ''}</td>
+      <td class="team ${h2hCellClass}">${g2hMainText}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('countLabel').textContent = `${filtered.length} rows`;
+}
+
+function mostRecentPriorDate(seasonData, todayKey){
+  let best = null;
+  seasonData.forEach(r => { if(r.date < todayKey && (!best || r.date > best)) best = r.date; });
+  return best;
+}
+function lastNDistinctDates(seasonData, todayKey, n){
+  const dates = new Set();
+  seasonData.forEach(r => { if(r.date < todayKey) dates.add(r.date); });
+  return Array.from(dates).sort().slice(-n);
+}
+function computeH2HAccuracyExcludingTied(rows){
+  let wins = 0, losses = 0;
+  rows.forEach(r => {
+    if(!r.winner || r.winner === '—') return;
+    if(!!(r.h2h && r.h2h.startsWith('Tied'))) return;
+    const h2hDisplay = (!r.h2h_winner || r.h2h_winner === '—') ? deriveH2HLeader(r.h2h) : r.h2h_winner;
+    const h2hTeam = extractH2HTeam(h2hDisplay);
+    if(!h2hTeam) return;
+    if(h2hTeam === r.winner) wins++; else losses++;
+  });
+  return { wins, losses };
+}
+function renderH2HStatBoxes(){
+  const todayKey = todayStr();
+  const prevDate = mostRecentPriorDate(SEASON_DATA, todayKey);
+  const prevDayRows = prevDate ? SEASON_DATA.filter(r => r.date === prevDate) : [];
+  const prevStats = computeH2HAccuracyExcludingTied(prevDayRows);
+
+  const last5Dates = lastNDistinctDates(SEASON_DATA, todayKey, 5);
+  const last5Rows = SEASON_DATA.filter(r => last5Dates.includes(r.date));
+  const last5Stats = computeH2HAccuracyExcludingTied(last5Rows);
+
+  const seasonRows = SEASON_DATA.filter(r => r.date < todayKey && !r.preseason && !r.playoff);
+  const seasonStats = computeH2HAccuracyExcludingTied(seasonRows);
+
+  function fillBox(elId, stats, label, titleSuffix){
+    const total = stats.wins + stats.losses;
+    const pct = total > 0 ? (stats.wins / total * 100) : null;
+    const pctClass = pct === null ? '' : (pct >= 50 ? 'good' : 'bad');
+    const pctText = pct === null ? '—' : pct.toFixed(1) + '%';
+    const el = document.getElementById(elId);
+    el.innerHTML = `<span class="stat-label">${label}</span> W=${stats.wins} L=${stats.losses} <span class="stat-pct ${pctClass}">${pctText}</span>`;
+    el.title = `Pre-tied (coinflip) games excluded${titleSuffix ? ' — ' + titleSuffix : ''}`;
+  }
+  fillBox('prevDayStatBox', prevStats, 'Prev Day', prevDate ? prevDate : 'no prior completed day yet');
+  fillBox('last5StatBox', last5Stats, 'Last 5 Days', last5Dates.length > 0 ? `${last5Dates[0]} through ${last5Dates[last5Dates.length-1]}` : 'not enough completed days yet');
+  fillBox('seasonStatBox', seasonStats, 'Season', `through ${prevDate || todayKey}`);
+}
+
+function wireCellInspector(){
+  document.getElementById('sheetBody').addEventListener('click', (e) => {
+    const td = e.target.closest('td');
+    if(!td) return;
+    const tr = td.closest('tr');
+    const cells = Array.from(tr.children);
+    const colIdx = cells.indexOf(td);
+    const rowNum = tr.querySelector('.rownum').textContent;
+    const colLetters = ['','A','B','C','D','E','F','G'];
+    document.getElementById('cellRef').textContent = colLetters[colIdx] + (parseInt(rowNum)+1);
+    document.getElementById('cellContent').textContent = td.textContent.trim();
+  });
+}
+
+function csvField(val){
+  const s = String(val ?? '');
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+function exportCsv(){
+  const rows = CURRENT_FILTERED;
+  const today = todayStr();
+  const header = ['Date','Away','Home','Winner','Current / Winner Record','Head-to-Head Record','H2H Outcome Winner'];
+  const lines = [header.map(csvField).join(',')];
+
+  rows.forEach(r => {
+    const live = r._live;
+    let winnerText, recordText;
+    if(live){
+      if(live.state === 'in'){
+        winnerText = `${live.awayAbbr} ${live.awayScore}-${live.homeScore} ${live.homeAbbr} (${live.shortDetail || 'LIVE'})`;
+        recordText = `${live.awayAbbr} (${live.awayRec}) @ ${live.homeAbbr} (${live.homeRec})`;
+      } else if(live.state === 'post'){
+        winnerText = `${live.winner} (FINAL ${live.awayScore}-${live.homeScore})`;
+        recordText = `${live.awayAbbr} (${live.awayRec}) @ ${live.homeAbbr} (${live.homeRec})`;
+      } else {
+        winnerText = `— (${live.shortDetail || 'Scheduled'})`;
+        recordText = `${live.awayAbbr} (${live.awayRec}) @ ${live.homeAbbr} (${live.homeRec})`;
+      }
+    } else {
+      const isDash = (r.winner === '—' || !r.winner);
+      winnerText = isDash ? '—' : `${r.winner} (${r.awayScore}-${r.homeScore})`;
+      recordText = r.record || '';
+    }
+    const actualWinnerText = (live && live.state === 'post') ? live.winner : (r.winner && r.winner !== '—' ? r.winner : null);
+    const h2hText = (r.h2h || '') + (actualWinnerText ? ` (${actualWinnerText})` : '');
+    const wasPreGameTiedCsv = !!(r.h2h && r.h2h.startsWith('Tied'));
+    const tierLabelCsv = TIER_DISPLAY_NAME[classifyTierFromH2HText(r.h2h)];
+    const tierTagCsv = tierLabelCsv ? ` (${tierLabelCsv})` : '';
+    let h2hWinnerText;
+    if(actualWinnerText){
+      const actualLoserText = actualWinnerText === r.away ? r.home : r.away;
+      h2hWinnerText = `${actualWinnerText}${tierTagCsv} (${actualLoserText})${wasPreGameTiedCsv ? ' (pre-tied)' : ''}`;
+    } else {
+      const pendingH2hText = (!r.h2h_winner || r.h2h_winner === '—') ? deriveH2HLeader(r.h2h) : r.h2h_winner;
+      h2hWinnerText = `${pendingH2hText}${tierTagCsv}`;
+    }
+    const dateText = (r.eventTime ? `${r.date} ${formatGameTime(r.eventTime)}` : r.date) + (r.playoff ? ' (Playoffs)' : r.preseason ? ' (Preseason)' : '');
+    lines.push([dateText, r.away, r.home, winnerText, recordText, h2hText, h2hWinnerText].map(csvField).join(','));
+  });
+
+  const csv = lines.join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `wnba-schedule-${today}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function hasLiveGameNow(){ return Object.values(LIVE_MAP).some(g => g.state === 'in'); }
+function hasUpcomingGameSoon(withinMs){
+  const now = Date.now();
+  return Object.values(LIVE_MAP).some(g => {
+    if(g.state !== 'pre' || !g.eventTime) return false;
+    const start = new Date(g.eventTime).getTime();
+    if(isNaN(start)) return false;
+    return start > now && start - now <= withinMs;
+  });
+}
+function updateLivePill(){
+  const pill = document.getElementById('livePill');
+  const live = hasLiveGameNow();
+  const soon = hasUpcomingGameSoon(60 * 60 * 1000);
+  if(live) pill.innerHTML = '<span class="live-dot"></span>LIVE · auto-refresh 30s';
+  else if(soon) pill.innerHTML = '<span class="live-dot"></span>Game starting soon · auto-refresh 30s';
+  else pill.innerHTML = '<span class="live-dot" style="animation:none; opacity:.5;"></span>No live games · refreshing hourly';
+}
+function scheduleNextRefresh(){
+  const soon = hasUpcomingGameSoon(60 * 60 * 1000);
+  const delay = (hasLiveGameNow() || soon) ? 30000 : 3600000;
+  setTimeout(async () => {
+    await fetchLiveToday();
+    allRows = mergeRows();
+    render();
+    updateLivePill();
+    scheduleNextRefresh();
+  }, delay);
+}
+
+async function init(){
+  document.getElementById('rangeSub').textContent = "Loading WNBA season from ESPN…";
+
+  SEASON_DATA = await fetchFullSeason();
+  backfillSeasonRecords(SEASON_DATA);
+  SEASON_DATA.forEach(r => {
+    const h2h = computeH2H(r.away, r.home, r.date);
+    r.h2h = h2h.text;
+    r.h2h_winner = h2h.leader;
+  });
+
+  if(SEASON_DATA.length > 0){
+    const dates = SEASON_DATA.map(r => r.date).sort();
+    document.getElementById('rangeSub').textContent = `${dates[0]} → ${dates[dates.length-1]} · ${SEASON_DATA.length} games · live from ESPN`;
+  } else {
+    document.getElementById('rangeSub').textContent = 'No completed games found yet for this season.';
+  }
+
+  renderH2HStatBoxes();
+
+  await fetchLiveToday();
+  allRows = mergeRows();
+  populateFilters(allRows);
+  render();
+  wireCellInspector();
+  updateLivePill();
+
+  document.getElementById('teamFilter').addEventListener('change', render);
+  document.getElementById('dateFilter').addEventListener('change', render);
+  document.getElementById('viewFilter').addEventListener('change', render);
+  document.getElementById('exportCsvBtn').addEventListener('click', exportCsv);
+  document.getElementById('dateHeader').addEventListener('click', () => {
+    if(document.getElementById('viewFilter').value !== 'today') return;
+    TODAY_SORT_DIR = TODAY_SORT_DIR === 'asc' ? 'desc' : 'asc';
+    render();
+  });
+
+  scheduleNextRefresh();
+}
+
+// Shows the file's actual last-modified date (as reported by the
+// browser/server) instead of a hand-typed version string, so it updates
+// itself whenever the file changes. Note: depends on GitHub Pages' CDN
+// correctly reporting a Last-Modified header — usually reliable, but not
+// guaranteed on every host.
+function renderVersionTag(){
+  const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  const d = new Date(document.lastModified);
+  const stamp = `${d.getFullYear()}_${months[d.getMonth()]}_${String(d.getDate()).padStart(2,'0')} ${d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
+  const el = document.getElementById('versionTag');
+  if(el) el.textContent = `version: ${stamp}`;
+}
+renderVersionTag();
+
+init();
+</script>
+</body>
+</html>

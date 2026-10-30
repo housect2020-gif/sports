@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NFL Guarantee — Locks &amp; Wildcards</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --page-bg: #eef1f6;
+    --surface: #ffffff;
+    --grid: #e3e7ee;
+    --grid-strong: #ccd3de;
+    --header-bg: linear-gradient(135deg, #013369 0%, #001a3d 100%);
+    --header-fg: #ffffff;
+    --colhead-bg: #f2f4f8;
+    --accent: #013369;
+    --accent-soft: rgba(1,51,105,.08);
+    --live: #d50a0a;
+    --live-soft: rgba(213,10,10,.09);
+    --win: #0a7d3f;
+    --win-soft: rgba(10,125,63,.10);
+    --warn: #c2660a;
+    --warn-soft: rgba(194,102,10,.13);
+    --text: #14213b;
+    --sub: #64708a;
+    --radius: 12px;
+    --radius-sm: 7px;
+    --shadow: 0 1px 2px rgba(0,20,60,.05), 0 8px 24px -12px rgba(0,20,60,.22);
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Consolas', 'SF Mono', 'Roboto Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--page-bg);font-family:var(--font-ui);color:var(--text);}
+
+  .titlebar{
+    background:var(--header-bg); color:var(--header-fg);
+    padding:16px 22px; display:flex; align-items:center; justify-content:space-between;
+    flex-wrap:wrap; gap:10px; box-shadow:0 2px 10px rgba(0,20,60,.3);
+    border-bottom:3px solid var(--live);
+  }
+  .titlebar h1{font-size:16px; margin:0; font-weight:700;}
+  .titlebar .sub{font-size:12px; color:#9fb3d9; margin-top:3px;}
+  .nav-links{display:flex; align-items:center; gap:16px; flex-wrap:wrap;}
+  .nav-links a{color:#cfe0ff; text-decoration:none; font-size:13px; font-weight:600;}
+  .nav-links a:hover{color:#fff;}
+
+  .page-wrap{max-width:1200px; margin:22px auto; padding:0 18px 40px;}
+
+  .disclaimer{
+    background:var(--live-soft); border:1px solid rgba(213,10,10,.25); color:var(--live);
+    border-radius:var(--radius-sm); padding:10px 14px; font-size:12.5px; margin-bottom:20px; line-height:1.5;
+  }
+
+  .card{background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow); border:1px solid var(--grid-strong); padding:20px; margin-bottom:20px;}
+  .card h2{font-size:14px; margin:0 0 14px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.4px;}
+  .card-head{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px;}
+  .card-head h2{margin:0;}
+  .status-line{font-size:13px; color:var(--sub); margin-bottom:14px;}
+  .lock-count{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--sub); font-weight:600;}
+  .lock-count select{
+    font-family:var(--font-ui); font-size:13px; padding:6px 10px; border:1px solid var(--grid-strong);
+    border-radius:var(--radius-sm); background:var(--surface); color:var(--text);
+  }
+
+  .standings-grid{display:grid; grid-template-columns:repeat(4, 1fr); gap:16px;}
+  .standings-col{display:flex; flex-direction:column; gap:2px;}
+  .standings-row{
+    display:grid; grid-template-columns:24px 1fr 62px 46px 40px; align-items:center; gap:6px;
+    padding:6px 6px; border-radius:6px; font-size:12.5px;
+  }
+  .standings-row.head{color:var(--sub); font-size:10.5px; text-transform:uppercase; font-weight:700; letter-spacing:.3px;}
+  .standings-row:not(.head):nth-child(odd){background:var(--colhead-bg);}
+  .standings-row .rank{font-family:var(--font-mono); color:var(--sub); font-weight:600;}
+  .standings-row .team{font-weight:700;}
+  .standings-row.topn .team{color:var(--win);}
+  .standings-row .rec{font-family:var(--font-mono); color:var(--sub); font-size:12px;}
+  .standings-row .pctval{font-family:var(--font-mono); font-weight:600; font-size:12px;}
+
+  .top10-checks{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;}
+  .top10-check{
+    display:flex; align-items:center; gap:7px; font-size:13px; padding:7px 12px;
+    border:1px solid var(--grid); border-radius:99px; cursor:pointer; background:var(--colhead-bg);
+  }
+  .top10-check input{margin:0;}
+  .top10-check.picked{border-color:var(--win); background:var(--win-soft);}
+  .top10-check .rank-tag{font-family:var(--font-mono); font-size:10.5px; color:var(--sub);}
+  .top10-check.matchup-0{border-color:#c9b3f5; background:#ece4fb;}
+  .top10-check.matchup-1{border-color:#a9d8ec; background:#dff1fb;}
+  .top10-check.matchup-2{border-color:#f0b9d1; background:#fbe4ee;}
+  .top10-check.matchup-3{border-color:#edd28f; background:#fdf0d5;}
+  .top10-check.matchup-4{border-color:#a5e5d3; background:#dcf7f0;}
+
+  .lock-list{display:flex; flex-direction:column; gap:6px;}
+  .lock-row{
+    display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+    padding:9px 12px; border:1px solid var(--grid); border-radius:var(--radius-sm); font-size:13px;
+  }
+  .lock-row.standard{background:var(--win-soft);}
+  .lock-row.standard .lock-pick{color:var(--win);}
+  .lock-row.matchup-0{background:#ece4fb; border-color:#c9b3f5;}
+  .lock-row.matchup-0 .lock-pick{color:#6a3fd1;}
+  .lock-row.matchup-1{background:#dff1fb; border-color:#a9d8ec;}
+  .lock-row.matchup-1 .lock-pick{color:#1c6f96;}
+  .lock-row.matchup-2{background:#fbe4ee; border-color:#f0b9d1;}
+  .lock-row.matchup-2 .lock-pick{color:#b23368;}
+  .lock-row.matchup-3{background:#fdf0d5; border-color:#edd28f;}
+  .lock-row.matchup-3 .lock-pick{color:#96650a;}
+  .lock-row.matchup-4{background:#dcf7f0; border-color:#a5e5d3;}
+  .lock-row.matchup-4 .lock-pick{color:#0f7a5e;}
+  .lock-teams{font-weight:700;}
+  .score-note{font-weight:500; font-size:11px; color:var(--sub); font-family:var(--font-mono); margin-left:6px;}
+  .lock-reason{color:var(--sub); font-size:11.5px; flex:1; text-align:right;}
+  .lock-l10{color:var(--sub); font-size:11px; font-family:var(--font-mono); white-space:nowrap;}
+  .lock-pick{font-weight:800; margin-left:12px;}
+  .pick-rate-chip{font-family:var(--font-mono); font-size:11.5px; font-weight:600; color:var(--sub); margin-left:12px; white-space:nowrap;}
+  .pick-rate-chip.good{color:var(--win); font-weight:800;}
+  .pick-rate-n{font-weight:400; opacity:.8;}
+
+  .wild-checks{display:flex; flex-direction:column; gap:8px;}
+  .wild-check{
+    display:flex; align-items:center; justify-content:space-between; gap:9px; font-size:13px; padding:9px 12px; flex-wrap:wrap;
+    border:1px solid var(--grid); border-radius:var(--radius-sm); cursor:pointer; background:var(--colhead-bg);
+  }
+  .wild-check input{margin:0;}
+  .wild-check .wild-main{display:flex; align-items:center; gap:9px; flex:1; flex-wrap:wrap;}
+  .wild-check .wild-h2h{font-weight:700; font-size:12.5px; color:var(--accent); white-space:nowrap; margin-left:12px;}
+  .wild-check .wild-l10{color:var(--sub); font-size:11px; font-family:var(--font-mono); white-space:nowrap;}
+  .wild-check.picked{border-color:var(--warn); background:var(--warn-soft);}
+  .wild-hint{font-size:12px; color:var(--sub); margin-bottom:10px;}
+
+  .combo-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:14px;}
+  .combo-card{border:1px solid var(--grid-strong); border-radius:var(--radius); padding:15px; background:var(--colhead-bg);}
+  .combo-rank{font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--sub); margin-bottom:8px;}
+  .combo-legs{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px;}
+  .combo-legs li{font-size:12.5px; display:flex; justify-content:space-between; gap:8px;}
+  .combo-legs .leg-teams{color:var(--sub);}
+  .combo-legs .leg-pick{font-weight:700;}
+  .combo-legs li.wildcard .leg-pick{color:var(--warn);}
+  .combo-legs li.locked .leg-pick{color:var(--win);}
+
+  .empty-state{color:var(--sub); font-size:13px; padding:20px; text-align:center;}
+  .status-badge{
+    font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.3px;
+    padding:2px 6px; border-radius:99px; margin-left:6px; vertical-align:middle;
+  }
+  .status-badge.live{background:var(--live-soft); color:var(--live);}
+  .status-badge.pre{background:var(--accent-soft); color:var(--accent);}
+
+  @media (max-width:1000px){ .standings-grid{grid-template-columns:1fr 1fr;} }
+  @media (max-width:560px){ .standings-grid{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <div>
+    <h1>NFL Guarantee — Locks &amp; Wildcards</h1>
+    <div class="sub" id="rangeSub">Loading standings and this week's slate…</div>
+  </div>
+  <div class="nav-links">
+    <a href="index.html">← Schedule sheet</a>
+    <a href="streaks.html">Streaks →</a>
+    <a href="picks.html">My Picks →</a>
+  </div>
+</div>
+
+<div class="page-wrap">
+
+  <div class="disclaimer">
+    <strong>What this is:</strong> "locked" picks are this week's top-ranked teams by record (you choose how many, 5–12) winning their games. When two ranked teams play each other, the pick goes to the head-to-head leader this season; if that's tied or they haven't met, the home team's home record is compared with the away team's road record (overall record at a neutral site). Wildcard games — between two teams outside your top group — are shown with both possible outcomes so you can choose. Not real odds, not betting advice — entertainment only.
+  </div>
+
+  <div class="card">
+    <h2>Current standings</h2>
+    <div class="status-line" id="standingsStatus">Loading…</div>
+    <div class="standings-grid" id="standingsGrid"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h2>Top-<span class="topn-label">10</span> lock picks</h2>
+      <label class="lock-count">Lock the top
+        <select id="lockCount">
+          <option>5</option><option>6</option><option>7</option><option>8</option>
+          <option>9</option><option selected>10</option><option>11</option><option>12</option>
+        </select>
+        teams
+      </label>
+    </div>
+    <div class="status-line" id="lockStatus">Loading…</div>
+    <div class="top10-checks" id="top10Checks"></div>
+    <div class="lock-list" id="lockList"></div>
+  </div>
+
+  <div class="card">
+    <h2>Wildcard games</h2>
+    <div class="wild-hint">This week's remaining games not involving a locked team. Pick 1 to 4 — each shows up as both possible outcomes below (4 picks = 16 combos).</div>
+    <div style="display:flex; justify-content:flex-end; font-size:10.5px; color:var(--sub); text-transform:uppercase; font-weight:700; letter-spacing:.3px; padding:0 12px 6px;">H2H Outcome Winner</div>
+    <div class="wild-checks" id="wildChecks"></div>
+  </div>
+
+  <div class="card">
+    <h2>Guarantee combos</h2>
+    <div class="combo-grid" id="comboResults"><div class="empty-state">Select at least one wildcard game above to see combos.</div></div>
+  </div>
+
+</div>
+
+<footer style="padding:12px 18px; font-size:11px; color:#8189a0; background:var(--colhead-bg); border-top:1px solid var(--grid); text-align:center;">
+  <div id="versionTag">version: loading…</div>
+</footer>
+
+<script>window.CLOUD_RELOAD_ON_REMOTE=true;</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="../cloud.js"></script>
+<script>
+/* ===================== Shared NFL data helpers (same on every page) ===================== */
+const ESPN_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
+
+// "Today" in US Eastern time — the NFL schedule's home timezone, so dates and
+// kickoff times read the same for every viewer regardless of where they are.
+function dateStrET(d){
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(d || new Date());
+  const get = (type) => parts.find(p => p.type === type).value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+function todayStr(){ return dateStrET(); }
+
+// A sortable key for an NFL week: "2-06" = regular season week 6, "3-01" = Wild Card.
+function weekKeyOf(seasonType, week){ return `${seasonType}-${String(week).padStart(2, '0')}`; }
+let WEEK_LABELS = {};
+function buildWeekLabels(json){
+  const labels = {};
+  const cal = (json.leagues && json.leagues[0] && json.leagues[0].calendar) || [];
+  cal.forEach(section => {
+    const st = parseInt(section.value, 10);
+    if(st !== 2 && st !== 3) return;
+    (section.entries || []).forEach(e => { labels[weekKeyOf(st, parseInt(e.value, 10))] = e.label; });
+  });
+  return labels;
+}
+function weekLabel(key){
+  if(!key) return '';
+  if(WEEK_LABELS[key]) return WEEK_LABELS[key];
+  const [st, wk] = key.split('-');
+  return st === '3' ? `Playoffs Rd ${parseInt(wk, 10)}` : `Week ${parseInt(wk, 10)}`;
+}
+function isPlayoffKey(key){ return !!key && key.startsWith('3-'); }
+
+async function fetchScoreboard(query){
+  try{
+    const res = await fetch(ESPN_SCOREBOARD + (query ? '?' + query : ''));
+    if(!res.ok) return null;
+    return await res.json();
+  } catch(e){ console.error('ESPN fetch failed', query, e); return null; }
+}
+
+// Turns one ESPN event into the flat row shape used everywhere on the site.
+// winner is the team abbreviation, 'TIE' for a tied final, or null if not final.
+function parseEvent(ev){
+  const comp = ev.competitions && ev.competitions[0];
+  if(!comp || !comp.competitors) return null;
+  const home = comp.competitors.find(c => c.homeAway === 'home');
+  const away = comp.competitors.find(c => c.homeAway === 'away');
+  if(!home || !away || !home.team || !away.team) return null;
+  const homeAbbr = home.team.abbreviation, awayAbbr = away.team.abbreviation;
+  if(['AFC', 'NFC'].includes(homeAbbr) || ['AFC', 'NFC'].includes(awayAbbr)) return null; // Pro Bowl
+  const st = (comp.status && comp.status.type) || (ev.status && ev.status.type) || {};
+  const state = st.state || 'pre';
+  const seasonType = ev.season && ev.season.type;
+  const week = ev.week && ev.week.number;
+  if(seasonType !== 2 && seasonType !== 3) return null; // regular season + playoffs only
+  const toNum = (s) => { const n = parseInt(s, 10); return isNaN(n) ? null : n; };
+  const homeScore = state === 'pre' ? null : toNum(home.score);
+  const awayScore = state === 'pre' ? null : toNum(away.score);
+  let winner = null;
+  if(state === 'post' && st.completed){
+    if(home.winner) winner = homeAbbr;
+    else if(away.winner) winner = awayAbbr;
+    else if(homeScore !== null && homeScore === awayScore) winner = 'TIE';
+  }
+  const rec = (c, type) => { const r = (c.records || []).find(x => x.type === type); return r ? r.summary : ''; };
+  // Betting line, when ESPN includes it (usually only before kickoff).
+  const odds = (comp.odds || [])[0] || null;
+  const ouNum = odds && odds.overUnder != null ? parseFloat(odds.overUnder) : NaN;
+  return {
+    ou: isNaN(ouNum) ? null : ouNum, spread: (odds && odds.details) || null,
+    id: ev.id, seasonType, week, weekKey: weekKeyOf(seasonType, week),
+    eventTime: ev.date, date: dateStrET(new Date(ev.date)),
+    away: awayAbbr, home: homeAbbr, awayScore, homeScore, winner,
+    state, shortDetail: st.shortDetail || st.detail || '', neutral: !!comp.neutralSite,
+    awayRec: rec(away, 'total'), homeRec: rec(home, 'total')
+  };
+}
+
+function contextFromJson(json){
+  const seasonType = json.season && json.season.type;
+  const week = json.week && json.week.number;
+  const inSeason = (seasonType === 2 || seasonType === 3) && week;
+  return {
+    year: (json.season && json.season.year) || new Date().getFullYear(),
+    seasonType, week,
+    currentKey: inSeason ? weekKeyOf(seasonType, week) : null,
+    events: inSeason ? (json.events || []).map(parseEvent).filter(Boolean) : []
+  };
+}
+
+// The default scoreboard tells us the current season/week and carries the
+// calendar — but on game days it can list only THAT DAY's games (e.g. just the
+// Monday night game). So the week's games are then requested explicitly by
+// week number, which always returns the whole slate (Thu, Sun and Mon).
+async function fetchSeasonContext(){
+  const json = await fetchScoreboard('');
+  if(!json) return null;
+  const labels = buildWeekLabels(json);
+  if(Object.keys(labels).length) WEEK_LABELS = labels;
+  const ctx = contextFromJson(json);
+  if(ctx.currentKey){
+    const weekJson = await fetchScoreboard(`dates=${ctx.year}&seasontype=${ctx.seasonType}&week=${ctx.week}`);
+    if(weekJson && (weekJson.events || []).length){
+      const byId = new Map(ctx.events.map(g => [g.id, g]));
+      (weekJson.events || []).map(parseEvent).filter(Boolean)
+        .filter(g => g.weekKey === ctx.currentKey)
+        .forEach(g => { if(!byId.has(g.id)) byId.set(g.id, g); });
+      ctx.events = Array.from(byId.values()).sort((a, b) => a.eventTime.localeCompare(b.eventTime));
+    }
+  }
+  return ctx;
+}
+
+// Every game this season up to and including the current week, one request per week, in parallel.
+async function fetchFullSeason(ctx){
+  const regWeeks = Object.keys(WEEK_LABELS).filter(k => k.startsWith('2-')).length || 18;
+  const postWeeks = Object.keys(WEEK_LABELS).filter(k => k.startsWith('3-')).length || 4;
+  let regUpTo = 0, postUpTo = 0;
+  if(ctx.seasonType === 2) regUpTo = ctx.week;
+  else if(ctx.seasonType === 3){ regUpTo = regWeeks; postUpTo = ctx.week; }
+  else if(ctx.seasonType === 4){ regUpTo = regWeeks; postUpTo = postWeeks; }
+  const queries = [];
+  for(let w = 1; w <= regUpTo; w++) queries.push(`dates=${ctx.year}&seasontype=2&week=${w}`);
+  for(let w = 1; w <= postUpTo; w++) queries.push(`dates=${ctx.year}&seasontype=3&week=${w}`);
+  const results = await Promise.all(queries.map(fetchScoreboard));
+  const byId = new Map();
+  results.forEach(json => {
+    if(!json) return;
+    (json.events || []).forEach(ev => { const g = parseEvent(ev); if(g && !byId.has(g.id)) byId.set(g.id, g); });
+  });
+  return Array.from(byId.values()).sort((a, b) => a.eventTime.localeCompare(b.eventTime));
+}
+
+function emptyRec(){ return { w: 0, l: 0, t: 0 }; }
+function recStr(r){ if(!r) return '0-0'; return r.t ? `${r.w}-${r.l}-${r.t}` : `${r.w}-${r.l}`; }
+// NFL convention: a tie counts as half a win.
+function pct(r){ if(!r) return 0; const g = r.w + r.l + r.t; return g > 0 ? (r.w + 0.5 * r.t) / g : 0; }
+function applyResult(record, g){
+  if(!g.winner) return;
+  record[g.away] = record[g.away] || emptyRec();
+  record[g.home] = record[g.home] || emptyRec();
+  if(g.winner === 'TIE'){ record[g.away].t++; record[g.home].t++; return; }
+  const loser = g.winner === g.away ? g.home : g.away;
+  record[g.winner].w++; record[loser].l++;
+}
+
+// Kickoff in US Eastern, labeled (EDT/EST), so it never contradicts the date beside it.
+function formatGameTime(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  const day = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' }).format(d);
+  const timeStr = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }).format(d);
+  const tzName = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', timeZoneName: 'short' })
+    .formatToParts(d).find(p => p.type === 'timeZoneName').value;
+  return `${day} ${timeStr} ${tzName}`;
+}
+/* ===================== end shared helpers ===================== */
+
+const PICKS_STORAGE_KEY = 'nfl_site_picks_v1';
+function loadSavedPicks(){
+  try{ return JSON.parse(localStorage.getItem(PICKS_STORAGE_KEY) || '[]'); }
+  catch(e){ return []; }
+}
+function saveSavedPicksList(picks){
+  try{ localStorage.setItem(PICKS_STORAGE_KEY, JSON.stringify(picks)); }
+  catch(e){ console.error('Could not save picks', e); }
+}
+function isPickSaved(id){ return loadSavedPicks().some(p => p.id === id); }
+function toggleSavedPick(pick, isChecked){
+  let picks = loadSavedPicks();
+  if(isChecked){
+    if(!picks.some(p => p.id === pick.id)) picks.push({ ...pick, addedAt: new Date().toISOString() });
+  } else {
+    picks = picks.filter(p => p.id !== pick.id);
+  }
+  saveSavedPicksList(picks);
+}
+
+const LAST_N = 5; // recent-form window — 5 games is roughly a third of an NFL season
+let SEASON_DATA = [];   // completed games this season
+let STANDINGS = {};     // team -> {w,l,t} regular season
+let SPLITS = {};        // team -> {home:{w,l,t}, road:{w,l,t}} (neutral-site games excluded)
+let LASTN = {};         // team -> {w,l,t} over their last LAST_N games
+let RANKINGS = [];
+let TOP_N = 10;
+let TOP_TEAMS = [];
+let WEEK_GAMES = [];    // this week's games that haven't gone final
+let CURRENT_KEY = null;
+let SELECTED_TOP = new Set();
+let SELECTED_WILD = new Set();
+let wildcardGames = [];
+let LOCK_TEAM_PICK_RATES = {};
+let WILD_TEAM_PICK_RATES = {};
+
+function computeStandings(rows){
+  const record = {};
+  rows.forEach(r => { if(r.seasonType === 2) applyResult(record, r); });
+  return record;
+}
+
+function computeSplits(rows){
+  const splits = {};
+  const blank = () => ({ home: emptyRec(), road: emptyRec() });
+  rows.forEach(r => {
+    if(!r.winner || r.neutral || r.seasonType !== 2) return;
+    splits[r.home] = splits[r.home] || blank();
+    splits[r.away] = splits[r.away] || blank();
+    if(r.winner === 'TIE'){ splits[r.home].home.t++; splits[r.away].road.t++; }
+    else if(r.winner === r.home){ splits[r.home].home.w++; splits[r.away].road.l++; }
+    else { splits[r.home].home.l++; splits[r.away].road.w++; }
+  });
+  return splits;
+}
+
+function computeLastN(rows, n){
+  const byTeam = {};
+  rows.forEach(r => { [r.away, r.home].forEach(t => { (byTeam[t] = byTeam[t] || []).push(r); }); });
+  const result = {};
+  Object.keys(byTeam).forEach(team => {
+    const rec = emptyRec();
+    byTeam[team].slice().sort((a, b) => a.eventTime.localeCompare(b.eventTime)).slice(-n).forEach(g => {
+      if(g.winner === 'TIE') rec.t++; else if(g.winner === team) rec.w++; else rec.l++;
+    });
+    result[team] = rec;
+  });
+  return result;
+}
+
+// Head-to-head this season, counting only games before `beforeTime`.
+function computeH2H(teamA, teamB, beforeTime){
+  let winsA = 0, winsB = 0, ties = 0;
+  SEASON_DATA.forEach(r => {
+    if(!((r.away === teamA && r.home === teamB) || (r.away === teamB && r.home === teamA))) return;
+    if(beforeTime && r.eventTime >= beforeTime) return;
+    if(r.winner === teamA) winsA++; else if(r.winner === teamB) winsB++; else ties++;
+  });
+  return { winsA, winsB, ties, total: winsA + winsB + ties };
+}
+
+// Same "H2H Outcome Winner" logic as the schedule sheet: H2H leader, or the
+// better overall record when tied / no meetings ("Tied - KC", "No H2H - KC").
+function computeH2HOutcome(teamA, teamB, beforeTime){
+  const h = computeH2H(teamA, teamB, beforeTime);
+  const lean = (prefix) => {
+    const pA = pct(STANDINGS[teamA]), pB = pct(STANDINGS[teamB]);
+    if(pA > pB) return `${prefix} - ${teamA}`;
+    if(pB > pA) return `${prefix} - ${teamB}`;
+    return prefix;
+  };
+  if(h.total === 0) return { text: 'No meetings yet', leader: lean('No H2H') };
+  if(h.winsA === h.winsB) return { text: `Tied ${h.winsA}-${h.winsB}`, leader: lean('Tied') };
+  return h.winsA > h.winsB
+    ? { text: `${teamA} leads ${h.winsA}-${h.winsB}`, leader: teamA }
+    : { text: `${teamB} leads ${h.winsB}-${h.winsA}`, leader: teamB };
+}
+function leaderTeam(leader){
+  if(!leader || leader === '—' || leader === 'Tied' || leader === 'No H2H') return null;
+  const m = leader.match(/^(?:Tied|No H2H) - (.+)$/);
+  return m ? m[1] : leader;
+}
+
+function rankOf(team){ const r = RANKINGS.find(x => x.team === team); return r ? r.rank : '?'; }
+
+function renderStandings(){
+  const grid = document.getElementById('standingsGrid');
+  const topSet = new Set(TOP_TEAMS);
+  const makeCol = (list) => {
+    const col = document.createElement('div');
+    col.className = 'standings-col';
+    col.innerHTML = `<div class="standings-row head"><div>#</div><div>Team</div><div>W-L</div><div>Pct</div><div>L${LAST_N}</div></div>`;
+    list.forEach(r => {
+      const row = document.createElement('div');
+      row.className = 'standings-row' + (topSet.has(r.team) ? ' topn' : '');
+      row.innerHTML = `<div class="rank">${r.rank}</div><div class="team">${r.team}</div><div class="rec">${recStr(r.rec)}</div><div class="pctval">${r.pct.toFixed(3).replace(/^0/, '')}</div><div class="rec">${recStr(r.lastN)}</div>`;
+      col.appendChild(row);
+    });
+    return col;
+  };
+  grid.innerHTML = '';
+  const per = Math.ceil(RANKINGS.length / 4);
+  for(let i = 0; i < 4; i++) grid.appendChild(makeCol(RANKINGS.slice(i * per, (i + 1) * per)));
+}
+
+function pairKey(a, b){ return [a, b].sort().join('-'); }
+
+// One color per ranked-vs-ranked matchup, applied to both the pills and the lock rows.
+function updateMatchupColors(){
+  const colorByPair = new Map();
+  WEEK_GAMES.forEach(g => {
+    if(SELECTED_TOP.has(g.away) && SELECTED_TOP.has(g.home)){
+      const key = pairKey(g.away, g.home);
+      if(!colorByPair.has(key)) colorByPair.set(key, colorByPair.size % 5);
+    }
+  });
+  const colorByTeam = new Map();
+  WEEK_GAMES.forEach(g => {
+    if(SELECTED_TOP.has(g.away) && SELECTED_TOP.has(g.home)){
+      const idx = colorByPair.get(pairKey(g.away, g.home));
+      colorByTeam.set(g.away, idx); colorByTeam.set(g.home, idx);
+    }
+  });
+  document.querySelectorAll('.top10-check').forEach(el => {
+    el.classList.remove('matchup-0', 'matchup-1', 'matchup-2', 'matchup-3', 'matchup-4');
+    if(colorByTeam.has(el.dataset.team)) el.classList.add(`matchup-${colorByTeam.get(el.dataset.team)}`);
+  });
+  return colorByPair;
+}
+
+function renderTopChecks(){
+  const wrap = document.getElementById('top10Checks');
+  const playing = new Set();
+  WEEK_GAMES.forEach(g => { playing.add(g.away); playing.add(g.home); });
+  const relevant = TOP_TEAMS.filter(t => playing.has(t));
+  SELECTED_TOP = new Set(relevant);
+  if(relevant.length === 0){
+    wrap.innerHTML = `<div class="empty-state">None of the top ${TOP_N} teams have a game left this week (byes or already final).</div>`;
+    return;
+  }
+  wrap.innerHTML = relevant.map(team => `
+    <label class="top10-check picked" data-team="${team}">
+      <input type="checkbox" value="${team}" checked>
+      <span>${team}</span>
+      <span class="rank-tag">#${rankOf(team)}</span>
+    </label>`).join('');
+  wrap.querySelectorAll('.top10-check').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if(e.target.tagName !== 'INPUT'){ e.preventDefault(); const cb = el.querySelector('input'); cb.checked = !cb.checked; }
+      const team = el.dataset.team;
+      if(el.querySelector('input').checked){ SELECTED_TOP.add(team); el.classList.add('picked'); }
+      else { SELECTED_TOP.delete(team); el.classList.remove('picked'); }
+      updateMatchupColors();
+      renderLocks(); renderWildcards(); renderCombos();
+    });
+  });
+}
+
+// Home/road tiebreak for two ranked teams with no H2H edge. At a neutral site
+// there's no real home team, so overall record decides instead.
+function splitTiebreak(g){
+  if(g.neutral){
+    const pA = pct(STANDINGS[g.away]), pH = pct(STANDINGS[g.home]);
+    return { pick: pH >= pA ? g.home : g.away, note: `neutral site — overall ${g.home} ${recStr(STANDINGS[g.home])} vs ${g.away} ${recStr(STANDINGS[g.away])}` };
+  }
+  const homeSplit = (SPLITS[g.home] && SPLITS[g.home].home) || emptyRec();
+  const awaySplit = (SPLITS[g.away] && SPLITS[g.away].road) || emptyRec();
+  return {
+    pick: pct(homeSplit) >= pct(awaySplit) ? g.home : g.away,
+    note: `tiebreak: ${g.home} home ${recStr(homeSplit)} vs ${g.away} road ${recStr(awaySplit)}`
+  };
+}
+
+function pickLockedGame(g, selectedSet){
+  const awayIn = selectedSet.has(g.away), homeIn = selectedSet.has(g.home);
+  if(!awayIn && !homeIn) return null;
+  const lA = LASTN[g.away] || emptyRec(), lH = LASTN[g.home] || emptyRec();
+  const meta = { ...g, bothTop: awayIn && homeIn, lnText: `${g.away} (${recStr(lA)}) / ${g.home} (${recStr(lH)})` };
+  if(awayIn && !homeIn) return { ...meta, pick: g.away, reason: `${g.away} is #${rankOf(g.away)} — ${g.home} is #${rankOf(g.home)}` };
+  if(homeIn && !awayIn) return { ...meta, pick: g.home, reason: `${g.home} is #${rankOf(g.home)} — ${g.away} is #${rankOf(g.away)}` };
+  const h = computeH2H(g.away, g.home, g.eventTime);
+  if(h.winsA !== h.winsB){
+    const pick = h.winsA > h.winsB ? g.away : g.home;
+    return { ...meta, pick, reason: `H2H: ${pick} leads ${Math.max(h.winsA, h.winsB)}-${Math.min(h.winsA, h.winsB)}` };
+  }
+  const tb = splitTiebreak(g);
+  const h2hNote = h.total > 0 ? `H2H tied ${h.winsA}-${h.winsB} — ` : 'No H2H meetings yet — ';
+  return { ...meta, pick: tb.pick, reason: h2hNote + tb.note };
+}
+
+// Backtests the lock rule on every completed game this season, using today's
+// top group as a stand-in for whichever teams would have been selected then.
+function computeLockTeamPickRates(){
+  const tally = {};
+  const topSet = new Set(TOP_TEAMS);
+  SEASON_DATA.forEach(r => {
+    const res = pickLockedGame(r, topSet);
+    if(!res) return;
+    tally[res.pick] = tally[res.pick] || { correct: 0, total: 0 };
+    tally[res.pick].total++;
+    if(res.pick === r.winner) tally[res.pick].correct++;
+  });
+  return tally;
+}
+
+// Backtests the wildcard H2H-outcome rule on completed games between two teams
+// outside today's top group.
+function computeWildTeamPickRates(){
+  const tally = {};
+  const topSet = new Set(TOP_TEAMS);
+  SEASON_DATA.forEach(r => {
+    if(topSet.has(r.away) || topSet.has(r.home)) return;
+    const pick = leaderTeam(computeH2HOutcome(r.away, r.home, r.eventTime).leader);
+    if(!pick) return;
+    tally[pick] = tally[pick] || { correct: 0, total: 0 };
+    tally[pick].total++;
+    if(pick === r.winner) tally[pick].correct++;
+  });
+  return tally;
+}
+
+function pickRateChip(team, tallyMap){
+  const t = tallyMap[team];
+  if(!t) return '<span class="pick-rate-chip">—</span>';
+  const p = t.correct / t.total * 100;
+  const lowSample = t.total < 4;
+  const cls = !lowSample && p >= 70 ? 'pick-rate-chip good' : 'pick-rate-chip';
+  return `<span class="${cls}">${p.toFixed(1)}% <span class="pick-rate-n">(${t.correct}/${t.total}${lowSample ? ', small sample' : ''})</span></span>`;
+}
+
+function statusBadge(g){
+  return g.state === 'in'
+    ? `<span class="status-badge live">${g.shortDetail || 'Live'}</span>`
+    : `<span class="status-badge pre">${g.shortDetail || 'Scheduled'}</span>`;
+}
+function scoreNote(g){
+  return g.state === 'in' && g.awayScore !== null ? `<span class="score-note">(${g.away} ${g.awayScore}-${g.homeScore} ${g.home})</span>` : '';
+}
+
+function currentLocks(){ return WEEK_GAMES.map(g => pickLockedGame(g, SELECTED_TOP)).filter(Boolean); }
+
+function renderLocks(){
+  const wrap = document.getElementById('lockList');
+  const locks = currentLocks();
+  if(locks.length === 0){
+    wrap.innerHTML = '<div class="empty-state">No selected top teams have a game left this week.</div>';
+    document.getElementById('lockStatus').textContent = 'No locked picks yet.';
+    return;
+  }
+  const colorByPair = updateMatchupColors();
+  const n = colorByPair.size;
+  document.getElementById('lockStatus').textContent =
+    `${locks.length} locked pick${locks.length === 1 ? '' : 's'} for ${weekLabel(CURRENT_KEY)}` +
+    (n > 0 ? ` — ${n} ranked-vs-ranked matchup${n === 1 ? '' : 's'} color-coded below.` : '.');
+  wrap.innerHTML = locks.map(g => {
+    const rowClass = g.bothTop ? `matchup-${colorByPair.get(pairKey(g.away, g.home))}` : 'standard';
+    return `
+      <div class="lock-row ${rowClass}">
+        <div class="lock-teams">${g.away} @ ${g.home}${scoreNote(g)}${statusBadge(g)}</div>
+        <div class="lock-l10">L${LAST_N}: ${g.lnText}</div>
+        <div class="lock-reason">${g.reason}</div>
+        <div class="lock-pick">${g.pick}</div>
+        ${pickRateChip(g.pick, LOCK_TEAM_PICK_RATES)}
+      </div>`;
+  }).join('');
+}
+
+const MAX_WILDCARDS = 4;
+function renderWildcards(){
+  const wrap = document.getElementById('wildChecks');
+  const lockedTeams = new Set();
+  WEEK_GAMES.forEach(g => {
+    if(SELECTED_TOP.has(g.away) || SELECTED_TOP.has(g.home)){ lockedTeams.add(g.away); lockedTeams.add(g.home); }
+  });
+  wildcardGames = WEEK_GAMES.filter(g => !lockedTeams.has(g.away) && !lockedTeams.has(g.home));
+  SELECTED_WILD = new Set();
+  if(wildcardGames.length === 0){
+    wrap.innerHTML = '<div class="empty-state">No wildcard games left this week — every remaining game involves a locked team.</div>';
+    return;
+  }
+  wrap.innerHTML = wildcardGames.map((g, i) => {
+    const h = computeH2HOutcome(g.away, g.home, g.eventTime);
+    const lA = LASTN[g.away] || emptyRec(), lH = LASTN[g.home] || emptyRec();
+    return `
+      <label class="wild-check" data-idx="${i}">
+        <span class="wild-main">
+          <input type="checkbox" value="${i}">
+          <span>${g.away} @ ${g.home}${scoreNote(g)}${statusBadge(g)}</span>
+          <span class="wild-l10">L${LAST_N}: ${g.away} (${recStr(lA)}) / ${g.home} (${recStr(lH)})</span>
+        </span>
+        <span class="wild-h2h" title="${h.text}">${h.leader}</span>
+        ${pickRateChip(leaderTeam(h.leader), WILD_TEAM_PICK_RATES)}
+      </label>`;
+  }).join('');
+  wrap.querySelectorAll('.wild-check').forEach(el => {
+    const cb = el.querySelector('input');
+    cb.addEventListener('change', () => {
+      const idx = parseInt(el.dataset.idx, 10);
+      if(cb.checked && SELECTED_WILD.size >= MAX_WILDCARDS){ cb.checked = false; return; }
+      if(cb.checked){ SELECTED_WILD.add(idx); el.classList.add('picked'); }
+      else { SELECTED_WILD.delete(idx); el.classList.remove('picked'); }
+      renderCombos();
+    });
+  });
+}
+
+// Each leg's hit rate, smoothed toward 50% ((correct + 1) / (total + 2)).
+// NFL samples are tiny — a team picked once and lost would otherwise read 0%
+// and zero out the whole combo. No history at all comes out to exactly 50%.
+function legRate(team, tallyMap){
+  const t = tallyMap[team] || { correct: 0, total: 0 };
+  return (t.correct + 1) / (t.total + 2);
+}
+
+function renderCombos(){
+  const wrap = document.getElementById('comboResults');
+  const selectedGames = Array.from(SELECTED_WILD).sort((a, b) => a - b).map(i => wildcardGames[i]);
+  if(selectedGames.length === 0){
+    wrap.innerHTML = '<div class="empty-state">Select at least one wildcard game above to see combos.</div>';
+    return;
+  }
+  const locks = currentLocks();
+  let branches = [[]];
+  selectedGames.forEach(g => {
+    const next = [];
+    branches.forEach(b => {
+      next.push([...b, { away: g.away, home: g.home, pick: g.away }]);
+      next.push([...b, { away: g.away, home: g.home, pick: g.home }]);
+    });
+    branches = next;
+  });
+  const dateLabel = weekLabel(CURRENT_KEY);
+  wrap.innerHTML = branches.map((wildPicks, i) => {
+    const allLegs = [...locks.map(g => ({ away: g.away, home: g.home, pick: g.pick, locked: true })), ...wildPicks];
+    const combined = allLegs.reduce((p, g) => p * legRate(g.pick, g.locked ? LOCK_TEAM_PICK_RATES : WILD_TEAM_PICK_RATES), 1);
+    const sig = allLegs.map(g => `${g.away}${g.home}${g.pick}`).join('_');
+    const comboId = `guarantee-combo-${CURRENT_KEY}-${sig}`;
+    const legsJson = JSON.stringify(allLegs.map(g => ({ away: g.away, home: g.home, pick: g.pick }))).replace(/"/g, '&quot;');
+    return `
+    <div class="combo-card">
+      <div class="combo-rank">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; text-transform:none; letter-spacing:normal;">
+          <input type="checkbox" class="combo-pick-checkbox" data-pick-id="${comboId}" data-date="${dateLabel}" data-legs="${legsJson}" data-combined="${combined}" ${isPickSaved(comboId) ? 'checked' : ''} title="Add to My Picks">
+          Combo ${i + 1}
+        </label>
+      </div>
+      <ul class="combo-legs">
+        ${allLegs.map(g => `<li class="${g.locked ? 'locked' : 'wildcard'}"><span class="leg-teams">${g.away} @ ${g.home}</span><span class="leg-pick">${g.pick}</span></li>`).join('')}
+      </ul>
+      <div style="display:flex; justify-content:space-between; padding-top:8px; margin-top:8px; border-top:1px solid var(--grid-strong); font-size:12.5px;">
+        <span style="color:var(--sub);">Combined estimate</span>
+        <span style="font-weight:700; font-family:var(--font-mono); color:var(--win);">${(combined * 100).toFixed(1)}%</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Recomputes everything that depends on how many teams are locked.
+function applyTopN(){
+  TOP_N = parseInt(document.getElementById('lockCount').value, 10);
+  document.querySelectorAll('.topn-label').forEach(el => el.textContent = TOP_N);
+  TOP_TEAMS = RANKINGS.slice(0, TOP_N).map(r => r.team);
+  LOCK_TEAM_PICK_RATES = computeLockTeamPickRates();
+  WILD_TEAM_PICK_RATES = computeWildTeamPickRates();
+  renderStandings();
+  renderTopChecks();
+  renderLocks();
+  renderWildcards();
+  renderCombos();
+}
+
+async function init(){
+  document.getElementById('standingsStatus').textContent = 'Loading season data (32 teams)…';
+  const ctx = await fetchSeasonContext();
+  if(!ctx){
+    document.getElementById('rangeSub').textContent = "Couldn't reach ESPN's NFL data — try refreshing in a minute.";
+    document.getElementById('standingsStatus').textContent = 'ESPN fetch failed.';
+    document.getElementById('lockStatus').textContent = '';
+    return;
+  }
+  CURRENT_KEY = ctx.currentKey;
+  const all = await fetchFullSeason(ctx);
+  SEASON_DATA = all.filter(g => g.winner);
+  const known = new Set(SEASON_DATA.map(g => g.id));
+  ctx.events.forEach(g => { if(g.winner && !known.has(g.id)) SEASON_DATA.push(g); });
+  SEASON_DATA.sort((a, b) => a.eventTime.localeCompare(b.eventTime));
+
+  STANDINGS = computeStandings(SEASON_DATA);
+  SPLITS = computeSplits(SEASON_DATA);
+  LASTN = computeLastN(SEASON_DATA, LAST_N);
+  RANKINGS = Object.keys(STANDINGS).map(team => ({
+    team, rec: STANDINGS[team], pct: pct(STANDINGS[team]), lastN: LASTN[team] || emptyRec()
+  })).sort((a, b) => b.pct - a.pct || b.rec.w - a.rec.w)
+    .map((r, i) => ({ ...r, rank: i + 1 }));
+
+  WEEK_GAMES = ctx.events.filter(g => g.state !== 'post');
+
+  document.getElementById('rangeSub').textContent =
+    `Standings from ${SEASON_DATA.length} completed games · ${WEEK_GAMES.length} game${WEEK_GAMES.length === 1 ? '' : 's'} left in ${CURRENT_KEY ? weekLabel(CURRENT_KEY) : 'this week'}`;
+  document.getElementById('standingsStatus').textContent =
+    `Ranked by winning percentage (ties count as half a win) across ${SEASON_DATA.length} completed games.`;
+
+  document.getElementById('lockCount').addEventListener('change', applyTopN);
+  applyTopN();
+
+  document.getElementById('comboResults').addEventListener('change', (e) => {
+    if(!e.target.classList.contains('combo-pick-checkbox')) return;
+    const cb = e.target;
+    let legs = [];
+    try{ legs = JSON.parse(cb.dataset.legs); } catch(err){}
+    toggleSavedPick({
+      id: cb.dataset.pickId, type: 'combo', source: 'guarantee',
+      date: cb.dataset.date, legs, combinedEstimate: parseFloat(cb.dataset.combined)
+    }, cb.checked);
+  });
+}
+
+function renderVersionTag(){
+  const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  const d = new Date(document.lastModified);
+  const stamp = `${d.getFullYear()}_${months[d.getMonth()]}_${String(d.getDate()).padStart(2,'0')} ${d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
+  const el = document.getElementById('versionTag');
+  if(el) el.textContent = `version: ${stamp}`;
+}
+renderVersionTag();
+
+init();
+</script>
+</body>
+</html>

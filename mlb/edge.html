@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLB Edge — Strong H2H Picks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --page-bg: #eef1f6;
+    --surface: #ffffff;
+    --grid: #e3e7ee;
+    --grid-strong: #ccd3de;
+    --header-bg: linear-gradient(135deg, #002d72 0%, #001a46 100%);
+    --header-fg: #ffffff;
+    --colhead-bg: #f2f4f8;
+    --accent: #002d72;
+    --accent-soft: rgba(0,45,114,.08);
+    --live: #d50032;
+    --live-soft: rgba(213,0,50,.09);
+    --win: #0a7d3f;
+    --win-soft: rgba(10,125,63,.10);
+    --warn: #c2660a;
+    --warn-soft: rgba(194,102,10,.13);
+    --text: #14213b;
+    --sub: #64708a;
+    --radius: 12px;
+    --radius-sm: 7px;
+    --shadow: 0 1px 2px rgba(0,20,60,.05), 0 8px 24px -12px rgba(0,20,60,.22);
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Consolas', 'SF Mono', 'Roboto Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--page-bg);font-family:var(--font-ui);color:var(--text);}
+
+  .titlebar{
+    background:var(--header-bg); color:var(--header-fg);
+    padding:16px 22px; display:flex; align-items:center; justify-content:space-between;
+    flex-wrap:wrap; gap:10px; box-shadow:0 2px 10px rgba(0,20,60,.3);
+    border-bottom:3px solid var(--live);
+  }
+  .titlebar h1{font-size:16px; margin:0; font-weight:700;}
+  .titlebar .sub{font-size:12px; color:#9fb3d9; margin-top:3px;}
+  .nav-links{display:flex; align-items:center; gap:16px;}
+  .nav-links a{color:#cfe0ff; text-decoration:none; font-size:13px; font-weight:600;}
+  .nav-links a:hover{color:#fff;}
+
+  .page-wrap{max-width:1200px; margin:22px auto; padding:0 18px 40px;}
+
+  .disclaimer{
+    background:var(--live-soft); border:1px solid rgba(213,0,50,.25); color:var(--live);
+    border-radius:var(--radius-sm); padding:10px 14px; font-size:12.5px; margin-bottom:20px; line-height:1.5;
+  }
+  .disclaimer strong{display:block; margin-bottom:4px;}
+
+  .card{background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow); border:1px solid var(--grid-strong); padding:20px; margin-bottom:20px;}
+  .card h2{font-size:14px; margin:0 0 14px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.4px;}
+  .status-line{font-size:13px; color:var(--sub); margin-bottom:14px;}
+
+  /* Backtest summary */
+  .backtest-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(190px,1fr)); gap:12px;}
+  .backtest-tile{border:1px solid var(--grid); border-radius:var(--radius-sm); padding:14px; background:var(--colhead-bg);}
+  .backtest-tile .label{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.3px; color:var(--sub); margin-bottom:6px;}
+  .backtest-tile .pct{font-family:var(--font-mono); font-weight:800; font-size:24px;}
+  .backtest-tile .n{font-size:11px; color:var(--sub); margin-top:2px;}
+  .backtest-tile .n.last10{font-size:10.5px; margin-top:6px; padding-top:6px; border-top:1px dashed var(--grid-strong); font-weight:600;}
+  .backtest-tile .n.last10.good{color:var(--win);}
+  .backtest-tile .n.last10.bad{color:var(--warn);}
+  .tile-strong .pct{color:var(--win);}
+  .tile-moderate .pct{color:var(--warn);}
+  .tile-coinflip .pct{color:var(--live);}
+
+  /* Picks table */
+  .pick-list{display:flex; flex-direction:column; gap:6px;}
+  .pick-row{
+    display:grid; grid-template-columns:150px 1fr 90px 90px 90px 110px; align-items:center; gap:10px;
+    padding:9px 12px; border:1px solid var(--grid); border-radius:var(--radius-sm); font-size:13px;
+  }
+  .pick-row.strong{background:var(--win-soft);}
+  .pick-row.moderate{background:var(--warn-soft);}
+  .pick-row.coinflip{background:var(--live-soft);}
+  .pick-row.nodata{background:var(--colhead-bg); opacity:.7;}
+  .pick-row.pitcher_edge{background:var(--accent-soft);}
+  .pick-teams{font-weight:700;}
+  .pick-source{color:var(--sub); font-size:11.5px;}
+  .pick-tier{font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:.3px; text-align:center; padding:3px 8px; border-radius:99px;}
+  .tier-strong{background:var(--win); color:#fff;}
+  .tier-moderate{background:var(--warn); color:#fff;}
+  .tier-coinflip{background:var(--live); color:#fff;}
+  .tier-nodata{background:var(--grid-strong); color:var(--sub);}
+  .tier-pitcher_edge{background:var(--accent); color:#fff;}
+  .pitcher-chip{
+    font-size:10.5px; font-weight:600; padding:2px 7px; border-radius:99px;
+    white-space:nowrap; display:inline-flex; align-items:center; gap:3px;
+  }
+  .pitcher-chip.confirm{background:var(--win-soft); color:var(--win); border:1px solid var(--win);}
+  .pitcher-chip.warn{background:var(--warn-soft); color:var(--warn); border:1px solid var(--warn);}
+  .pitcher-chip.gap{background:var(--accent-soft); color:var(--accent); border:1px solid var(--accent);}
+  .closer-chip{
+    font-size:10px; font-weight:500; color:var(--live); margin-top:3px;
+    white-space:normal; line-height:1.4;
+  }
+  .pick-team{font-weight:800; text-align:center;}
+  .pick-hist{font-family:var(--font-mono); font-size:11.5px; color:var(--sub); text-align:right;}
+  .status-badge{
+    font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.3px;
+    padding:2px 6px; border-radius:99px; margin-left:6px; vertical-align:middle;
+  }
+  .status-badge.live{background:var(--live-soft); color:var(--live);}
+  .status-badge.pre{background:var(--accent-soft); color:var(--accent);}
+  .score-note{font-weight:500; font-size:11px; color:var(--sub); font-family:var(--font-mono); margin-left:4px;}
+
+  /* Controls */
+  .controls{display:flex; flex-wrap:wrap; gap:20px; align-items:flex-end;}
+  .control-group{display:flex; flex-direction:column; gap:6px;}
+  .control-group label{font-size:12px; font-weight:600; color:var(--sub); text-transform:uppercase; letter-spacing:.3px;}
+  select{
+    font-family:var(--font-ui); font-size:13px; padding:8px 12px; border:1px solid var(--grid-strong);
+    border-radius:var(--radius-sm); background:var(--surface); color:var(--text);
+  }
+  .checkbox-line{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text);}
+  .btn-primary{
+    background:var(--live); color:#fff; border:none; font-weight:700; cursor:pointer;
+    padding:10px 20px; letter-spacing:.2px; border-radius:var(--radius-sm); font-size:13px;
+  }
+  .btn-primary:hover{background:#b8002a;}
+  .btn-primary:disabled{background:#c9ccd4; cursor:not-allowed;}
+
+  /* Combos */
+  .combo-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:14px;}
+  .combo-card{border:1px solid var(--grid-strong); border-radius:var(--radius); padding:15px; background:var(--colhead-bg);}
+  .combo-card.best{border-color:var(--win); background:var(--win-soft);}
+  .combo-rank{font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--sub); margin-bottom:8px;}
+  .combo-card.best .combo-rank{color:var(--win);}
+  .combo-legs{list-style:none; margin:0 0 12px; padding:0; display:flex; flex-direction:column; gap:6px;}
+  .combo-legs li{font-size:12.5px; display:flex; justify-content:space-between; gap:8px;}
+  .combo-legs .leg-teams{color:var(--sub);}
+  .combo-legs .leg-pick{font-weight:700;}
+  .combo-combined{display:flex; justify-content:space-between; align-items:center; padding-top:10px; border-top:1px dashed var(--grid-strong); font-size:12.5px;}
+  .combo-combined .value{font-family:var(--font-mono); font-weight:700; font-size:16px; color:var(--accent);}
+  .combo-card.best .combo-combined .value{color:var(--win);}
+
+  .empty-state{color:var(--sub); font-size:13px; padding:20px; text-align:center;}
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <div>
+    <h1>MLB Edge — Strong H2H Picks</h1>
+    <div class="sub" id="rangeSub">Loading season data and today's slate…</div>
+  </div>
+  <div class="nav-links">
+    <a href="index.html">← Schedule sheet</a>
+    <a href="parlays.html">Parlay builder</a>
+    <a href="bestbet.html">Best Bet</a>
+    <a href="guarantee.html">Guarantee</a>
+    <a href="streaks.html">Streaks →</a>
+    <a href="picks.html">My Picks →</a>
+  </div>
+</div>
+
+<div class="page-wrap">
+
+  <div class="disclaimer">
+    <strong>What this is:</strong> a filter, not a prediction model. Every game this season is classified by how decisive the head-to-head record between the two teams is — a real 3+ game H2H lead ("Strong"), a 1-2 game lead ("Moderate"), or a tied series decided only by season-record tiebreak ("Coinflip"). On top of that, tonight's starting pitchers are checked: on a Strong or Moderate pick, it's flagged if the better-pitching starter is actually going the other way (backtested: this widens or narrows the real odds noticeably on both tiers, more so on Moderate); on a Coinflip or No-data game, a genuinely large gap between the two starters' recent ERA (2.00+ over the last 90 days) can promote it to a usable "Pitcher edge" pick. The H2H backtest numbers below are computed live against every completed game this season, so they update as the season goes — the pitcher-edge rate (~72%) is from a one-time test and is kept visually distinct rather than presented as equally verified. Stacking multiple legs into a parlay multiplies the odds against you even when each individual pick is strong — see the note under "Combos" before reading too much into the combined percentage. Not real sportsbook odds, not betting advice — entertainment only.
+  </div>
+
+  <div class="card">
+    <h2>Backtest — this season so far</h2>
+    <div class="status-line" id="backtestStatus">Loading…</div>
+    <div class="backtest-grid" id="backtestGrid"></div>
+  </div>
+
+  <div class="card">
+    <h2>Parlay hit rate by leg count — no cherry-picking</h2>
+    <div class="status-line" id="legRateStatus">Loading…</div>
+    <div class="backtest-grid" id="legRateGrid"></div>
+    <div class="status-line" style="margin-top:12px; margin-bottom:0;">This is the honest number: for every completed day this season, it computes the probability that a <em>randomly</em> chosen N-leg subset of that day's Strong+Moderate pool would have hit every leg, then averages that across the whole season — not just the best days you happen to remember. A "great day" like an 8-in-a-row or 13-in-a-row streak is real when it happens, but it isn't a repeatable signal you can spot in advance; it's ordinary variance around these season-wide averages.</div>
+  </div>
+
+  <div class="card">
+    <h2>Today's games, classified</h2>
+    <div class="status-line" id="picksStatus">Loading…</div>
+    <div class="pick-list" id="pickList">
+      <div class="pick-row" style="background:transparent; border:none; font-weight:700; text-transform:uppercase; font-size:10.5px; color:var(--sub);">
+        <div>Matchup</div><div>H2H record</div><div>Tier</div><div>Pick</div><div id="tierRateHeader" style="text-align:right; cursor:pointer; user-select:none;" title="Click to sort by tier hit rate">Tier hit rate <span id="tierRateArrow"></span></div><div id="pickRateHeader" style="text-align:right; cursor:pointer; user-select:none;" title="Click to sort by pick's hit rate when picked">Pick's hit rate when picked <span id="pickRateArrow"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Build combos from Strong picks</h2>
+    <div class="controls">
+      <div class="control-group">
+        <label>Legs per combo</label>
+        <select id="legCount"></select>
+        <div id="legRateLabel" style="font-size:11px; color:var(--sub); margin-top:2px; max-width:220px;"></div>
+      </div>
+      <div class="control-group">
+        <label>Number of combos</label>
+        <select id="comboCount">
+          <option value="3">3</option>
+          <option value="5" selected>5</option>
+          <option value="8">8</option>
+          <option value="10">10</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>&nbsp;</label>
+        <div class="checkbox-line">
+          <input type="checkbox" id="includeModerate">
+          <label for="includeModerate" style="text-transform:none; font-weight:400; color:var(--text);">Include Moderate H2H and Pitcher edge picks if Strong pool is too small</label>
+        </div>
+        <div class="checkbox-line" style="margin-top:6px;">
+          <input type="checkbox" id="excludeLive" checked>
+          <label for="excludeLive" style="text-transform:none; font-weight:400; color:var(--text);">Exclude games already in progress</label>
+        </div>
+      </div>
+      <div class="control-group">
+        <label>&nbsp;</label>
+        <button class="btn-primary" id="generateBtn" disabled>Generate combos</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Generated combos</h2>
+    <div class="status-line">Combined % is the product of each leg's historical tier hit rate — it estimates how often <em>all</em> legs land together, not how good any single pick is. More legs always makes this number smaller, even when every pick is strong.</div>
+    <div class="combo-grid" id="comboResults"><div class="empty-state">Set your options above and click "Generate combos".</div></div>
+  </div>
+
+</div>
+
+<footer style="padding:12px 18px; font-size:11px; color:#8189a0; background:var(--colhead-bg); border-top:1px solid var(--grid); text-align:center;">
+  <div id="versionTag">version: loading…</div>
+</footer>
+
+<script>window.CLOUD_RELOAD_ON_REMOTE=true;</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="../cloud.js"></script>
+<script>
+// The official MLB Stats API's numeric team IDs, mapped to the same display
+// abbreviations used throughout the site.
+const TEAM_ID_MAP = {
+  108:'LAA', 109:'AZ', 110:'BAL', 111:'BOS', 112:'CHC', 113:'CIN', 114:'CLE', 115:'COL',
+  116:'DET', 117:'HOU', 118:'KC', 119:'LAD', 120:'WSH', 121:'NYM', 133:'ATH', 134:'PIT',
+  135:'SD', 136:'SEA', 137:'SF', 138:'STL', 139:'TB', 140:'TEX', 141:'TOR', 142:'MIN',
+  143:'PHI', 144:'ATL', 145:'CWS', 146:'MIA', 147:'NYY', 158:'MIL'
+};
+function teamAbbr(id){ return TEAM_ID_MAP[id] || null; }
+
+// Computes a date string in US Eastern time — the timezone MLB's own
+// schedule data is anchored to. Using the viewer's local clock here was a
+// real bug: a viewer outside US time zones could have their local calendar
+// day roll over while it's still "today" by MLB's own reckoning, silently
+// pulling the wrong day's slate. Pass a Date to convert that moment, or
+// nothing for right now. Intl.DateTimeFormat handles the EDT/EST switch
+// automatically, so this stays correct across the whole season.
+function dateStrET(d){
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(d || new Date());
+  const get = (type) => parts.find(p => p.type === type).value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+function todayStr(){ return dateStrET(); }
+
+
+const SEASON_START = '2026-03-26'; // Opening Day 2026
+// gameType codes: F = Wild Card, D = Division Series, L = League Championship Series, W = World Series
+const POSTSEASON_TYPES = new Set(['F', 'D', 'L', 'W']);
+
+let SEASON_DATA = [];
+let STANDINGS = {};
+let TODAY_GAMES = [];
+let POOL = [];          // today's classified eligible games
+let CLOSER_DATA = {};   // team abbr -> {name, saves, blownSaves, saveOpportunities, blownRate, era} for that team's primary closer (season save leader), when we have data for them
+let PICKS_SORT_KEY = null; // 'tierRate' | 'pickRate' | null (null = natural game order)
+
+// Shared "My Picks" storage — identical on the schedule sheet, Parlays, and
+// the Picks page itself. Static pages with no backend, so localStorage
+// (shared across pages on the same site) is what lets a checkbox checked
+// here show up on picks.html.
+const PICKS_STORAGE_KEY = 'mlb_site_picks_v1';
+function loadSavedPicks(){
+  try{ return JSON.parse(localStorage.getItem(PICKS_STORAGE_KEY) || '[]'); }
+  catch(e){ return []; }
+}
+function saveSavedPicksList(picks){
+  try{ localStorage.setItem(PICKS_STORAGE_KEY, JSON.stringify(picks)); }
+  catch(e){ console.error('Could not save picks', e); }
+}
+function isPickSaved(id){
+  return loadSavedPicks().some(p => p.id === id);
+}
+function toggleSavedPick(pick, isChecked){
+  let picks = loadSavedPicks();
+  if(isChecked){
+    if(!picks.some(p => p.id === pick.id)) picks.push({ ...pick, addedAt: new Date().toISOString() });
+  } else {
+    picks = picks.filter(p => p.id !== pick.id);
+  }
+  saveSavedPicksList(picks);
+}
+let PICKS_SORT_DIR = 'desc';
+let BACKTEST = {};       // tier -> {correct, total}
+let TEAM_PICK_RATES = {}; // team -> {correct, total} — this specific team's hit rate whenever it was the H2H pick
+let LEG_HIT_RATES = {};  // N -> {avg, days}
+let LAST_COMBOS = [];
+
+// Pulls the ENTIRE season's completed games in one request. Switched from
+// ESPN's unofficial scoreboard endpoint (which started hard-blocking browser
+// requests with CORS/403 errors — a server-side block that no client-side
+// retry or throttling can work around) to MLB's own official Stats API, which
+// both supports CORS for browser use and supports a date-range query, so this
+// no longer needs ~150 separate day-by-day requests at all.
+async function fetchFullSeason(){
+  try{
+    const endStr = todayStr(); // US Eastern "today" — see dateStrET()/todayStr() above
+    const res = await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate=${SEASON_START}&endDate=${endStr}`);
+    if(!res.ok) return [];
+    const json = await res.json();
+    const games = [];
+    (json.dates || []).forEach(d => {
+      (d.games || []).forEach(g => {
+        if(!POSTSEASON_TYPES.has(g.gameType) && g.gameType !== 'R') return; // regular season + postseason — excludes the All-Star Game, spring training
+        if(!g.status || g.status.detailedState !== 'Final') return; // completed games only
+        const awayAbbr = teamAbbr(g.teams.away.team.id);
+        const homeAbbr = teamAbbr(g.teams.home.team.id);
+        if(!awayAbbr || !homeAbbr) return;
+        const winner = g.teams.away.isWinner ? awayAbbr : (g.teams.home.isWinner ? homeAbbr : null);
+        if(!winner) return; // guards against a suspended/no-decision game with no declared winner
+        games.push({
+          id: g.gamePk,
+          eventTime: g.gameDate, // exact start timestamp — distinguishes a real
+                                  // doubleheader (two different times) from the
+                                  // same game counted twice (identical time)
+          date: g.officialDate, // MLB's own "which calendar day this game belongs
+                                 // to" field — more reliable than slicing a timestamp
+          away: awayAbbr, home: homeAbbr, winner
+        });
+      });
+    });
+    const byKey = new Map();
+    games.forEach(g => {
+      const key = `${g.eventTime}|${g.away}|${g.home}`;
+      if(!byKey.has(key)) byKey.set(key, g);
+    });
+    return Array.from(byKey.values()).map(({id, eventTime, ...rest}) => rest);
+  } catch(e){
+    console.error('season fetch failed', e);
+    return [];
+  }
+}
+
+function computeStandings(rows){
+  const record = {};
+  rows.forEach(r => {
+    if(!r.winner || r.winner === '—') return;
+    const loser = r.winner === r.away ? r.home : r.away;
+    record[r.winner] = record[r.winner] || { w:0, l:0 };
+    record[loser] = record[loser] || { w:0, l:0 };
+    record[r.winner].w++;
+    record[loser].l++;
+  });
+  return record;
+}
+
+function pct(rec){ if(!rec) return null; const g = rec.w + rec.l; return g > 0 ? rec.w / g : null; }
+
+// Full-season H2H between two teams (same aggregate approach as the schedule
+// sheet's column G) — returns wins for each side and the margin.
+function computeH2HRaw(teamA, teamB){
+  let winsA = 0, winsB = 0;
+  SEASON_DATA.forEach(r => {
+    if(!r.winner || r.winner === '—') return;
+    const pair = new Set([r.away, r.home]);
+    if(!pair.has(teamA) || !pair.has(teamB)) return;
+    if(r.winner === teamA) winsA++;
+    else if(r.winner === teamB) winsB++;
+  });
+  return { winsA, winsB, total: winsA + winsB };
+}
+
+// Classifies one matchup into a tier, using the same rule the backtest showed
+// actually correlates with accuracy: a real H2H lead of 3+ games is "strong";
+// 1-2 games is "moderate"; a tied series (decided only by season-record
+// tiebreak) is "coinflip"; no meetings yet is "nodata" (excluded — there's no
+// real signal to grade).
+function classifyMatchup(away, home){
+  const h2h = computeH2HRaw(away, home);
+  if(h2h.total === 0){
+    return { tier: 'nodata', pick: null, source: 'No meetings yet' };
+  }
+  if(h2h.winsA === h2h.winsB){
+    const recA = STANDINGS[away], recB = STANDINGS[home];
+    const pctA = pct(recA), pctB = pct(recB);
+    let pick = null;
+    if(pctA !== null && pctB !== null && pctA !== pctB){
+      pick = pctA > pctB ? away : home;
+    }
+    return {
+      tier: 'coinflip', pick,
+      source: pick ? `Tied ${h2h.winsA}-${h2h.winsB} — season-record tiebreak` : `Tied ${h2h.winsA}-${h2h.winsB} — no tiebreak available`
+    };
+  }
+  const pick = h2h.winsA > h2h.winsB ? away : home;
+  const margin = Math.abs(h2h.winsA - h2h.winsB);
+  const tier = margin >= 3 ? 'strong' : 'moderate';
+  return { tier, pick, source: `${pick} leads ${Math.max(h2h.winsA,h2h.winsB)}-${Math.min(h2h.winsA,h2h.winsB)}` };
+}
+
+// Backtests the classification rule against every completed game this season:
+// for each game, classify it (using the same full-season aggregate H2H the
+// site always shows), then check whether that classification's pick matches
+// what actually happened.
+function runBacktest(){
+  const tally = {
+    strong: {correct:0, total:0, history:[]},
+    moderate: {correct:0, total:0, history:[]},
+    coinflip: {correct:0, total:0, history:[]}
+  };
+  SEASON_DATA.forEach(r => {
+    const c = classifyMatchup(r.away, r.home);
+    if(c.tier === 'nodata' || !c.pick) return;
+    const isCorrect = c.pick === r.winner;
+    tally[c.tier].total++;
+    if(isCorrect) tally[c.tier].correct++;
+    // SEASON_DATA is already sorted chronologically (fetchFullSeason sorts by
+    // date before returning), so pushing in forEach order gives a
+    // chronological history for this tier — used below to show a "last N"
+    // recent-form figure alongside the season-wide rate.
+    tally[c.tier].history.push(isCorrect);
+  });
+  return tally;
+}
+
+// Hit rate over just the most recent N games of a tier's chronological
+// history, as a "recent form" figure alongside the season-wide rate — a
+// large season sample is the more statistically reliable number, but a
+// short recent window can surface a hot or cold stretch worth knowing about.
+function lastNRate(history, n){
+  const recent = history.slice(-n);
+  if(recent.length === 0) return null;
+  const correct = recent.filter(Boolean).length;
+  return { correct, total: recent.length, pct: correct / recent.length * 100 };
+}
+
+// For every team, tallies how often that team specifically was the H2H pick
+// (any tier) and how often that pick actually won. A team's overall record
+// tells you how good they are; this tells you something different — how
+// reliable it's actually been to bet ON them specifically whenever the H2H
+// signal favored them. A team can have a mediocre record but still cover
+// strongly whenever they were the pick (or vice versa).
+function computeTeamPickRates(){
+  const tally = {}; // team -> {correct, total}
+  SEASON_DATA.forEach(r => {
+    const c = classifyMatchup(r.away, r.home);
+    if(c.tier === 'nodata' || !c.pick) return;
+    tally[c.pick] = tally[c.pick] || { correct: 0, total: 0 };
+    tally[c.pick].total++;
+    if(c.pick === r.winner) tally[c.pick].correct++;
+  });
+  return tally;
+}
+
+// n-choose-k, used for the hypergeometric leg-count backtest below.
+function nCr(n, k){
+  if(k < 0 || k > n) return 0;
+  k = Math.min(k, n - k);
+  let result = 1;
+  for(let i = 0; i < k; i++){
+    result = result * (n - i) / (i + 1);
+  }
+  return result;
+}
+
+// For every completed day this season, builds that day's qualifying pool
+// (Strong + Moderate picks only — Coinflip and no-data games are excluded, same
+// as the default combo pool). Then, for each leg count, computes the
+// hypergeometric probability that a RANDOMLY chosen N-leg subset of that day's
+// pool would have hit every leg — i.e. "if I built an N-leg parlay from
+// whatever was in the pool that day, what fraction of ways to pick N games
+// would have hit." Averaging that across every day this season gives an
+// honest, no-cherry-picking answer to "how often does an N-leg parlay from
+// this pool actually land," instead of just pointing at the best days after
+// the fact.
+function computeLegHitRates(){
+  const byDate = {};
+  SEASON_DATA.forEach(r => { (byDate[r.date] = byDate[r.date] || []).push(r); });
+
+  const dayStats = [];
+  Object.values(byDate).forEach(games => {
+    let correct = 0, total = 0;
+    games.forEach(r => {
+      const c = classifyMatchup(r.away, r.home);
+      if(c.tier !== 'strong' && c.tier !== 'moderate') return;
+      if(!c.pick) return;
+      total++;
+      if(c.pick === r.winner) correct++;
+    });
+    if(total > 0) dayStats.push({ correct, total });
+  });
+
+  const legSizes = [2,3,4,5,6,7,8];
+  const results = {};
+  legSizes.forEach(N => {
+    const probs = [];
+    dayStats.forEach(({correct, total}) => {
+      if(total < N) return;
+      const p = correct < N ? 0 : nCr(correct, N) / nCr(total, N);
+      probs.push(p);
+    });
+    results[N] = {
+      avg: probs.length ? probs.reduce((a,b) => a+b, 0) / probs.length : null,
+      days: probs.length
+    };
+  });
+  return results;
+}
+
+// Formats a game's exact start timestamp as a readable local time (e.g. "4:07 PM").
+// Always shows the game's start time in US Eastern (labeled explicitly),
+// instead of silently converting to the viewer's own local timezone — avoids
+// a time that could otherwise roll into a different calendar day than the
+// date shown next to it for a viewer outside US time zones.
+function formatGameTime(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  const timeStr = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit'
+  }).format(d);
+  const tzName = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', timeZoneName: 'short'
+  }).formatToParts(d).find(p => p.type === 'timeZoneName').value;
+  return `${timeStr} ${tzName}`;
+}
+
+async function fetchTodayGames(){
+  const dateParam = todayStr(); // US Eastern "today"
+  try{
+    const res = await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${dateParam}&hydrate=probablePitcher`);
+    if(!res.ok) return [];
+    const json = await res.json();
+    const games = [];
+    (json.dates || []).forEach(dt => {
+      (dt.games || []).forEach(g => {
+        if(!POSTSEASON_TYPES.has(g.gameType) && g.gameType !== 'R') return; // regular season + postseason — excludes the All-Star Game, spring training
+        const awayAbbr = teamAbbr(g.teams.away.team.id);
+        const homeAbbr = teamAbbr(g.teams.home.team.id);
+        if(!awayAbbr || !homeAbbr) return;
+        let state = 'pre';
+        if(g.status.abstractGameState === 'Live') state = 'in';
+        else if(g.status.abstractGameState === 'Final') state = 'post';
+        const shortDetail = g.status.detailedState || '';
+        let awayScore = g.teams.away.score;
+        let homeScore = g.teams.home.score;
+        if(state === 'in' || state === 'post'){
+          if(awayScore === undefined || awayScore === null) awayScore = 0;
+          if(homeScore === undefined || homeScore === null) homeScore = 0;
+        } else {
+          awayScore = null; homeScore = null;
+        }
+        const awayPitcher = g.teams.away.probablePitcher;
+        const homePitcher = g.teams.home.probablePitcher;
+        games.push({
+          away: awayAbbr,
+          home: homeAbbr,
+          status: state, statusText: shortDetail,
+          eventTime: g.gameDate,
+          awayScore, homeScore,
+          awayPitcherId: awayPitcher ? awayPitcher.id : null,
+          homePitcherId: homePitcher ? homePitcher.id : null
+        });
+      });
+    });
+    return games;
+  } catch(e){ console.error('today fetch failed', e); return []; }
+}
+
+// Fetches each pitcher's ERA over the last 90 days — not full-season ERA, which
+// would blend in outings from months ago and wash out how a pitcher is throwing
+// right now. Backtested at both 60 and 90 days: this only becomes a meaningful
+// signal once the gap between the two starters is large (2.00+ ERA apart);
+// anything smaller was close to noise both times, matching exactly how H2H
+// margin behaved (a 1-game lead barely beats a coin flip; a 3+ game lead is a
+// real signal). See PITCHER_EDGE_MIN_GAP and PITCHER_EDGE_HISTORICAL_RATE below.
+async function fetchPitcherERAs(pitcherIds){
+  const uniqueIds = [...new Set(pitcherIds.filter(id => id))];
+  if(uniqueIds.length === 0) return {};
+  const endStr = todayStr(); // US Eastern "today"
+  // Anchor at noon UTC on that date before subtracting days — noon UTC is
+  // always solidly mid-day in US Eastern (never near a date boundary there),
+  // so the 90-day-back arithmetic can't accidentally land on the wrong ET
+  // calendar day the way subtracting from an ambiguous local time could.
+  const anchor = new Date(endStr + 'T12:00:00Z');
+  anchor.setUTCDate(anchor.getUTCDate() - 90);
+  const startStr = dateStrET(anchor);
+
+  const eraMap = {};
+  await Promise.all(uniqueIds.map(async (id) => {
+    try{
+      const res = await fetch(`https://statsapi.mlb.com/api/v1/people/${id}/stats?stats=byDateRange&startDate=${startStr}&endDate=${endStr}&group=pitching`);
+      if(!res.ok) return;
+      const data = await res.json();
+      const splits = (data.stats && data.stats[0] && data.stats[0].splits) || [];
+      // A pitcher traded mid-window has one split per team plus a combined
+      // "All" split — always prefer the combined one so a trade doesn't quietly
+      // drop half their recent starts.
+      const combined = splits.find(s => s.sport && s.sport.code === 'All') || splits[0];
+      const era = combined && combined.stat && combined.stat.era;
+      if(era !== undefined && era !== '-.--'){
+        eraMap[id] = parseFloat(era);
+      }
+    } catch(e){ /* leave this pitcher out of the map on failure */ }
+  }));
+  return eraMap;
+}
+
+// Pulls this season's top ~30 save leaders league-wide in one request, then
+// gets their full pitching line (saves, blown saves, save opportunities, ERA)
+// in one batched follow-up — cheap (2 requests total), unlike per-game
+// scanning. Backtested directly: the top 10 closers by saves blow only ~8% of
+// opportunities, versus ~27% for the bottom 10 on this same leaderboard — a
+// real, large gap, though it only matters in an actual save situation (a late,
+// close game), which is why this is surfaced conditionally rather than baked
+// into the tier picks the way starting pitcher ERA was.
+async function fetchCloserData(){
+  try{
+    const leadersRes = await fetch('https://statsapi.mlb.com/api/v1/stats/leaders?leaderCategories=saves&season=2026&sportId=1&statGroup=pitching&limit=30');
+    if(!leadersRes.ok) return {};
+    const leadersJson = await leadersRes.json();
+    const leaders = (leadersJson.leagueLeaders && leadersJson.leagueLeaders[0] && leadersJson.leagueLeaders[0].leaders) || [];
+    if(leaders.length === 0) return {};
+
+    const ids = leaders.map(l => l.person.id);
+    const statsRes = await fetch(`https://statsapi.mlb.com/api/v1/people?personIds=${ids.join(',')}&hydrate=stats(group=[pitching],type=[season],season=2026)`);
+    if(!statsRes.ok) return {};
+    const statsJson = await statsRes.json();
+
+    const statById = {};
+    (statsJson.people || []).forEach(p => {
+      const statGroup = (p.stats || []).find(s => s.group && s.group.displayName === 'pitching');
+      const stat = statGroup && statGroup.splits && statGroup.splits[0] && statGroup.splits[0].stat;
+      if(stat) statById[p.id] = stat;
+    });
+
+    const map = {};
+    leaders.forEach(l => {
+      const abbr = teamAbbr(l.team.id);
+      if(!abbr || map[abbr]) return; // leaders is already sorted by saves, so the first hit per team is that team's primary closer
+      const stat = statById[l.person.id];
+      if(!stat || !stat.saveOpportunities) return;
+      map[abbr] = {
+        name: l.person.fullName,
+        saves: stat.saves,
+        blownSaves: stat.blownSaves,
+        saveOpportunities: stat.saveOpportunities,
+        blownRate: stat.blownSaves / stat.saveOpportunities,
+        era: stat.era
+      };
+    });
+    return map;
+  } catch(e){ console.error('closer data fetch failed', e); return {}; }
+}
+
+// Attaches a pitcher-quality read on top of the H2H tier already assigned.
+// Two things happen here, both grounded in what the backtest actually showed
+// (not recomputed live — the pitcher-ERA backtest needs ~150-250 individual
+// requests, too heavy to re-run on every page load, so these thresholds are
+// fixed from a one-time test and clearly kept separate from the tier hit-rate
+// tiles above, which ARE computed live):
+//   1. On a Strong H2H pick, flag (don't override) whether the better-ERA
+//      starter is throwing for the team H2H favors or the other team — a
+//      qualitative heads-up, not a number we silently bake into the tier's
+//      displayed hit rate.
+//   2. On a Coinflip or No-data game, a genuinely large ERA gap (2.00+, the
+//      threshold where the one-time backtest actually cleared a coin flip —
+//      anything smaller wasn't reliably better than 50/50) promotes it into a
+//      usable "Pitcher edge" pick instead of leaving it unusable.
+const PITCHER_EDGE_MIN_GAP = 2.0; // validated at both 60- and 90-day windows — the jump to a real signal consistently happens right at this cutoff
+const PITCHER_EDGE_HISTORICAL_RATE = 0.715; // from a one-time last-90-days backtest (n=382), not live — re-confirmed the 60-day test's 69.6% almost exactly
+
+function applyPitcherSignal(game, eraMap){
+  const awayERA = game.awayPitcherId ? eraMap[game.awayPitcherId] : undefined;
+  const homeERA = game.homePitcherId ? eraMap[game.homePitcherId] : undefined;
+  const hasERA = awayERA !== undefined && homeERA !== undefined && awayERA !== homeERA;
+  const eraGap = hasERA ? Math.abs(awayERA - homeERA) : null;
+  const eraPick = hasERA ? (awayERA < homeERA ? game.away : game.home) : null;
+
+  let pitcherSignal = null;
+  let tier = game.tier;
+  let pick = game.pick;
+  let source = game.source;
+
+  // Confirm/warn was originally only checked on Strong-tier picks (validated
+  // gap: 84.3% agree vs. 78.1% disagree). Extended to Moderate tier after a
+  // dedicated backtest showed the effect is actually LARGER there — 70.5%
+  // agree vs. 55.9% disagree (n=336/304, a statistically solid gap, not noise)
+  // — meaning a Moderate pick the pitcher backs up is close to Strong-tier
+  // reliability, while one it contradicts is barely better than a coin flip.
+  if((game.tier === 'strong' || game.tier === 'moderate') && hasERA){
+    pitcherSignal = eraPick === game.pick ? 'confirm' : 'warn';
+  } else if((game.tier === 'coinflip' || game.tier === 'nodata') && hasERA && eraGap >= PITCHER_EDGE_MIN_GAP){
+    tier = 'pitcher_edge';
+    pick = eraPick;
+    source = `${eraPick} starter's ERA is ${eraGap.toFixed(2)} lower (last 90 days)`;
+  }
+
+  return { ...game, tier, pick, source, pitcherSignal, eraGap, hasERA };
+}
+
+function renderBacktest(){
+  const grid = document.getElementById('backtestGrid');
+  const tierLabel = { strong: 'Strong (3+ game H2H lead)', moderate: 'Moderate (1-2 game lead)', coinflip: 'Coinflip (tied, tiebreak)' };
+  const tierClass = { strong: 'tile-strong', moderate: 'tile-moderate', coinflip: 'tile-coinflip' };
+  grid.innerHTML = ['strong','moderate','coinflip'].map(t => {
+    const b = BACKTEST[t];
+    const rate = b.total > 0 ? (b.correct / b.total * 100) : 0;
+    // Last-10 recent-form line, in the same cell as the season-wide number —
+    // shows whether each tier has been running hot or cold lately versus its
+    // full-season baseline. A small sample on its own (10 games), so shown as
+    // a lighter, secondary line rather than replacing the season figure.
+    let last10Line = '';
+    const l10 = lastNRate(b.history, 10);
+    if(l10){
+      const l10Class = l10.pct >= rate ? 'good' : 'bad';
+      last10Line = `<div class="n last10 ${l10Class}">Last 10: ${l10.correct}/${l10.total} (${l10.pct.toFixed(1)}%)</div>`;
+    }
+    return `
+      <div class="backtest-tile ${tierClass[t]}">
+        <div class="label">${tierLabel[t]}</div>
+        <div class="pct">${b.total > 0 ? rate.toFixed(1) + '%' : '—'}</div>
+        <div class="n">${b.correct}/${b.total} games this season</div>
+        ${last10Line}
+      </div>
+    `;
+  }).join('');
+  document.getElementById('backtestStatus').textContent = `Computed live from ${SEASON_DATA.length} completed games this season.`;
+}
+
+function renderLegRates(){
+  const grid = document.getElementById('legRateGrid');
+  const sizes = [2,3,4,5,6,7,8];
+  grid.innerHTML = sizes.map(N => {
+    const r = LEG_HIT_RATES[N];
+    const tierClass = r.avg === null ? '' : (r.avg >= 0.3 ? 'tile-strong' : (r.avg >= 0.12 ? 'tile-moderate' : 'tile-coinflip'));
+    return `
+      <div class="backtest-tile ${tierClass}">
+        <div class="label">${N}-leg parlay</div>
+        <div class="pct">${r.avg === null ? '—' : (r.avg*100).toFixed(1) + '%'}</div>
+        <div class="n">avg across ${r.days} days this season</div>
+      </div>
+    `;
+  }).join('');
+  document.getElementById('legRateStatus').textContent = `Computed by averaging every completed day this season — not just the best ones.`;
+}
+
+function updateLegRateLabel(){
+  const legCount = parseInt(document.getElementById('legCount').value);
+  const el = document.getElementById('legRateLabel');
+  if(!el) return;
+  const r = LEG_HIT_RATES[legCount];
+  if(!r || r.avg === null){
+    el.textContent = '';
+    return;
+  }
+  el.textContent = `This season, a ${legCount}-leg parlay from this pool has hit an average of ${(r.avg*100).toFixed(1)}% of days.`;
+}
+
+function tierHitRate(tier){
+  if(tier === 'pitcher_edge') return PITCHER_EDGE_HISTORICAL_RATE;
+  const b = BACKTEST[tier];
+  if(!b || b.total === 0) return 0.5;
+  return b.correct / b.total;
+}
+
+function renderPicks(){
+  const wrap = document.getElementById('pickList');
+  const header = wrap.querySelector('.pick-row');
+  wrap.innerHTML = '';
+  wrap.appendChild(header);
+
+  if(POOL.length === 0){
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = 'No live or upcoming games right now.';
+    wrap.appendChild(empty);
+    return;
+  }
+
+  const tierName = { strong: 'Strong', moderate: 'Moderate', coinflip: 'Coinflip', nodata: 'No data', pitcher_edge: 'Pitcher edge' };
+
+  // Numeric values behind the two rate columns, computed once so both the
+  // display and the optional sort use the exact same numbers. Games with no
+  // real rate (No-data tier, or a pick with no season history yet) sort to
+  // the bottom regardless of direction, rather than jumping to the top of an
+  // ascending sort as a bare 0 or blank would.
+  const enriched = POOL.map(g => {
+    const tierRateValue = g.tier === 'pitcher_edge' ? PITCHER_EDGE_HISTORICAL_RATE
+      : (g.tier !== 'nodata' ? tierHitRate(g.tier) : null);
+    let pickRateValue = null;
+    if(g.pick && TEAM_PICK_RATES[g.pick]){
+      const tp = TEAM_PICK_RATES[g.pick];
+      pickRateValue = tp.correct / tp.total;
+    }
+    return { g, tierRateValue, pickRateValue };
+  });
+
+  let ordered = enriched;
+  if(PICKS_SORT_KEY){
+    const valueKey = PICKS_SORT_KEY === 'tierRate' ? 'tierRateValue' : 'pickRateValue';
+    ordered = enriched.slice().sort((a, b) => {
+      const av = a[valueKey], bv = b[valueKey];
+      if(av === null && bv === null) return 0;
+      if(av === null) return 1;  // no-data rows always sink to the bottom
+      if(bv === null) return -1;
+      return PICKS_SORT_DIR === 'asc' ? av - bv : bv - av;
+    });
+  }
+
+  const tierArrow = document.getElementById('tierRateArrow');
+  const pickArrow = document.getElementById('pickRateArrow');
+  if(tierArrow) tierArrow.textContent = PICKS_SORT_KEY === 'tierRate' ? (PICKS_SORT_DIR === 'asc' ? '▲' : '▼') : '';
+  if(pickArrow) pickArrow.textContent = PICKS_SORT_KEY === 'pickRate' ? (PICKS_SORT_DIR === 'asc' ? '▲' : '▼') : '';
+
+  ordered.forEach(({ g }) => {
+    const badge = g.status === 'in'
+      ? `<span class="status-badge live">${g.statusText || 'Live'}</span>`
+      : (g.status === 'post'
+        ? `<span class="status-badge pre">${g.statusText || 'Final'}</span>`
+        : `<span class="status-badge pre">${formatGameTime(g.eventTime) || g.statusText || 'Scheduled'}</span>`);
+    const hasScore = g.status === 'in' && g.awayScore !== null && g.homeScore !== null;
+    const scoreText = hasScore ? `<span class="score-note">(${g.away} ${g.awayScore}-${g.homeScore} ${g.home})</span>` : '';
+
+    // Closer reference — only surfaced when the game is actually live and
+    // close (margin of 3 or fewer runs, matching the real MLB save-situation
+    // threshold), since closer reliability only matters once a team has a
+    // late lead worth protecting. Backtested separately from everything else
+    // on this page: this season's top-10 closers by saves blow only ~8% of
+    // opportunities vs. ~27% for the bottom 10 — a real gap, just a
+    // conditional one, which is why it's shown as reference info here rather
+    // than folded into the tier pick itself.
+    const isCloseGame = g.status === 'in' && hasScore && Math.abs(g.awayScore - g.homeScore) <= 3;
+    let closerChip = '';
+    if(isCloseGame){
+      const awayCloser = CLOSER_DATA[g.away];
+      const homeCloser = CLOSER_DATA[g.home];
+      if(awayCloser || homeCloser){
+        const parts = [];
+        if(awayCloser) parts.push(`${g.away}: ${awayCloser.name} (${(awayCloser.blownRate*100).toFixed(0)}% blown)`);
+        if(homeCloser) parts.push(`${g.home}: ${homeCloser.name} (${(homeCloser.blownRate*100).toFixed(0)}% blown)`);
+        closerChip = `<div class="closer-chip">Close game — closers: ${parts.join(' &middot; ')}</div>`;
+      }
+    }
+    // "Pitcher edge" games use a one-time backtest number, not the live tile
+    // above — shown as an italic estimate rather than a plain percentage, so
+    // it doesn't read as equally verified as Strong/Moderate/Coinflip.
+    const rate = g.tier === 'pitcher_edge'
+      ? `<em>~${(PITCHER_EDGE_HISTORICAL_RATE * 100).toFixed(0)}%</em>`
+      : (g.tier !== 'nodata' ? (tierHitRate(g.tier) * 100).toFixed(1) + '%' : '—');
+    let signalChip = '';
+    if(g.pitcherSignal === 'confirm'){
+      signalChip = `<span class="pitcher-chip confirm">pitcher backs it up</span>`;
+    } else if(g.pitcherSignal === 'warn'){
+      signalChip = `<span class="pitcher-chip warn">better pitcher going other way</span>`;
+    }
+    // How reliably THIS specific team has covered, historically, whenever it
+    // was the H2H pick — separate from the tier's general hit rate. A small
+    // sample (under 5 picks this season) is shown but flagged, since a couple
+    // of games either way can swing the percentage a lot at that size.
+    let pickTeamRate = '—';
+    if(g.pick && TEAM_PICK_RATES[g.pick]){
+      const tp = TEAM_PICK_RATES[g.pick];
+      const pct = tp.correct / tp.total * 100;
+      const lowSample = tp.total < 5;
+      const highlight = !lowSample && pct >= 70 ? 'color:var(--win); font-weight:700;' : '';
+      pickTeamRate = `<span style="${highlight}">${pct.toFixed(1)}%</span><span style="display:block; font-size:9.5px; color:var(--sub);">${tp.correct}/${tp.total}${lowSample ? ' · small sample' : ''}</span>`;
+    }
+
+    // Checkbox to send this straight pick to the shared Picks page. Keyed by
+    // today's date so it stays stable across this page's own auto-refresh.
+    let pickCheckbox = '';
+    if(g.pick){
+      const todayKey = todayStr(); // US Eastern "today" — keeps pick IDs stable and consistent for every viewer
+      const pickId = `edge-${todayKey}-${g.away}-${g.home}`;
+      const checked = isPickSaved(pickId) ? 'checked' : '';
+      const detailAttr = `${tierName[g.tier]} tier — ${g.source}`.replace(/"/g, '&quot;');
+      pickCheckbox = `<input type="checkbox" class="pick-checkbox" data-pick-id="${pickId}" data-date="${todayKey}" data-away="${g.away}" data-home="${g.home}" data-pick="${g.pick}" data-detail="${detailAttr}" ${checked} title="Add to My Picks" style="margin-right:5px; vertical-align:middle;">`;
+    }
+
+    const row = document.createElement('div');
+    row.className = `pick-row ${g.tier}`;
+    row.innerHTML = `
+      <div class="pick-teams">${g.away} @ ${g.home}${scoreText}${badge}${closerChip}</div>
+      <div class="pick-source">${g.source}${signalChip ? '<br>' + signalChip : ''}</div>
+      <div class="pick-tier tier-${g.tier}">${tierName[g.tier]}</div>
+      <div class="pick-team">${g.pick || '—'}</div>
+      <div class="pick-hist">${rate}</div>
+      <div class="pick-hist" style="line-height:1.3;">${pickCheckbox}${pickTeamRate}</div>
+    `;
+    wrap.appendChild(row);
+  });
+}
+
+
+// Strong is always in the pool. Moderate H2H and Pitcher-edge picks are close
+// enough in backtested strength (63.8% and ~69.6%) to bucket together as the
+// "secondary tier" toggled in via the checkbox — both clearly beat a coin
+// flip, neither is as strong as Strong H2H on its own.
+function buildPool(includeModerate, excludeLive){
+  return POOL.filter(g => {
+    if(excludeLive && g.status === 'in') return false;
+    return g.tier === 'strong' || (includeModerate && (g.tier === 'moderate' || g.tier === 'pitcher_edge'));
+  });
+}
+
+function populateLegOptions(){
+  const sel = document.getElementById('legCount');
+  const includeModerate = document.getElementById('includeModerate').checked;
+  const excludeLive = document.getElementById('excludeLive').checked;
+  const pool = buildPool(includeModerate, excludeLive);
+  const maxLegs = Math.min(pool.length, 8);
+  sel.innerHTML = '';
+  for(let i = 2; i <= Math.max(2, maxLegs); i++){
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = i;
+    sel.appendChild(opt);
+  }
+  document.getElementById('generateBtn').disabled = pool.length < 2;
+  updateLegRateLabel();
+}
+
+// n-choose-k, used to size-check the exhaustive search below before running it.
+function binomialCoefficient(n, k){
+  if(k < 0 || k > n) return 0;
+  k = Math.min(k, n - k);
+  let result = 1;
+  for(let i = 0; i < k; i++){
+    result = result * (n - i) / (i + 1);
+  }
+  return Math.round(result);
+}
+
+// Yields every k-index subset of [0..n), in order — the standard combinatorial
+// "next combination" algorithm.
+function* combinationIndices(n, k){
+  const idx = Array.from({ length: k }, (_, i) => i);
+  while(true){
+    yield idx.slice();
+    let i = k - 1;
+    while(i >= 0 && idx[i] === n - k + i) i--;
+    if(i < 0) return;
+    idx[i]++;
+    for(let j = i + 1; j < k; j++) idx[j] = idx[j - 1] + 1;
+  }
+}
+
+function generateCombos(){
+  const includeModerate = document.getElementById('includeModerate').checked;
+  const excludeLive = document.getElementById('excludeLive').checked;
+  const pool = buildPool(includeModerate, excludeLive).filter(g => g.pick);
+  const legCount = parseInt(document.getElementById('legCount').value);
+  const comboCount = parseInt(document.getElementById('comboCount').value);
+
+  if(pool.length < legCount){
+    document.getElementById('comboResults').innerHTML = `<div class="empty-state">Not enough qualifying games (${pool.length} available, ${legCount} needed).</div>`;
+    return;
+  }
+
+  // Exhaustively checks EVERY possible N-leg combination from the pool and
+  // ranks them by combined estimate, rather than randomly sampling a handful.
+  // A day's slate is small enough (usually under 15 games) that this is
+  // computationally trivial — there's no real reason to approximate, and
+  // random sampling could (and did) miss the actual best-odds combination
+  // entirely, which defeats the point of labeling a result "Best Combined
+  // Odds." The size cap below is just a safety net for an unexpectedly huge
+  // pool; it will essentially never trigger for a real MLB slate.
+  const totalPossible = binomialCoefficient(pool.length, legCount);
+  let combos = [];
+  if(totalPossible <= 200000){
+    for(const idx of combinationIndices(pool.length, legCount)){
+      const legs = idx.map(i => pool[i]);
+      const combined = legs.reduce((p, g) => p * tierHitRate(g.tier), 1);
+      combos.push({ legs, combined });
+    }
+    combos.sort((a, b) => b.combined - a.combined);
+    combos = combos.slice(0, comboCount);
+  } else {
+    // Fallback for a pool too large to enumerate exhaustively — random
+    // sampling, same as before, but this path shouldn't come up in practice.
+    const baseIdx = pool.map((_, i) => i);
+    const seen = new Set();
+    let attempts = 0;
+    while(combos.length < comboCount && attempts < comboCount * 40){
+      attempts++;
+      const idx = baseIdx.slice().sort(() => Math.random() - 0.5).slice(0, legCount).sort((a,b) => a - b);
+      const sig = idx.join(',');
+      if(seen.has(sig)) continue;
+      seen.add(sig);
+      const legs = idx.map(i => pool[i]);
+      const combined = legs.reduce((p, g) => p * tierHitRate(g.tier), 1);
+      combos.push({ legs, combined });
+    }
+    combos.sort((a, b) => b.combined - a.combined);
+  }
+
+  LAST_COMBOS = combos;
+  renderCombos(combos);
+}
+
+function renderCombos(combos){
+  const wrap = document.getElementById('comboResults');
+  if(combos.length === 0){
+    wrap.innerHTML = '<div class="empty-state">Could not build combinations from this pool.</div>';
+    return;
+  }
+  const todayKey = todayStr(); // US Eastern "today" — keeps pick IDs stable and consistent for every viewer
+  wrap.innerHTML = combos.map((c, i) => {
+    const legsSig = c.legs.map(g => `${g.away}${g.home}${g.pick}`).join('_');
+    const comboId = `edge-combo-${todayKey}-${legsSig}`;
+    const checked = isPickSaved(comboId) ? 'checked' : '';
+    const legsJson = JSON.stringify(c.legs.map(g => ({ away: g.away, home: g.home, pick: g.pick }))).replace(/"/g, '&quot;');
+    return `
+    <div class="combo-card ${i === 0 ? 'best' : ''}">
+      <div class="combo-rank">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" class="combo-pick-checkbox" data-pick-id="${comboId}" data-date="${todayKey}" data-legs="${legsJson}" data-combined="${c.combined}" ${checked} title="Add to My Picks">
+          ${i === 0 ? 'Best combined odds' : `Combo ${i + 1}`} · ${c.legs.length} legs
+        </label>
+      </div>
+      <ul class="combo-legs">
+        ${c.legs.map(g => `<li><span class="leg-teams">${g.away} @ ${g.home}</span><span class="leg-pick">${g.pick}</span></li>`).join('')}
+      </ul>
+      <div class="combo-combined">
+        <span>Combined estimate</span>
+        <span class="value">${(c.combined * 100).toFixed(1)}%</span>
+      </div>
+    </div>
+  `;
+  }).join('');
+}
+
+async function init(){
+  document.getElementById('rangeSub').textContent = 'Loading season data and today\'s slate…';
+
+  const [season, today, closerData] = await Promise.all([fetchFullSeason(), fetchTodayGames(), fetchCloserData()]);
+  SEASON_DATA = season;
+  STANDINGS = computeStandings(SEASON_DATA);
+  TODAY_GAMES = today.filter(g => g.status !== 'post');
+  CLOSER_DATA = closerData;
+
+  BACKTEST = runBacktest();
+  TEAM_PICK_RATES = computeTeamPickRates();
+  renderBacktest();
+
+  LEG_HIT_RATES = computeLegHitRates();
+  renderLegRates();
+
+  const basePool = TODAY_GAMES.map(g => {
+    const c = classifyMatchup(g.away, g.home);
+    return { ...g, ...c };
+  });
+
+  document.getElementById('picksStatus').textContent = `${TODAY_GAMES.length} games tonight · checking starting pitchers…`;
+  const pitcherIds = basePool.flatMap(g => [g.awayPitcherId, g.homePitcherId]);
+  const eraMap = await fetchPitcherERAs(pitcherIds);
+  POOL = basePool.map(g => applyPitcherSignal(g, eraMap));
+
+  const eligible = POOL.filter(g => g.tier !== 'nodata' && g.pick);
+  document.getElementById('rangeSub').textContent = `${SEASON_DATA.length} completed games backtested this season · ${TODAY_GAMES.length} eligible games tonight`;
+  document.getElementById('picksStatus').textContent = `${eligible.length} of ${TODAY_GAMES.length} games tonight have a usable signal (H2H or starting pitcher).`;
+
+  renderPicks();
+  populateLegOptions();
+  updateLegRateLabel();
+
+  document.getElementById('includeModerate').addEventListener('change', populateLegOptions);
+  document.getElementById('excludeLive').addEventListener('change', populateLegOptions);
+  document.getElementById('tierRateHeader').addEventListener('click', () => {
+    if(PICKS_SORT_KEY === 'tierRate'){
+      PICKS_SORT_DIR = PICKS_SORT_DIR === 'asc' ? 'desc' : 'asc';
+    } else {
+      PICKS_SORT_KEY = 'tierRate';
+      PICKS_SORT_DIR = 'desc';
+    }
+    renderPicks();
+  });
+  document.getElementById('pickRateHeader').addEventListener('click', () => {
+    if(PICKS_SORT_KEY === 'pickRate'){
+      PICKS_SORT_DIR = PICKS_SORT_DIR === 'asc' ? 'desc' : 'asc';
+    } else {
+      PICKS_SORT_KEY = 'pickRate';
+      PICKS_SORT_DIR = 'desc';
+    }
+    renderPicks();
+  });
+  document.getElementById('legCount').addEventListener('change', updateLegRateLabel);
+  document.getElementById('generateBtn').addEventListener('click', generateCombos);
+
+  document.getElementById('pickList').addEventListener('change', (e) => {
+    if(!e.target.classList.contains('pick-checkbox')) return;
+    const cb = e.target;
+    const pick = {
+      id: cb.dataset.pickId,
+      type: 'straight',
+      source: 'edge',
+      date: cb.dataset.date,
+      away: cb.dataset.away,
+      home: cb.dataset.home,
+      pick: cb.dataset.pick,
+      detail: cb.dataset.detail
+    };
+    toggleSavedPick(pick, cb.checked);
+  });
+
+  document.getElementById('comboResults').addEventListener('change', (e) => {
+    if(!e.target.classList.contains('combo-pick-checkbox')) return;
+    const cb = e.target;
+    let legs = [];
+    try{ legs = JSON.parse(cb.dataset.legs); } catch(err){ /* leave empty on parse failure */ }
+    const pick = {
+      id: cb.dataset.pickId,
+      type: 'combo',
+      source: 'edge',
+      date: cb.dataset.date,
+      legs,
+      combinedEstimate: parseFloat(cb.dataset.combined)
+    };
+    toggleSavedPick(pick, cb.checked);
+  });
+
+  scheduleNextRefresh();
+}
+
+function buildGameKey(away, home){ return `${away}@${home}`; }
+
+// Re-checks today's live scores/status periodically — needed for the closer
+// reference chip above to actually work as intended (appearing once a game
+// becomes close, not just reflecting whatever the score happened to be at
+// page load). Tier, pick, and pitcher-signal fields are left untouched on
+// refresh, since those are pre-game determinations that don't change once
+// the game starts — only the live fields (status, score) get updated.
+async function refreshLiveGames(){
+  const freshGames = await fetchTodayGames();
+  const freshByKey = {};
+  freshGames.forEach(g => { freshByKey[buildGameKey(g.away, g.home)] = g; });
+
+  POOL = POOL
+    .map(g => {
+      const fresh = freshByKey[buildGameKey(g.away, g.home)];
+      if(!fresh) return g;
+      return { ...g, status: fresh.status, statusText: fresh.statusText, awayScore: fresh.awayScore, homeScore: fresh.homeScore };
+    })
+    .filter(g => g.status !== 'post');
+
+  renderPicks();
+  populateLegOptions();
+  updateLegRateLabel();
+}
+
+function hasLiveGameNow(){
+  return POOL.some(g => g.status === 'in');
+}
+
+// Same smart backoff as the schedule sheet: 30s while something's actually
+// live, an hour otherwise — no point hammering the API for a slate that's
+// all "Scheduled" or already final.
+function scheduleNextRefresh(){
+  const delay = hasLiveGameNow() ? 30000 : 3600000;
+  setTimeout(async () => {
+    await refreshLiveGames();
+    scheduleNextRefresh();
+  }, delay);
+}
+
+function renderVersionTag(){
+  const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  const d = new Date(document.lastModified);
+  const stamp = `${d.getFullYear()}_${months[d.getMonth()]}_${String(d.getDate()).padStart(2,'0')} ${d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
+  const el = document.getElementById('versionTag');
+  if(el) el.textContent = `version: ${stamp}`;
+}
+renderVersionTag();
+
+init();
+</script>
+</body>
+</html>

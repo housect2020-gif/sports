@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NFL Schedule & Records — Live Sheet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --page-bg: #eef1f6;
+    --surface: #ffffff;
+    --grid: #e3e7ee;
+    --grid-strong: #ccd3de;
+    --header-bg: linear-gradient(135deg, #013369 0%, #001a3d 100%);
+    --header-fg: #ffffff;
+    --colhead-bg: #f2f4f8;
+    --row-alt: #f8f9fc;
+    --row-hover: #eaf0fb;
+    --accent: #013369;
+    --accent-soft: rgba(1,51,105,.08);
+    --live: #d50a0a;
+    --live-soft: rgba(213,10,10,.09);
+    --win: #0a7d3f;
+    --win-soft: rgba(10,125,63,.10);
+    --warn: #c2660a;
+    --warn-soft: rgba(194,102,10,.13);
+    --today-soft: #fff4d6;
+    --text: #14213b;
+    --sub: #64708a;
+    --radius: 12px;
+    --radius-sm: 7px;
+    --shadow: 0 1px 2px rgba(0,20,60,.05), 0 8px 24px -12px rgba(0,20,60,.22);
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Consolas', 'SF Mono', 'Roboto Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--page-bg);font-family:var(--font-ui);color:var(--text);}
+
+  .titlebar{
+    background:var(--header-bg); color:var(--header-fg);
+    padding:16px 22px; display:flex; align-items:center; justify-content:space-between;
+    flex-wrap:wrap; gap:10px; box-shadow:0 2px 10px rgba(0,20,60,.3);
+    border-bottom:3px solid var(--live);
+  }
+  .titlebar h1{font-size:16px; margin:0; font-weight:700; letter-spacing:.1px;}
+  .titlebar .sub{font-size:12px; color:#9fb3d9; margin-top:3px;}
+  .titlebar a{color:#cfe0ff; text-decoration:none; font-size:13px; font-weight:600;}
+  .titlebar a:hover{color:#fff;}
+  .live-pill{
+    display:inline-flex; align-items:center; gap:6px;
+    background:rgba(213,10,10,.18); border:1px solid rgba(213,10,10,.5);
+    color:#ff9e9e; padding:6px 12px; border-radius:99px; font-size:12px; font-weight:600;
+  }
+  .live-dot{width:7px;height:7px;border-radius:50%;background:var(--live);animation:pulse 1.4s infinite;}
+  @keyframes pulse{0%{opacity:1;transform:scale(1);}50%{opacity:.35;transform:scale(1.4);}100%{opacity:1;transform:scale(1);}}
+  .refresh-note{font-size:11px; color:#8fa0c7;}
+
+  .page-wrap{max-width:1400px; margin:18px auto; padding:0 18px 28px;}
+  .sheet-card{background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; border:1px solid var(--grid-strong);}
+
+  .formula-bar{
+    background:var(--surface); border-bottom:1px solid var(--grid);
+    display:flex; align-items:center; padding:9px 16px; gap:10px; font-size:13px;
+    position:sticky; top:0; z-index:30; flex-wrap:wrap;
+  }
+  .cell-ref{
+    font-family:var(--font-mono); background:var(--colhead-bg); border:1px solid var(--grid-strong);
+    border-radius:var(--radius-sm); padding:4px 10px; min-width:64px; text-align:center; color:var(--sub); font-size:12px; font-weight:600;
+  }
+  .fx{color:var(--sub); font-style:italic; font-size:12px; user-select:none;}
+  .formula-content{
+    flex:1; min-width:160px; font-family:var(--font-mono); font-size:13px; color:var(--text);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .h2h-stat-box{
+    font-family:var(--font-mono); font-size:12px; font-weight:600; color:var(--text);
+    background:var(--colhead-bg); border:1px solid var(--grid-strong); border-radius:var(--radius-sm);
+    padding:5px 12px; white-space:nowrap; flex-shrink:0;
+  }
+  .h2h-stat-box .stat-label{
+    font-family:var(--font-ui); font-size:9.5px; font-weight:700; color:var(--sub);
+    text-transform:uppercase; letter-spacing:.3px; margin-right:5px;
+  }
+  .h2h-stat-box .stat-pct{font-weight:800; margin-left:4px;}
+  .h2h-stat-box .stat-pct.good{color:var(--win);}
+  .h2h-stat-box .stat-pct.bad{color:var(--live);}
+
+  .toolbar{
+    background:var(--colhead-bg); border-bottom:1px solid var(--grid);
+    display:flex; align-items:center; gap:16px; padding:10px 16px; flex-wrap:wrap;
+    font-size:13px;
+  }
+  .toolbar label{color:var(--sub); font-size:12px; margin-right:5px; font-weight:500;}
+  .toolbar select{
+    font-family:var(--font-ui); font-size:13px; padding:6px 10px; border:1px solid var(--grid-strong);
+    border-radius:var(--radius-sm); background:var(--surface); color:var(--text); transition:border-color .15s;
+  }
+  .toolbar select:hover{border-color:var(--accent);}
+  .toolbar .count{margin-left:auto; color:var(--sub); font-size:12px; font-weight:500;}
+  .legend{display:flex; align-items:center; gap:14px; font-size:12px; color:var(--sub); flex-wrap:wrap;}
+  .legend-item{display:inline-flex; align-items:center; gap:5px;}
+  .swatch{width:11px; height:11px; border-radius:3px; display:inline-block; border:1px solid rgba(0,0,0,.08);}
+  .swatch-today{background:var(--today-soft);}
+  .swatch-live{background:var(--live-soft);}
+  .swatch-final{background:var(--win-soft);}
+  .swatch-dateband{background:#e7ecf8; border-color:#c3ceec;}
+
+  .sheet-wrap{overflow:auto; max-height:calc(100vh - 130px);}
+  table{border-collapse:collapse; width:100%; background:var(--surface); font-size:13px;}
+  thead th{
+    position:sticky; top:0; z-index:20;
+    background:var(--colhead-bg); border:1px solid var(--grid);
+    padding:9px 12px; text-align:left; font-weight:700; color:var(--text);
+    white-space:nowrap; letter-spacing:.1px;
+  }
+  thead tr.colletters th{
+    background:#f0f2f8; color:var(--sub); font-family:var(--font-mono); font-weight:500;
+    font-size:11px; padding:4px 12px; top:0; z-index:21;
+  }
+  thead tr.headers th{top:23px;}
+  tbody th.rownum{
+    position:sticky; left:0; z-index:10;
+    background:#f0f2f8; color:var(--sub); font-family:var(--font-mono); font-weight:500;
+    border:1px solid var(--grid); text-align:center; font-size:11px; min-width:36px;
+  }
+  tbody td{border:1px solid var(--grid); padding:8px 12px; white-space:nowrap; vertical-align:middle;}
+  tbody tr:nth-child(even){background:var(--row-alt);}
+  tr.date-band{background:#e7ecf8 !important;}
+  tr.date-band:hover{background:#d7dff2 !important;}
+  tbody tr:hover{background:var(--row-hover);}
+  td.date{font-family:var(--font-mono); color:var(--sub); font-size:12px;}
+  .week-tag{font-family:var(--font-ui); font-weight:700; color:var(--text); font-size:12px; margin-right:4px;}
+  .game-time{color:var(--accent); font-size:10.5px; opacity:.8;}
+  .playoff-badge{
+    font-size:9.5px; font-weight:700; color:#7a3bd6; background:#efe4fc;
+    padding:1px 6px; border-radius:99px; margin-left:4px; white-space:nowrap; font-family:var(--font-ui);
+  }
+  .intl-badge{
+    font-size:9.5px; font-weight:700; color:var(--warn); background:var(--warn-soft);
+    padding:1px 6px; border-radius:99px; margin-left:4px; white-space:nowrap; font-family:var(--font-ui);
+  }
+  .hist-score{font-size:10.5px; color:var(--sub); font-family:var(--font-mono); font-weight:400;}
+  .h2h-actual-winner{font-size:10.5px; color:var(--sub); opacity:.85;}
+  td.team{font-weight:700; letter-spacing:.2px;}
+  td.winner{font-weight:700;}
+  td.winner.dash{color:var(--sub); font-weight:400;}
+  td.record{font-family:var(--font-mono); font-size:12px; color:var(--sub);}
+  td.h2h{font-size:12px; color:var(--sub);}
+  .badge-win{color:var(--win);}
+  tr.today-row{background:var(--today-soft) !important;}
+  tr.today-row:hover{background:#fcecc0 !important;}
+  tr.live-row{background:var(--live-soft) !important;}
+  tr.live-row:hover{background:rgba(213,10,10,.16) !important;}
+  .score-live{font-family:var(--font-mono); font-weight:700; color:var(--live);}
+  .status-tag{
+    font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; margin-left:6px;
+    background:var(--live-soft); color:var(--live); vertical-align:middle;
+  }
+  .status-final{background:var(--win-soft); color:var(--win);}
+  .status-pre{background:rgba(107,115,135,.12); color:var(--sub);}
+  .h2h-match{background:var(--win-soft) !important; color:var(--win) !important; font-weight:700;}
+  .h2h-mismatch{background:var(--live-soft) !important; color:var(--live) !important; font-weight:700;}
+  .h2h-loc{font-weight:400; font-size:11px; color:var(--sub); opacity:.85;}
+  .h2h-actual-loser{font-weight:400; font-size:10.5px; color:var(--sub); opacity:.7;}
+  .h2h-tier-tag{font-weight:600; font-size:10px; color:var(--accent); opacity:.75;}
+  .h2h-pretied{font-weight:400; font-size:9.5px; color:var(--sub); opacity:.65; font-style:italic;}
+  td.ou{font-family:var(--font-mono); font-size:12px;}
+  .ou-line{font-weight:700; color:var(--text);}
+  .ou-total{color:var(--sub); font-size:11px;}
+  .ou-over{font-weight:800; color:var(--win); font-family:var(--font-ui); font-size:11px;}
+  .ou-under{font-weight:800; color:var(--accent); font-family:var(--font-ui); font-size:11px;}
+  .ou-push{font-weight:800; color:var(--sub); font-family:var(--font-ui); font-size:11px;}
+  .error-row td{padding:28px; text-align:center; color:var(--sub); white-space:normal;}
+
+  footer{padding:12px 18px; font-size:11px; color:#8189a0; background:var(--colhead-bg); border-top:1px solid var(--grid);}
+  footer a{color:var(--accent);}
+
+  ::-webkit-scrollbar{height:10px; width:10px;}
+  ::-webkit-scrollbar-thumb{background:#c3cadb; border-radius:6px;}
+  ::-webkit-scrollbar-track{background:var(--page-bg);}
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <div>
+    <h1>NFL Games — Schedule, Results, Records &amp; Head-to-Head</h1>
+    <div class="sub" id="rangeSub">Loading season…</div>
+  </div>
+  <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+    <a href="guarantee.html">Guarantee →</a>
+    <a href="streaks.html">Streaks →</a>
+    <a href="picks.html">My Picks →</a>
+    <span class="refresh-note" id="lastUpdated">—</span>
+    <span class="live-pill" id="livePill"><span class="live-dot"></span>Loading…</span>
+  </div>
+</div>
+
+<div class="page-wrap">
+<div class="sheet-card">
+
+<div class="formula-bar">
+  <div class="cell-ref" id="cellRef">A1</div>
+  <div class="fx">fx</div>
+  <div class="formula-content" id="cellContent">NFL Games - Schedule, Results, Records &amp; Head-to-Head Analysis</div>
+  <div class="h2h-stat-box" id="lastWeekStatBox">Loading…</div>
+  <div class="h2h-stat-box" id="last3StatBox">Loading…</div>
+  <div class="h2h-stat-box" id="seasonStatBox">Loading…</div>
+  <div class="h2h-stat-box" id="ouStatBox">Loading…</div>
+</div>
+
+<div class="toolbar">
+  <div>
+    <label>Team</label>
+    <select id="teamFilter"><option value="">All teams</option></select>
+  </div>
+  <div>
+    <label>Week</label>
+    <select id="weekFilter"><option value="">All weeks</option></select>
+  </div>
+  <div>
+    <label>Show</label>
+    <select id="viewFilter">
+      <option value="all">All games</option>
+      <option value="week" selected>This week &amp; live</option>
+      <option value="finished">Completed only</option>
+    </select>
+  </div>
+  <div class="legend">
+    <span class="legend-item"><span class="swatch swatch-today"></span>This week</span>
+    <span class="legend-item"><span class="swatch swatch-live"></span>Live now</span>
+    <span class="legend-item"><span class="swatch swatch-final"></span>Final</span>
+    <span class="legend-item"><span class="swatch swatch-dateband"></span>Alternating by week</span>
+  </div>
+  <button id="exportCsvBtn" style="font-family:var(--font-ui); font-size:12.5px; font-weight:700; padding:6px 14px; border:1px solid var(--accent); border-radius:var(--radius-sm); background:var(--surface); color:var(--accent); cursor:pointer;">Export CSV</button>
+  <div class="count" id="countLabel">0 rows</div>
+</div>
+
+<div class="sheet-wrap">
+<table id="sheet">
+  <thead>
+    <tr class="colletters">
+      <th></th>
+      <th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th><th>G</th><th>H</th>
+    </tr>
+    <tr class="headers">
+      <th></th>
+      <th id="dateHeader" style="cursor:pointer; user-select:none;" title="Click to sort by kickoff time (only active in This Week &amp; Live view)">Week / Kickoff <span id="dateSortArrow"></span></th>
+      <th>Away</th>
+      <th>Home</th>
+      <th>Winner</th>
+      <th>Current / Winner Record</th>
+      <th>Head-to-Head Record</th>
+      <th>H2H Outcome Winner</th>
+      <th>Over / Under</th>
+    </tr>
+  </thead>
+  <tbody id="sheetBody"></tbody>
+</table>
+</div>
+
+<footer>
+  Season results are pulled live from ESPN's public NFL scoreboard each time this page loads (through <span id="histThrough">—</span>). This week's games refresh every 30 seconds while a game is live or about to kick off, and less often otherwise. Head-to-head counts only meetings <em>before</em> each game, this season. Over/Under lines come from ESPN's sportsbook partner: upcoming games show the current line; finished games use the closing line, fetched once per game and saved in this browser. No API key required.
+  <div style="margin-top:6px; color:#a7b2c2;" id="versionTag">version: loading…</div>
+</footer>
+
+</div>
+</div>
+
+<script>window.CLOUD_RELOAD_ON_REMOTE=true;</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="../cloud.js"></script>
+<script>
+/* ===================== Shared NFL data helpers (same on every page) ===================== */
+const ESPN_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
+
+// "Today" in US Eastern time — the NFL schedule's home timezone, so dates and
+// kickoff times read the same for every viewer regardless of where they are.
+function dateStrET(d){
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(d || new Date());
+  const get = (type) => parts.find(p => p.type === type).value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+function todayStr(){ return dateStrET(); }
+
+// A sortable key for an NFL week: "2-06" = regular season week 6, "3-01" = Wild Card.
+function weekKeyOf(seasonType, week){ return `${seasonType}-${String(week).padStart(2, '0')}`; }
+let WEEK_LABELS = {};
+function buildWeekLabels(json){
+  const labels = {};
+  const cal = (json.leagues && json.leagues[0] && json.leagues[0].calendar) || [];
+  cal.forEach(section => {
+    const st = parseInt(section.value, 10);
+    if(st !== 2 && st !== 3) return;
+    (section.entries || []).forEach(e => { labels[weekKeyOf(st, parseInt(e.value, 10))] = e.label; });
+  });
+  return labels;
+}
+function weekLabel(key){
+  if(!key) return '';
+  if(WEEK_LABELS[key]) return WEEK_LABELS[key];
+  const [st, wk] = key.split('-');
+  return st === '3' ? `Playoffs Rd ${parseInt(wk, 10)}` : `Week ${parseInt(wk, 10)}`;
+}
+function isPlayoffKey(key){ return !!key && key.startsWith('3-'); }
+
+async function fetchScoreboard(query){
+  try{
+    const res = await fetch(ESPN_SCOREBOARD + (query ? '?' + query : ''));
+    if(!res.ok) return null;
+    return await res.json();
+  } catch(e){ console.error('ESPN fetch failed', query, e); return null; }
+}
+
+// Turns one ESPN event into the flat row shape used everywhere on the site.
+// winner is the team abbreviation, 'TIE' for a tied final, or null if not final.
+function parseEvent(ev){
+  const comp = ev.competitions && ev.competitions[0];
+  if(!comp || !comp.competitors) return null;
+  const home = comp.competitors.find(c => c.homeAway === 'home');
+  const away = comp.competitors.find(c => c.homeAway === 'away');
+  if(!home || !away || !home.team || !away.team) return null;
+  const homeAbbr = home.team.abbreviation, awayAbbr = away.team.abbreviation;
+  if(['AFC', 'NFC'].includes(homeAbbr) || ['AFC', 'NFC'].includes(awayAbbr)) return null; // Pro Bowl
+  const st = (comp.status && comp.status.type) || (ev.status && ev.status.type) || {};
+  const state = st.state || 'pre';
+  const seasonType = ev.season && ev.season.type;
+  const week = ev.week && ev.week.number;
+  if(seasonType !== 2 && seasonType !== 3) return null; // regular season + playoffs only
+  const toNum = (s) => { const n = parseInt(s, 10); return isNaN(n) ? null : n; };
+  const homeScore = state === 'pre' ? null : toNum(home.score);
+  const awayScore = state === 'pre' ? null : toNum(away.score);
+  let winner = null;
+  if(state === 'post' && st.completed){
+    if(home.winner) winner = homeAbbr;
+    else if(away.winner) winner = awayAbbr;
+    else if(homeScore !== null && homeScore === awayScore) winner = 'TIE';
+  }
+  const rec = (c, type) => { const r = (c.records || []).find(x => x.type === type); return r ? r.summary : ''; };
+  // Betting line, when ESPN includes it (usually only before kickoff).
+  const odds = (comp.odds || [])[0] || null;
+  const ouNum = odds && odds.overUnder != null ? parseFloat(odds.overUnder) : NaN;
+  return {
+    ou: isNaN(ouNum) ? null : ouNum, spread: (odds && odds.details) || null,
+    id: ev.id, seasonType, week, weekKey: weekKeyOf(seasonType, week),
+    eventTime: ev.date, date: dateStrET(new Date(ev.date)),
+    away: awayAbbr, home: homeAbbr, awayScore, homeScore, winner,
+    state, shortDetail: st.shortDetail || st.detail || '', neutral: !!comp.neutralSite,
+    awayRec: rec(away, 'total'), homeRec: rec(home, 'total')
+  };
+}
+
+function contextFromJson(json){
+  const seasonType = json.season && json.season.type;
+  const week = json.week && json.week.number;
+  const inSeason = (seasonType === 2 || seasonType === 3) && week;
+  return {
+    year: (json.season && json.season.year) || new Date().getFullYear(),
+    seasonType, week,
+    currentKey: inSeason ? weekKeyOf(seasonType, week) : null,
+    events: inSeason ? (json.events || []).map(parseEvent).filter(Boolean) : []
+  };
+}
+
+// The default scoreboard tells us the current season/week and carries the
+// calendar — but on game days it can list only THAT DAY's games (e.g. just the
+// Monday night game). So the week's games are then requested explicitly by
+// week number, which always returns the whole slate (Thu, Sun and Mon).
+async function fetchSeasonContext(){
+  const json = await fetchScoreboard('');
+  if(!json) return null;
+  const labels = buildWeekLabels(json);
+  if(Object.keys(labels).length) WEEK_LABELS = labels;
+  const ctx = contextFromJson(json);
+  if(ctx.currentKey){
+    const weekJson = await fetchScoreboard(`dates=${ctx.year}&seasontype=${ctx.seasonType}&week=${ctx.week}`);
+    if(weekJson && (weekJson.events || []).length){
+      const byId = new Map(ctx.events.map(g => [g.id, g]));
+      (weekJson.events || []).map(parseEvent).filter(Boolean)
+        .filter(g => g.weekKey === ctx.currentKey)
+        .forEach(g => { if(!byId.has(g.id)) byId.set(g.id, g); });
+      ctx.events = Array.from(byId.values()).sort((a, b) => a.eventTime.localeCompare(b.eventTime));
+    }
+  }
+  return ctx;
+}
+
+// Every game this season up to and including the current week, one request per week, in parallel.
+async function fetchFullSeason(ctx){
+  const regWeeks = Object.keys(WEEK_LABELS).filter(k => k.startsWith('2-')).length || 18;
+  const postWeeks = Object.keys(WEEK_LABELS).filter(k => k.startsWith('3-')).length || 4;
+  let regUpTo = 0, postUpTo = 0;
+  if(ctx.seasonType === 2) regUpTo = ctx.week;
+  else if(ctx.seasonType === 3){ regUpTo = regWeeks; postUpTo = ctx.week; }
+  else if(ctx.seasonType === 4){ regUpTo = regWeeks; postUpTo = postWeeks; }
+  const queries = [];
+  for(let w = 1; w <= regUpTo; w++) queries.push(`dates=${ctx.year}&seasontype=2&week=${w}`);
+  for(let w = 1; w <= postUpTo; w++) queries.push(`dates=${ctx.year}&seasontype=3&week=${w}`);
+  const results = await Promise.all(queries.map(fetchScoreboard));
+  const byId = new Map();
+  results.forEach(json => {
+    if(!json) return;
+    (json.events || []).forEach(ev => { const g = parseEvent(ev); if(g && !byId.has(g.id)) byId.set(g.id, g); });
+  });
+  return Array.from(byId.values()).sort((a, b) => a.eventTime.localeCompare(b.eventTime));
+}
+
+function emptyRec(){ return { w: 0, l: 0, t: 0 }; }
+function recStr(r){ if(!r) return '0-0'; return r.t ? `${r.w}-${r.l}-${r.t}` : `${r.w}-${r.l}`; }
+// NFL convention: a tie counts as half a win.
+function pct(r){ if(!r) return 0; const g = r.w + r.l + r.t; return g > 0 ? (r.w + 0.5 * r.t) / g : 0; }
+function applyResult(record, g){
+  if(!g.winner) return;
+  record[g.away] = record[g.away] || emptyRec();
+  record[g.home] = record[g.home] || emptyRec();
+  if(g.winner === 'TIE'){ record[g.away].t++; record[g.home].t++; return; }
+  const loser = g.winner === g.away ? g.home : g.away;
+  record[g.winner].w++; record[loser].l++;
+}
+
+// Kickoff in US Eastern, labeled (EDT/EST), so it never contradicts the date beside it.
+function formatGameTime(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  const day = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' }).format(d);
+  const timeStr = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }).format(d);
+  const tzName = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', timeZoneName: 'short' })
+    .formatToParts(d).find(p => p.type === 'timeZoneName').value;
+  return `${day} ${timeStr} ${tzName}`;
+}
+/* ===================== end shared helpers ===================== */
+
+// Shared "My Picks" storage — same key on every NFL page. Kept separate from
+// the MLB site's key so the two sites' watchlists never mix.
+const PICKS_STORAGE_KEY = 'nfl_site_picks_v1';
+function loadSavedPicks(){
+  try{ return JSON.parse(localStorage.getItem(PICKS_STORAGE_KEY) || '[]'); }
+  catch(e){ return []; }
+}
+function saveSavedPicksList(picks){
+  try{ localStorage.setItem(PICKS_STORAGE_KEY, JSON.stringify(picks)); }
+  catch(e){ console.error('Could not save picks', e); }
+}
+function isPickSaved(id){ return loadSavedPicks().some(p => p.id === id); }
+function toggleSavedPick(pick, isChecked){
+  let picks = loadSavedPicks();
+  if(isChecked){
+    if(!picks.some(p => p.id === pick.id)) picks.push({ ...pick, addedAt: new Date().toISOString() });
+  } else {
+    picks = picks.filter(p => p.id !== pick.id);
+  }
+  saveSavedPicksList(picks);
+}
+
+/* ===================== Over / Under ===================== */
+// Lines come from ESPN's partner sportsbook. The scoreboard carries the line
+// before kickoff and usually drops it once a game starts, so every line seen is
+// remembered here. Finished games get their CLOSING line from ESPN's per-game
+// summary (pickcenter). Closing lines never change, so those are cached in this
+// browser and fetched only once per game — later visits load instantly.
+const ESPN_SUMMARY = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary';
+const OU_CACHE_KEY = 'nfl_ou_cache_v1';
+let OU_CACHE = {}; // gameId -> { ou, spread, closing: true if from the summary }
+try{ OU_CACHE = JSON.parse(localStorage.getItem(OU_CACHE_KEY) || '{}') || {}; } catch(e){ OU_CACHE = {}; }
+function saveOUCache(){ try{ localStorage.setItem(OU_CACHE_KEY, JSON.stringify(OU_CACHE)); } catch(e){} }
+
+// Records a line we just saw, or fills in one ESPN has since dropped.
+function applyOU(g){
+  const c = OU_CACHE[g.id];
+  if(c && c.closing){ g.ou = c.ou; g.spread = c.spread || g.spread; return; }
+  if(g.ou != null){ OU_CACHE[g.id] = { ou: g.ou, spread: g.spread, closing: false }; }
+  else if(c){ g.ou = c.ou; g.spread = g.spread || c.spread; }
+}
+
+// 'OVER' / 'UNDER' / 'PUSH' for a finished game with a line, else null.
+function ouResult(g){
+  if(!g.winner || g.ou == null || g.awayScore == null || g.homeScore == null) return null;
+  const total = g.awayScore + g.homeScore;
+  return total > g.ou ? 'OVER' : (total < g.ou ? 'UNDER' : 'PUSH');
+}
+
+let OU_FETCHING = false;
+// Pulls closing lines for finished games that don't have one cached yet,
+// 6 requests at a time, then refreshes the sheet and the O/U box.
+async function fetchClosingLines(){
+  if(OU_FETCHING) return;
+  const todo = SEASON_DATA.filter(g => g.winner && !(OU_CACHE[g.id] && OU_CACHE[g.id].closing));
+  // Games in progress whose line the scoreboard has already dropped.
+  const seen = new Set(todo.map(g => g.id));
+  CURRENT_WEEK_GAMES.forEach(g => { if(!g.winner && g.ou == null && !seen.has(g.id)) todo.push(g); });
+  if(todo.length === 0){ renderOUStatBox(); return; }
+  OU_FETCHING = true;
+  let done = 0;
+  const box = document.getElementById('ouStatBox');
+  const worker = async () => {
+    while(todo.length){
+      const g = todo.shift();
+      try{
+        const res = await fetch(`${ESPN_SUMMARY}?event=${g.id}`);
+        if(res.ok){
+          const json = await res.json();
+          const pc = (json.pickcenter || [])[0];
+          const ou = pc && pc.overUnder != null ? parseFloat(pc.overUnder) : NaN;
+          const isFinal = !!g.winner; // only a finished game's line is the true closing line
+          if(!isNaN(ou)) OU_CACHE[g.id] = { ou, spread: (pc && pc.details) || null, closing: isFinal };
+          else if(isFinal) OU_CACHE[g.id] = { ou: (OU_CACHE[g.id] && OU_CACHE[g.id].ou) ?? null, spread: (OU_CACHE[g.id] && OU_CACHE[g.id].spread) || null, closing: true };
+        }
+      } catch(e){ /* leave uncached; it'll be retried on the next page load */ }
+      done++;
+      if(box) box.innerHTML = `<span class="stat-label">O/U Season</span> loading lines ${done}/${done + todo.length}…`;
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
+  saveOUCache();
+  SEASON_DATA.forEach(applyOU);
+  CURRENT_WEEK_GAMES.forEach(applyOU);
+  OU_FETCHING = false;
+  allRows = mergeRows();
+  render();
+  renderOUStatBox();
+}
+
+function renderOUStatBox(){
+  let over = 0, under = 0, push = 0;
+  SEASON_DATA.forEach(g => {
+    const r = ouResult(g);
+    if(r === 'OVER') over++; else if(r === 'UNDER') under++; else if(r === 'PUSH') push++;
+  });
+  const decided = over + under;
+  const el = document.getElementById('ouStatBox');
+  el.innerHTML = `<span class="stat-label">O/U Season</span> Over=${over} Under=${under}${push ? ` Push=${push}` : ''} ` +
+    `<span class="stat-pct">${decided ? (over / decided * 100).toFixed(1) + '% over' : '—'}</span>`;
+  el.title = 'Every finished game this season vs. its closing total (pushes excluded from the %). Lines from ESPN\'s sportsbook partner.';
+}
+
+function ouCellHtml(r){
+  const live = r._live;
+  if(r.ou == null) return '<span style="color:var(--sub);">—</span>';
+  const line = `<span class="ou-line" title="${r.spread ? 'Spread: ' + r.spread : ''}">${r.ou}</span>`;
+  const result = ouResult(r);
+  if(result){
+    const total = r.awayScore + r.homeScore;
+    return `${line} <span class="ou-total">→ ${total}</span> <span class="ou-${result.toLowerCase()}">${result}</span>`;
+  }
+  if(live && live.state === 'in' && live.awayScore != null){
+    return `${line} <span class="ou-total">· now ${live.awayScore + live.homeScore}</span>`;
+  }
+  return `O/U ${line}${r.spread ? ` <span class="ou-total">${r.spread}</span>` : ''}`;
+}
+/* ===================== end Over / Under ===================== */
+
+let SEASON_DATA = [];          // completed games (winner or TIE) this season
+let CURRENT_KEY = null;        // this week's key, e.g. "2-06"
+let CURRENT_WEEK_GAMES = [];   // every game this week, any status
+let STANDINGS = {};            // team -> {w,l,t}, regular season, cumulative
+let STANDINGS_BEFORE_WEEK = {}; // weekKey -> {team -> {w,l,t}} entering that week
+let allRows = [];
+let CURRENT_FILTERED = [];
+let WEEK_SORT_DIR = 'asc';
+
+// Stamps each completed game with both teams' records after that week (column E),
+// and snapshots every team's record ENTERING each week — that's what the
+// head-to-head tiebreak uses, so it never peeks at the game's own result.
+function backfillSeasonRecords(rows){
+  const record = {};
+  STANDINGS_BEFORE_WEEK = {};
+  const byWeek = {};
+  rows.forEach(r => { (byWeek[r.weekKey] = byWeek[r.weekKey] || []).push(r); });
+  Object.keys(byWeek).sort().forEach(key => {
+    const snap = {};
+    Object.keys(record).forEach(t => { snap[t] = { ...record[t] }; });
+    STANDINGS_BEFORE_WEEK[key] = snap;
+    byWeek[key].forEach(r => { if(r.seasonType === 2) applyResult(record, r); });
+    byWeek[key].forEach(r => {
+      r.record = `${r.away} (${recStr(record[r.away])}) @ ${r.home} (${recStr(record[r.home])})`;
+    });
+  });
+  STANDINGS = record;
+}
+
+// Head-to-head this season, counting only meetings BEFORE this game's kickoff.
+// NFL teams meet at most twice in a regular season, so most matchups have no
+// meetings yet — in that case (and when tied) the pick falls back to whichever
+// team had the better record entering that week, labeled so it's clearly a
+// record-based lean rather than a real H2H edge.
+function computeH2H(teamA, teamB, beforeTime, weekKey){
+  let a = 0, b = 0, t = 0;
+  SEASON_DATA.forEach(r => {
+    if(!r.winner) return;
+    if(!((r.away === teamA && r.home === teamB) || (r.away === teamB && r.home === teamA))) return;
+    if(beforeTime && r.eventTime >= beforeTime) return;
+    if(r.winner === teamA) a++;
+    else if(r.winner === teamB) b++;
+    else t++;
+  });
+  const standings = (weekKey && STANDINGS_BEFORE_WEEK[weekKey]) || STANDINGS;
+  const lean = (prefix) => {
+    const pA = pct(standings[teamA]), pB = pct(standings[teamB]);
+    if(pA > pB) return `${prefix} - ${teamA}`;
+    if(pB > pA) return `${prefix} - ${teamB}`;
+    return prefix;
+  };
+  const tieTxt = t ? `-${t}` : '';
+  if(a === 0 && b === 0 && t === 0) return { text: 'No meetings yet', leader: lean('No H2H') };
+  if(a === b) return { text: `Tied ${a}-${b}${tieTxt}`, leader: lean('Tied') };
+  return a > b
+    ? { text: `${teamA} leads ${a}-${b}${tieTxt}`, leader: teamA }
+    : { text: `${teamB} leads ${b}-${a}${tieTxt}`, leader: teamB };
+}
+
+// "Tied - KC" / "No H2H - KC" -> "KC"; a bare "Tied", "No H2H" or "—" -> null.
+function extractH2HTeam(val){
+  if(!val || val === '—' || val === 'Tied' || val === 'No H2H') return null;
+  const m = val.match(/^(?:Tied|No H2H) - (.+)$/);
+  return m ? m[1] : val;
+}
+function isCoinflipH2H(h2hText){ return !!h2hText && (h2hText.startsWith('Tied') || h2hText === 'No meetings yet'); }
+
+// Tiers scaled for football's tiny H2H samples: Strong = 2+ game lead (a sweep),
+// Moderate = 1 game lead, Coinflip = tied, No data = no meetings yet.
+function classifyTierFromH2HText(h2hText){
+  if(!h2hText) return null;
+  if(h2hText === 'No meetings yet') return 'nodata';
+  if(h2hText.startsWith('Tied')) return 'coinflip';
+  const m = h2hText.match(/leads (\d+)-(\d+)/);
+  if(!m) return null;
+  return (parseInt(m[1], 10) - parseInt(m[2], 10)) >= 2 ? 'strong' : 'moderate';
+}
+const TIER_DISPLAY_NAME = { strong: 'Strong', moderate: 'Moderate', coinflip: 'Coinflip', nodata: 'No data' };
+
+function rebuildDerived(){
+  SEASON_DATA.sort((a, b) => a.eventTime.localeCompare(b.eventTime));
+  backfillSeasonRecords(SEASON_DATA);
+  SEASON_DATA.forEach(r => {
+    const h = computeH2H(r.away, r.home, r.eventTime, r.weekKey);
+    r.h2h = h.text; r.h2h_winner = h.leader;
+  });
+  renderH2HStatBoxes();
+}
+
+function mergeRows(){
+  const rows = SEASON_DATA.filter(r => r.weekKey !== CURRENT_KEY).map(r => ({ ...r }));
+  CURRENT_WEEK_GAMES.forEach(g => {
+    const h = computeH2H(g.away, g.home, g.eventTime, g.weekKey);
+    rows.push({
+      ...g,
+      record: `${g.away} (${g.awayRec || '0-0'}) @ ${g.home} (${g.homeRec || '0-0'})`,
+      h2h: h.text, h2h_winner: h.leader, _live: g
+    });
+  });
+  // Safety net: any finished game from this week that the live feed didn't
+  // list still shows, using the season data's copy.
+  const liveIds = new Set(CURRENT_WEEK_GAMES.map(g => g.id));
+  SEASON_DATA.filter(r => r.weekKey === CURRENT_KEY && !liveIds.has(r.id))
+    .forEach(r => rows.push({ ...r }));
+  rows.sort((a, b) => a.eventTime.localeCompare(b.eventTime));
+  return rows;
+}
+
+function populateFilters(rows){
+  const teamSel = document.getElementById('teamFilter');
+  const weekSel = document.getElementById('weekFilter');
+  const teams = new Set(), weeks = new Set();
+  rows.forEach(r => { teams.add(r.away); teams.add(r.home); weeks.add(r.weekKey); });
+  const prevTeam = teamSel.value, prevWeek = weekSel.value;
+  teamSel.innerHTML = '<option value="">All teams</option>' +
+    [...teams].sort().map(t => `<option value="${t}">${t}</option>`).join('');
+  weekSel.innerHTML = '<option value="">All weeks</option>' +
+    [...weeks].sort().reverse().map(k => `<option value="${k}">${weekLabel(k)}</option>`).join('');
+  teamSel.value = prevTeam; weekSel.value = prevWeek;
+}
+
+function winnerDisplay(winner){ return winner === 'TIE' ? 'TIE' : winner; }
+
+function render(){
+  const teamFilter = document.getElementById('teamFilter').value;
+  const weekFilter = document.getElementById('weekFilter').value;
+  const viewFilter = document.getElementById('viewFilter').value;
+
+  let filtered = allRows.filter(r => {
+    if(teamFilter && r.away !== teamFilter && r.home !== teamFilter) return false;
+    if(weekFilter && r.weekKey !== weekFilter) return false;
+    if(viewFilter === 'week' && r.weekKey !== CURRENT_KEY) return false;
+    if(viewFilter === 'finished' && !r.winner) return false;
+    return true;
+  });
+
+  // This-week view sorts by kickoff (toggle via the column header); other views show newest first.
+  if(viewFilter === 'week'){
+    filtered = filtered.slice().sort((a, b) => WEEK_SORT_DIR === 'asc'
+      ? a.eventTime.localeCompare(b.eventTime) : b.eventTime.localeCompare(a.eventTime));
+  } else {
+    filtered = filtered.slice().reverse();
+  }
+  CURRENT_FILTERED = filtered;
+
+  const dateHeader = document.getElementById('dateHeader');
+  const dateSortArrow = document.getElementById('dateSortArrow');
+  dateHeader.style.opacity = viewFilter === 'week' ? '1' : '.55';
+  dateSortArrow.textContent = viewFilter === 'week' ? (WEEK_SORT_DIR === 'asc' ? '▲' : '▼') : '';
+
+  const tbody = document.getElementById('sheetBody');
+  tbody.innerHTML = '';
+
+  if(filtered.length === 0){
+    const msg = viewFilter === 'week' && !CURRENT_KEY
+      ? 'No NFL week is in progress right now (preseason or offseason). Switch "Show" to All games to see results.'
+      : 'No games match these filters.';
+    tbody.innerHTML = `<tr class="error-row"><td colspan="9">${msg}</td></tr>`;
+  }
+
+  filtered.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    const live = r._live;
+    if(live && live.state === 'in') tr.classList.add('live-row');
+    else if(r.weekKey === CURRENT_KEY) tr.classList.add('today-row');
+    else if(r.week % 2 === 0) tr.classList.add('date-band'); // shading flips every week
+
+    let winnerHtml;
+    if(live && live.state === 'in'){
+      winnerHtml = `<span class="score-live">${r.away} ${live.awayScore} – ${live.homeScore} ${r.home}</span><span class="status-tag">${live.shortDetail || 'LIVE'}</span>`;
+    } else if(live && live.state === 'post'){
+      winnerHtml = live.winner
+        ? `<span class="badge-win">${winnerDisplay(live.winner)}</span><span class="status-tag status-final">FINAL ${live.awayScore}-${live.homeScore}</span>`
+        : `<span style="color:var(--sub); font-weight:400;">—</span><span class="status-tag status-pre">${live.shortDetail || 'Postponed'}</span>`;
+    } else if(live){
+      winnerHtml = `<span style="color:var(--sub); font-weight:400;">—</span><span class="status-tag status-pre">${live.shortDetail || 'Scheduled'}</span>`;
+    } else if(r.winner){
+      const hasScore = r.awayScore !== null && r.homeScore !== null;
+      winnerHtml = winnerDisplay(r.winner) + (hasScore ? ` <span class="hist-score">(${r.awayScore}-${r.homeScore})</span>` : '');
+    } else {
+      winnerHtml = '—';
+    }
+
+    const actualWinner = r.winner || null; // team abbr, 'TIE', or null
+    const h2hDisplay = r.h2h_winner || '—';
+    const h2hTeam = extractH2HTeam(h2hDisplay);
+    let h2hCellClass = '';
+    if(actualWinner && h2hTeam) h2hCellClass = (h2hTeam === actualWinner) ? 'h2h-match' : 'h2h-mismatch';
+
+    const coinflip = isCoinflipH2H(r.h2h);
+    const coinflipTag = coinflip
+      ? ` <span class="h2h-pretied">(${r.h2h === 'No meetings yet' ? 'no H2H' : 'pre-tied'})</span>` : '';
+    const tierLabel = TIER_DISPLAY_NAME[classifyTierFromH2HText(r.h2h)];
+    const tierTag = tierLabel ? ` <span class="h2h-tier-tag">(${tierLabel})</span>` : '';
+
+    let gMain;
+    if(actualWinner === 'TIE'){
+      gMain = `TIE${tierTag} <span class="h2h-actual-loser">(${r.away} / ${r.home})</span>${coinflipTag}`;
+    } else if(actualWinner){
+      const loser = actualWinner === r.away ? r.home : r.away;
+      const loc = actualWinner === r.home ? ' <span class="h2h-loc">(H)</span>' : ' <span class="h2h-loc">(A)</span>';
+      gMain = `${actualWinner}${loc}${tierTag} <span class="h2h-actual-loser">(${loser})</span>${coinflipTag}`;
+    } else {
+      let loc = '';
+      if(h2hTeam === r.home) loc = ' <span class="h2h-loc">(H)</span>';
+      else if(h2hTeam === r.away) loc = ' <span class="h2h-loc">(A)</span>';
+      gMain = `${h2hDisplay}${loc}${tierTag}`;
+    }
+
+    let pickCheckbox = '';
+    if(h2hTeam){
+      const pickId = `sched-${r.weekKey}-${r.away}-${r.home}`;
+      const checked = isPickSaved(pickId) ? 'checked' : '';
+      const detailAttr = (r.h2h || '').replace(/"/g, '&quot;');
+      const dateAttr = `${weekLabel(r.weekKey)} · ${r.date}`;
+      pickCheckbox = `<input type="checkbox" class="pick-checkbox" data-pick-id="${pickId}" data-date="${dateAttr}" data-away="${r.away}" data-home="${r.home}" data-pick="${h2hTeam}" data-detail="${detailAttr}" ${checked} title="Add to My Picks">`;
+    }
+
+    const playoff = isPlayoffKey(r.weekKey) ? ` <span class="playoff-badge">Playoffs</span>` : '';
+    const neutral = r.neutral ? ` <span class="intl-badge">Neutral site</span>` : '';
+
+    tr.innerHTML = `
+      <th class="rownum">${i + 1}</th>
+      <td class="date"><span class="week-tag">${weekLabel(r.weekKey)}</span>${r.date} <span class="game-time">${formatGameTime(r.eventTime)}</span>${playoff}${neutral}</td>
+      <td class="team">${r.away}</td>
+      <td class="team">${r.home}</td>
+      <td class="winner ${(!r.winner && !live) ? 'dash' : ''}">${winnerHtml}</td>
+      <td class="record">${r.record || ''}</td>
+      <td class="h2h">${pickCheckbox} ${r.h2h || ''}${actualWinner ? ' <span class="h2h-actual-winner">(' + winnerDisplay(actualWinner) + ')</span>' : ''}</td>
+      <td class="team ${h2hCellClass}">${gMain}</td>
+      <td class="ou">${ouCellHtml(r)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('countLabel').textContent = `${filtered.length} rows`;
+}
+
+// Completed weeks strictly before the current one, oldest first.
+function priorWeekKeys(){
+  return [...new Set(SEASON_DATA.map(r => r.weekKey))]
+    .filter(k => !CURRENT_KEY || k < CURRENT_KEY).sort();
+}
+
+// How often the pre-game H2H leader actually won — excluding games where H2H was
+// tied or had no meetings, since those picks come from the record tiebreak, not
+// a real head-to-head edge. A tied final counts as a miss.
+function computeH2HAccuracy(rows){
+  let wins = 0, losses = 0;
+  rows.forEach(r => {
+    if(!r.winner || isCoinflipH2H(r.h2h)) return;
+    const pick = extractH2HTeam(r.h2h_winner);
+    if(!pick) return;
+    if(pick === r.winner) wins++; else losses++;
+  });
+  return { wins, losses };
+}
+
+function renderH2HStatBoxes(){
+  const keys = priorWeekKeys();
+  const lastKey = keys[keys.length - 1];
+  const last3 = keys.slice(-3);
+  const inKeys = (set) => SEASON_DATA.filter(r => set.includes(r.weekKey));
+
+  function fillBox(elId, stats, label, titleSuffix){
+    const total = stats.wins + stats.losses;
+    const p = total > 0 ? stats.wins / total * 100 : null;
+    const cls = p === null ? '' : (p >= 50 ? 'good' : 'bad');
+    const el = document.getElementById(elId);
+    el.innerHTML = `<span class="stat-label">${label}</span> W=${stats.wins} L=${stats.losses} <span class="stat-pct ${cls}">${p === null ? '—' : p.toFixed(1) + '%'}</span>`;
+    el.title = `Tied / no-H2H (coinflip) games excluded${titleSuffix ? ' — ' + titleSuffix : ''}`;
+  }
+  fillBox('lastWeekStatBox', computeH2HAccuracy(lastKey ? inKeys([lastKey]) : []), 'Last Week', lastKey ? weekLabel(lastKey) : 'no completed week yet');
+  fillBox('last3StatBox', computeH2HAccuracy(inKeys(last3)), 'Last 3 Weeks',
+    last3.length ? `${weekLabel(last3[0])} through ${weekLabel(last3[last3.length - 1])}` : 'no completed weeks yet');
+  fillBox('seasonStatBox', computeH2HAccuracy(inKeys(keys)), 'Season', lastKey ? `through ${weekLabel(lastKey)}` : '');
+}
+
+function wireCellInspector(){
+  const body = document.getElementById('sheetBody');
+  body.addEventListener('click', (e) => {
+    const td = e.target.closest('td');
+    if(!td) return;
+    const tr = td.closest('tr');
+    const rn = tr.querySelector('.rownum');
+    if(!rn) return;
+    const colIdx = Array.from(tr.children).indexOf(td);
+    const colLetters = ['', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+    document.getElementById('cellRef').textContent = colLetters[colIdx] + (parseInt(rn.textContent, 10) + 1);
+    document.getElementById('cellContent').textContent = td.textContent.trim();
+  });
+  body.addEventListener('change', (e) => {
+    if(!e.target.classList.contains('pick-checkbox')) return;
+    const cb = e.target;
+    toggleSavedPick({
+      id: cb.dataset.pickId, type: 'straight', source: 'schedule',
+      date: cb.dataset.date, away: cb.dataset.away, home: cb.dataset.home,
+      pick: cb.dataset.pick, detail: cb.dataset.detail
+    }, cb.checked);
+  });
+}
+
+function csvField(val){
+  const s = String(val ?? '');
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// Exports exactly what's on screen (same filters and order) as plain text.
+function exportCsv(){
+  const header = ['Week', 'Kickoff', 'Away', 'Home', 'Winner', 'Current / Winner Record', 'Head-to-Head Record', 'H2H Outcome Winner', 'Over/Under Line', 'Total Points', 'O/U Result'];
+  const lines = [header.map(csvField).join(',')];
+  CURRENT_FILTERED.forEach(r => {
+    const live = r._live;
+    let winnerText;
+    if(live && live.state === 'in') winnerText = `${r.away} ${live.awayScore}-${live.homeScore} ${r.home} (${live.shortDetail || 'LIVE'})`;
+    else if(r.winner) winnerText = `${winnerDisplay(r.winner)}${r.awayScore !== null ? ` (${r.awayScore}-${r.homeScore})` : ''}`;
+    else winnerText = `— (${(live && live.shortDetail) || 'Scheduled'})`;
+
+    const coinflip = isCoinflipH2H(r.h2h);
+    const tierLabel = TIER_DISPLAY_NAME[classifyTierFromH2HText(r.h2h)];
+    const tierTag = tierLabel ? ` (${tierLabel})` : '';
+    let gText;
+    if(r.winner === 'TIE') gText = `TIE${tierTag} (${r.away} / ${r.home})`;
+    else if(r.winner) gText = `${r.winner}${tierTag} (${r.winner === r.away ? r.home : r.away})`;
+    else gText = `${r.h2h_winner || '—'}${tierTag}`;
+    if(r.winner && coinflip) gText += r.h2h === 'No meetings yet' ? ' (no H2H)' : ' (pre-tied)';
+
+    const kickoff = `${r.date} ${formatGameTime(r.eventTime)}${r.neutral ? ' (neutral site)' : ''}`;
+    const h2hText = (r.h2h || '') + (r.winner ? ` (${winnerDisplay(r.winner)})` : '');
+    const ouRes = ouResult(r);
+    const totalPts = r.awayScore != null && r.homeScore != null && (r.winner || (live && live.state === 'in')) ? r.awayScore + r.homeScore : '';
+    lines.push([weekLabel(r.weekKey), kickoff, r.away, r.home, winnerText, r.record || '', h2hText, gText, r.ou ?? '', totalPts, ouRes || ''].map(csvField).join(','));
+  });
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `nfl-schedule-${todayStr()}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function hasLiveGameNow(){ return CURRENT_WEEK_GAMES.some(g => g.state === 'in'); }
+function msUntilNextKickoff(){
+  const now = Date.now();
+  let best = null;
+  CURRENT_WEEK_GAMES.forEach(g => {
+    if(g.state !== 'pre') return;
+    const t = new Date(g.eventTime).getTime();
+    if(!isNaN(t) && t > now && (best === null || t - now < best)) best = t - now;
+  });
+  return best;
+}
+
+function updateLivePill(){
+  const pill = document.getElementById('livePill');
+  const next = msUntilNextKickoff();
+  if(hasLiveGameNow()) pill.innerHTML = '<span class="live-dot"></span>LIVE · auto-refresh 30s';
+  else if(next !== null && next <= 3600000) pill.innerHTML = '<span class="live-dot"></span>Kickoff soon · auto-refresh 30s';
+  else pill.innerHTML = '<span class="live-dot" style="animation:none; opacity:.5;"></span>No live games · checking hourly';
+}
+
+// Re-pulls this week's scoreboard. Any game that has gone final is folded into
+// the season data so records, H2H and the stat boxes stay current.
+async function refreshLive(){
+  const ctx = await fetchSeasonContext();
+  if(!ctx){
+    document.getElementById('lastUpdated').textContent = 'Live fetch failed — showing last known data';
+    return;
+  }
+  CURRENT_KEY = ctx.currentKey;
+  CURRENT_WEEK_GAMES = ctx.events;
+  CURRENT_WEEK_GAMES.forEach(applyOU);
+  saveOUCache();
+  const known = new Map(SEASON_DATA.map(g => [g.id, g]));
+  let changed = false;
+  CURRENT_WEEK_GAMES.forEach(g => {
+    if(g.winner && !known.has(g.id)){ SEASON_DATA.push({ ...g }); changed = true; }
+  });
+  if(changed){ rebuildDerived(); fetchClosingLines(); }
+  document.getElementById('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+}
+
+// 30s while a game is live or kickoff is within the hour; otherwise wake up at
+// the next kickoff (capped at an hour) so a late window is never missed.
+function scheduleNextRefresh(){
+  const next = msUntilNextKickoff();
+  let delay = 3600000;
+  if(hasLiveGameNow() || (next !== null && next <= 3600000)) delay = 30000;
+  else if(next !== null) delay = Math.max(30000, Math.min(3600000, next - 5 * 60000));
+  setTimeout(async () => {
+    await refreshLive();
+    allRows = mergeRows();
+    populateFilters(allRows);
+    render();
+    updateLivePill();
+    scheduleNextRefresh();
+  }, delay);
+}
+
+async function init(){
+  document.getElementById('rangeSub').textContent = "Loading this season from ESPN…";
+  const ctx = await fetchSeasonContext();
+  if(!ctx){
+    document.getElementById('rangeSub').textContent = "Couldn't reach ESPN's NFL data — try refreshing in a minute.";
+    document.getElementById('lastUpdated').textContent = 'ESPN fetch failed';
+    ['lastWeekStatBox', 'last3StatBox', 'seasonStatBox', 'ouStatBox'].forEach(id => document.getElementById(id).textContent = '—');
+    document.getElementById('sheetBody').innerHTML = `<tr class="error-row"><td colspan="9">ESPN's scoreboard couldn't be reached from this browser. If this keeps happening, ESPN may be blocking browser requests — let me know and we can switch to a scraper-fed data file.</td></tr>`;
+    return;
+  }
+  CURRENT_KEY = ctx.currentKey;
+  CURRENT_WEEK_GAMES = ctx.events;
+
+  const all = await fetchFullSeason(ctx);
+  SEASON_DATA = all.filter(g => g.winner);
+  const known = new Set(SEASON_DATA.map(g => g.id));
+  CURRENT_WEEK_GAMES.forEach(g => { if(g.winner && !known.has(g.id)) SEASON_DATA.push({ ...g }); });
+  SEASON_DATA.forEach(applyOU);
+  CURRENT_WEEK_GAMES.forEach(applyOU);
+  saveOUCache();
+  rebuildDerived();
+  renderOUStatBox();
+
+  const lastKey = SEASON_DATA.length ? SEASON_DATA[SEASON_DATA.length - 1].weekKey : null;
+  document.getElementById('rangeSub').textContent =
+    `${ctx.year} season · ${SEASON_DATA.length} completed games` +
+    (CURRENT_KEY ? ` · current: ${weekLabel(CURRENT_KEY)}` : '') + ' · live from ESPN';
+  document.getElementById('histThrough').textContent = lastKey ? weekLabel(lastKey) : '—';
+  document.getElementById('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+
+  if(!CURRENT_KEY) document.getElementById('viewFilter').value = 'all';
+
+  allRows = mergeRows();
+  populateFilters(allRows);
+  render();
+  wireCellInspector();
+  updateLivePill();
+
+  document.getElementById('teamFilter').addEventListener('change', render);
+  document.getElementById('weekFilter').addEventListener('change', render);
+  document.getElementById('viewFilter').addEventListener('change', render);
+  document.getElementById('exportCsvBtn').addEventListener('click', exportCsv);
+  document.getElementById('dateHeader').addEventListener('click', () => {
+    if(document.getElementById('viewFilter').value !== 'week') return;
+    WEEK_SORT_DIR = WEEK_SORT_DIR === 'asc' ? 'desc' : 'asc';
+    render();
+  });
+
+  scheduleNextRefresh();
+  fetchClosingLines(); // runs in the background; the sheet is already usable
+}
+
+// Version stamp from the file's last-modified date (as reported by GitHub Pages).
+function renderVersionTag(){
+  const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  const d = new Date(document.lastModified);
+  const stamp = `${d.getFullYear()}_${months[d.getMonth()]}_${String(d.getDate()).padStart(2,'0')} ${d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
+  const el = document.getElementById('versionTag');
+  if(el) el.textContent = `version: ${stamp}`;
+}
+renderVersionTag();
+
+init();
+</script>
+</body>
+</html>

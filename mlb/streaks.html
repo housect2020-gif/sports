@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLB Streaks — Win/Loss Streak Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --page-bg: #eef1f6;
+    --surface: #ffffff;
+    --grid: #e3e7ee;
+    --grid-strong: #ccd3de;
+    --header-bg: linear-gradient(135deg, #002d72 0%, #001a46 100%);
+    --header-fg: #ffffff;
+    --colhead-bg: #f2f4f8;
+    --accent: #002d72;
+    --accent-soft: rgba(0,45,114,.08);
+    --live: #d50032;
+    --live-soft: rgba(213,0,50,.09);
+    --win: #0a7d3f;
+    --win-soft: rgba(10,125,63,.10);
+    --warn: #c2660a;
+    --warn-soft: rgba(194,102,10,.13);
+    --text: #14213b;
+    --sub: #64708a;
+    --radius: 12px;
+    --radius-sm: 7px;
+    --shadow: 0 1px 2px rgba(0,20,60,.05), 0 8px 24px -12px rgba(0,20,60,.22);
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Consolas', 'SF Mono', 'Roboto Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--page-bg);font-family:var(--font-ui);color:var(--text);}
+
+  .titlebar{
+    background:var(--header-bg); color:var(--header-fg);
+    padding:16px 22px; display:flex; align-items:center; justify-content:space-between;
+    flex-wrap:wrap; gap:10px; box-shadow:0 2px 10px rgba(0,20,60,.3);
+    border-bottom:3px solid var(--live);
+  }
+  .titlebar h1{font-size:16px; margin:0; font-weight:700;}
+  .titlebar .sub{font-size:12px; color:#9fb3d9; margin-top:3px;}
+  .nav-links{display:flex; align-items:center; gap:16px;}
+  .nav-links a{color:#cfe0ff; text-decoration:none; font-size:13px; font-weight:600;}
+  .nav-links a:hover{color:#fff;}
+
+  .page-wrap{max-width:1300px; margin:22px auto; padding:0 18px 40px;}
+
+  .disclaimer{
+    background:var(--accent-soft); border:1px solid rgba(0,45,114,.2); color:var(--accent);
+    border-radius:var(--radius-sm); padding:10px 14px; font-size:12.5px; margin-bottom:20px; line-height:1.55;
+  }
+  .disclaimer strong{display:block; margin-bottom:4px;}
+
+  .card{background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow); border:1px solid var(--grid-strong); padding:20px; margin-bottom:20px;}
+  .card h2{font-size:14px; margin:0 0 14px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.4px;}
+  .status-line{font-size:13px; color:var(--sub); margin-bottom:14px;}
+
+  .controls{display:flex; flex-wrap:wrap; gap:20px; align-items:flex-end; margin-bottom:16px;}
+  .control-group{display:flex; flex-direction:column; gap:6px;}
+  .control-group label{font-size:12px; font-weight:600; color:var(--sub); text-transform:uppercase; letter-spacing:.3px;}
+  select{
+    font-family:var(--font-ui); font-size:13px; padding:8px 12px; border:1px solid var(--grid-strong);
+    border-radius:var(--radius-sm); background:var(--surface); color:var(--text);
+  }
+
+  table{border-collapse:collapse; width:100%; font-size:13px; table-layout:fixed;}
+  thead th{
+    background:var(--colhead-bg); border:1px solid var(--grid); padding:9px 8px; text-align:left;
+    font-weight:700; color:var(--sub); text-transform:uppercase; letter-spacing:.3px; font-size:10px;
+    white-space:normal; word-wrap:break-word; line-height:1.3; vertical-align:bottom;
+    cursor:pointer; user-select:none;
+  }
+  thead th:hover{color:var(--accent);}
+  tbody td{border:1px solid var(--grid); padding:8px 8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  tbody tr:nth-child(even){background:var(--colhead-bg);}
+  tbody tr:hover{background:var(--accent-soft);}
+  td.team{font-weight:800;}
+  td.num{font-family:var(--font-mono); text-align:right;}
+  td.streak-w{color:var(--win); font-weight:700;}
+  td.streak-l{color:var(--live); font-weight:700;}
+  .prob-high{color:var(--win); font-weight:700;}
+  .prob-low{color:var(--sub);}
+  .sort-arrow{font-size:9px; opacity:.6;}
+  .last-blown-note{display:block; font-size:9.5px; color:var(--sub); font-weight:400; font-family:var(--font-ui);}
+
+  .empty-state{color:var(--sub); font-size:13px; padding:20px; text-align:center;}
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <div>
+    <h1>MLB Streaks — Win/Loss Streak Tracker</h1>
+    <div class="sub" id="rangeSub">Loading season data…</div>
+  </div>
+  <div class="nav-links">
+    <a href="index.html">← Schedule sheet</a>
+    <a href="parlays.html">Parlay builder</a>
+    <a href="bestbet.html">Best Bet</a>
+    <a href="guarantee.html">Guarantee</a>
+    <a href="edge.html">Edge</a>
+    <a href="picks.html">My Picks</a>
+  </div>
+</div>
+
+<div class="page-wrap">
+
+  <div class="disclaimer">
+    <strong>What this is and isn't:</strong> the "Actual" columns are plain historical fact — the real longest win/loss streaks each team has had this season. The "Chance of..." columns are a genuine probability estimate for the <em>rest</em> of the season, computed from each team's own season win rate, assuming games are independent of one another (i.e. a win or loss today doesn't change tomorrow's odds). That assumption isn't a guess — we backtested it directly earlier this season and found essentially no game-to-game correlation (50.3% vs 49.7%), so treating each remaining game as an independent coin flip weighted by that team's real win rate is a reasonable, honest model — not a guarantee of what will actually happen, just the math given what's true so far.
+  </div>
+
+  <div class="card">
+    <h2>Streak length</h2>
+    <div class="controls">
+      <div class="control-group">
+        <label>Games in a row</label>
+        <select id="streakLen">
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5" selected>5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="10">10</option>
+        </select>
+      </div>
+    </div>
+    <div class="status-line" id="statusLine">Loading…</div>
+  </div>
+
+  <div class="card">
+    <h2>Every team, sorted by chance of a win streak</h2>
+    <div style="overflow-x:auto;">
+    <table id="streakTable">
+      <colgroup>
+        <col style="width:8%;">
+        <col style="width:9%;">
+        <col style="width:8%;">
+        <col style="width:12%;">
+        <col style="width:12%;">
+        <col style="width:10%;">
+        <col style="width:10%;">
+        <col style="width:15.5%;">
+        <col style="width:15.5%;">
+      </colgroup>
+      <thead>
+        <tr>
+          <th data-key="team">Team</th>
+          <th data-key="record">Record</th>
+          <th data-key="winPct">Win %</th>
+          <th data-key="maxWin">Longest Actual Win Streak</th>
+          <th data-key="maxLoss">Longest Actual Loss Streak</th>
+          <th data-key="current">Current Streak</th>
+          <th data-key="gamesLeft">Games Left (est.)</th>
+          <th data-key="winStreakProb">Chance of <span class="streak-len-label">5</span>-Game Win Streak</th>
+          <th data-key="lossStreakProb">Chance of <span class="streak-len-label">5</span>-Game Losing Streak</th>
+        </tr>
+      </thead>
+      <tbody id="streakBody"></tbody>
+    </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Closer reliability</h2>
+    <div class="status-line">
+      Each team's primary closer this season (by saves) and how often they've actually converted a save opportunity vs. blown it. This only matters once a game reaches a real save situation — a late lead of 3 runs or fewer — which is why it's shown here as season-long reference, not folded into any specific game's pick. Backtested: this season's top-10 closers by saves blow only about 8% of opportunities, vs. about 27% for the bottom 10 — a real, sizeable gap. Teams without an established closer in the league's top 30 by saves aren't shown; that itself is informative — no proven closer yet.
+    </div>
+    <div class="status-line" id="closerStatus"></div>
+    <div style="overflow-x:auto;">
+    <table id="closerTable">
+      <colgroup>
+        <col style="width:12%;">
+        <col style="width:28%;">
+        <col style="width:12%;">
+        <col style="width:12%;">
+        <col style="width:16%;">
+        <col style="width:20%;">
+      </colgroup>
+      <thead>
+        <tr>
+          <th data-key="team">Team</th>
+          <th data-key="name">Closer</th>
+          <th data-key="saves">Saves</th>
+          <th data-key="blownSaves">Blown</th>
+          <th data-key="blownRate">Blown Rate</th>
+          <th data-key="era">ERA</th>
+        </tr>
+      </thead>
+      <tbody id="closerBody"></tbody>
+    </table>
+    </div>
+  </div>
+
+</div>
+
+<footer style="padding:12px 18px; font-size:11px; color:#8189a0; background:var(--colhead-bg); border-top:1px solid var(--grid); text-align:center;">
+  <div id="versionTag">version: loading…</div>
+</footer>
+
+<script>window.CLOUD_RELOAD_ON_REMOTE=true;</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="../cloud.js"></script>
+<script>
+const TEAM_ID_MAP = {
+  108:'LAA', 109:'AZ', 110:'BAL', 111:'BOS', 112:'CHC', 113:'CIN', 114:'CLE', 115:'COL',
+  116:'DET', 117:'HOU', 118:'KC', 119:'LAD', 120:'WSH', 121:'NYM', 133:'ATH', 134:'PIT',
+  135:'SD', 136:'SEA', 137:'SF', 138:'STL', 139:'TB', 140:'TEX', 141:'TOR', 142:'MIN',
+  143:'PHI', 144:'ATL', 145:'CWS', 146:'MIA', 147:'NYY', 158:'MIL'
+};
+function teamAbbr(id){ return TEAM_ID_MAP[id] || null; }
+
+// Computes today's date in US Eastern time — the timezone MLB's own schedule
+// data is anchored to. Using the viewer's local clock here was a real bug: a
+// viewer outside US time zones could have their local calendar day roll over
+// while it's still "today" by MLB's own reckoning, silently pulling the
+// wrong day's slate. Intl.DateTimeFormat handles the EDT/EST switch
+// automatically, so this stays correct across the whole season.
+function dateStrET(d){
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(d || new Date());
+  const get = (type) => parts.find(p => p.type === type).value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+function todayStr(){ return dateStrET(); }
+
+
+const SEASON_START = '2026-03-26'; // Opening Day 2026
+// gameType codes: F = Wild Card, D = Division Series, L = League Championship Series, W = World Series
+const POSTSEASON_TYPES = new Set(['F', 'D', 'L', 'W']);
+const SEASON_LENGTH = 162; // standard MLB regular-season games per team, used to estimate games remaining
+
+let SEASON_DATA = [];
+let TEAM_ROWS = [];
+let SORT_KEY = 'winStreakProb';
+let SORT_DIR = 'desc';
+
+async function fetchFullSeason(){
+  try{
+    const endStr = todayStr(); // US Eastern "today"
+    const res = await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate=${SEASON_START}&endDate=${endStr}`);
+    if(!res.ok) return [];
+    const json = await res.json();
+    const games = [];
+    (json.dates || []).forEach(d => {
+      (d.games || []).forEach(g => {
+        if(!POSTSEASON_TYPES.has(g.gameType) && g.gameType !== 'R') return; // regular season + postseason — excludes the All-Star Game, spring training
+        if(!g.status || g.status.detailedState !== 'Final') return;
+        const awayAbbr = teamAbbr(g.teams.away.team.id);
+        const homeAbbr = teamAbbr(g.teams.home.team.id);
+        if(!awayAbbr || !homeAbbr) return;
+        const winner = g.teams.away.isWinner ? awayAbbr : (g.teams.home.isWinner ? homeAbbr : null);
+        if(!winner) return;
+        games.push({ eventTime: g.gameDate, date: g.officialDate, away: awayAbbr, home: homeAbbr, winner });
+      });
+    });
+    const byKey = new Map();
+    games.forEach(g => {
+      const key = `${g.eventTime}|${g.away}|${g.home}`;
+      if(!byKey.has(key)) byKey.set(key, g);
+    });
+    const merged = Array.from(byKey.values());
+    merged.sort((a,b) => a.eventTime.localeCompare(b.eventTime));
+    return merged;
+  } catch(e){ console.error('season fetch failed', e); return []; }
+}
+
+// Same approach as Edge's closer reference: pulls the league's top ~30 save
+// leaders, then their full pitching line, in 2 total requests. Backtested:
+// this season's top-10 closers by saves blow ~8% of opportunities vs. ~27%
+// for the bottom 10 — a real, large gap.
+async function fetchCloserData(){
+  try{
+    const leadersRes = await fetch('https://statsapi.mlb.com/api/v1/stats/leaders?leaderCategories=saves&season=2026&sportId=1&statGroup=pitching&limit=30');
+    if(!leadersRes.ok) return {};
+    const leadersJson = await leadersRes.json();
+    const leaders = (leadersJson.leagueLeaders && leadersJson.leagueLeaders[0] && leadersJson.leagueLeaders[0].leaders) || [];
+    if(leaders.length === 0) return {};
+
+    const ids = leaders.map(l => l.person.id);
+    const statsRes = await fetch(`https://statsapi.mlb.com/api/v1/people?personIds=${ids.join(',')}&hydrate=stats(group=[pitching],type=[season],season=2026)`);
+    if(!statsRes.ok) return {};
+    const statsJson = await statsRes.json();
+
+    const statById = {};
+    (statsJson.people || []).forEach(p => {
+      const statGroup = (p.stats || []).find(s => s.group && s.group.displayName === 'pitching');
+      const stat = statGroup && statGroup.splits && statGroup.splits[0] && statGroup.splits[0].stat;
+      if(stat) statById[p.id] = stat;
+    });
+
+    const map = {};
+    leaders.forEach(l => {
+      const abbr = teamAbbr(l.team.id);
+      if(!abbr || map[abbr]) return;
+      const stat = statById[l.person.id];
+      if(!stat || !stat.saveOpportunities) return;
+      map[abbr] = {
+        team: abbr, id: l.person.id, name: l.person.fullName, saves: stat.saves, blownSaves: stat.blownSaves,
+        saveOpportunities: stat.saveOpportunities, blownRate: stat.blownSaves / stat.saveOpportunities, era: stat.era
+      };
+    });
+    return map;
+  } catch(e){ console.error('closer data fetch failed', e); return {}; }
+}
+
+// For each closer, pulls their game log and finds how many of their own
+// appearances have happened since their most recent blown save — "games ago"
+// meaning appearances by that pitcher, not calendar days or team games. One
+// request per closer (bounded to the same ~30-pitcher leaderboard we already
+// use), run in parallel — comparable in cost to the pitcher-ERA lookup on Edge.
+async function fetchLastBlownSaveInfo(closerMap){
+  const entries = Object.values(closerMap).filter(c => c.blownSaves > 0);
+  await Promise.all(entries.map(async (closer) => {
+    try{
+      const res = await fetch(`https://statsapi.mlb.com/api/v1/people/${closer.id}/stats?stats=gameLog&group=pitching&season=2026`);
+      if(!res.ok) return;
+      const json = await res.json();
+      const splits = (json.stats && json.stats[0] && json.stats[0].splits) || [];
+      let lastBlownIdx = -1;
+      splits.forEach((s, i) => {
+        if(s.stat && s.stat.blownSaves >= 1) lastBlownIdx = i;
+      });
+      if(lastBlownIdx >= 0){
+        closer.appearancesSinceBlown = splits.length - 1 - lastBlownIdx;
+        closer.lastBlownDate = splits[lastBlownIdx].date;
+      }
+    } catch(e){ /* leave this closer without the extra detail on failure */ }
+  }));
+}
+
+let CLOSER_ROWS = [];
+let CLOSER_SORT_KEY = 'blownRate';
+let CLOSER_SORT_DIR = 'asc';
+
+function renderCloserTable(){
+  const tbody = document.getElementById('closerBody');
+  const sorted = CLOSER_ROWS.slice().sort((a, b) => {
+    const av = a[CLOSER_SORT_KEY], bv = b[CLOSER_SORT_KEY];
+    if(typeof av === 'string') return CLOSER_SORT_DIR === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    return CLOSER_SORT_DIR === 'asc' ? av - bv : bv - av;
+  });
+  tbody.innerHTML = sorted.map(r => {
+    const rateClass = r.blownRate <= 0.12 ? 'prob-high' : (r.blownRate >= 0.25 ? 'streak-l' : '');
+    let lastBlownNote = '';
+    if(r.blownSaves > 0){
+      lastBlownNote = r.appearancesSinceBlown !== undefined
+        ? `<span class="last-blown-note">${r.appearancesSinceBlown === 0 ? 'last outing' : r.appearancesSinceBlown + ' games ago'}</span>`
+        : '';
+    }
+    return `
+      <tr>
+        <td class="team">${r.team}</td>
+        <td>${r.name}</td>
+        <td class="num">${r.saves}</td>
+        <td class="num">${r.blownSaves}${lastBlownNote}</td>
+        <td class="num ${rateClass}">${(r.blownRate*100).toFixed(1)}%</td>
+        <td class="num">${r.era}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function wireCloserSorting(){
+  document.querySelectorAll('#closerTable thead th').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.key;
+      if(CLOSER_SORT_KEY === key){
+        CLOSER_SORT_DIR = CLOSER_SORT_DIR === 'asc' ? 'desc' : 'asc';
+      } else {
+        CLOSER_SORT_KEY = key;
+        CLOSER_SORT_DIR = 'asc';
+      }
+      renderCloserTable();
+    });
+  });
+}
+
+// Probability that a team experiences AT LEAST ONE run of `n` consecutive
+// "successes" (win or loss, whichever we're modeling) somewhere in the next
+// `games` games, given a fixed per-game probability `p` and independence
+// between games. Implemented as a small Markov-chain style DP over "current
+// run length" states 0..n-1 — once a run reaches n, its probability mass is
+// removed from the "hasn't happened yet" pool.
+function probAtLeastOneStreak(p, n, games){
+  if(n <= 0 || games <= 0) return 0;
+  let dist = new Array(n).fill(0);
+  dist[0] = 1;
+  for(let g = 0; g < games; g++){
+    const next = new Array(n).fill(0);
+    for(let state = 0; state < n; state++){
+      const mass = dist[state];
+      if(mass === 0) continue;
+      const extended = state + 1;
+      if(extended < n){
+        next[extended] += mass * p;
+      } // else: this mass has hit the streak and is dropped — no longer part of "hasn't happened"
+      next[0] += mass * (1 - p);
+    }
+    dist = next;
+  }
+  const survived = dist.reduce((a, b) => a + b, 0);
+  return 1 - survived;
+}
+
+function computeTeamStreakStats(streakLen){
+  const byTeam = {};
+  SEASON_DATA.forEach(g => {
+    for(const team of [g.away, g.home]){
+      (byTeam[team] = byTeam[team] || []).push(g.winner === team ? 'W' : 'L');
+    }
+  });
+
+  const rows = [];
+  Object.keys(byTeam).forEach(team => {
+    const log = byTeam[team];
+    const wins = log.filter(r => r === 'W').length;
+    const losses = log.length - wins;
+    const winPct = log.length > 0 ? wins / log.length : 0;
+
+    let maxWin = 0, maxLoss = 0, curWin = 0, curLoss = 0;
+    log.forEach(r => {
+      if(r === 'W'){ curWin++; curLoss = 0; maxWin = Math.max(maxWin, curWin); }
+      else { curLoss++; curWin = 0; maxLoss = Math.max(maxLoss, curLoss); }
+    });
+    const lastResult = log[log.length - 1];
+    let cs = 1;
+    for(let i = log.length - 2; i >= 0; i--){
+      if(log[i] === lastResult) cs++; else break;
+    }
+    const currentStreak = `${cs}${lastResult}`;
+
+    const gamesLeft = Math.max(0, SEASON_LENGTH - log.length);
+    const winStreakProb = probAtLeastOneStreak(winPct, streakLen, gamesLeft);
+    const lossStreakProb = probAtLeastOneStreak(1 - winPct, streakLen, gamesLeft);
+
+    rows.push({
+      team, wins, losses, winPct, maxWin, maxLoss, currentStreak,
+      gamesLeft, winStreakProb, lossStreakProb
+    });
+  });
+  return rows;
+}
+
+function renderTable(){
+  const tbody = document.getElementById('streakBody');
+  const sorted = TEAM_ROWS.slice().sort((a, b) => {
+    let av = a[SORT_KEY], bv = b[SORT_KEY];
+    if(typeof av === 'string') { av = av; bv = bv; return SORT_DIR === 'asc' ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av)); }
+    return SORT_DIR === 'asc' ? av - bv : bv - av;
+  });
+
+  tbody.innerHTML = sorted.map(r => {
+    const winProbClass = r.winStreakProb >= 0.5 ? 'prob-high' : 'prob-low';
+    const lossProbClass = r.lossStreakProb >= 0.5 ? 'prob-high' : 'prob-low';
+    const csClass = r.currentStreak.endsWith('W') ? 'streak-w' : 'streak-l';
+    return `
+      <tr>
+        <td class="team">${r.team}</td>
+        <td class="num">${r.wins}-${r.losses}</td>
+        <td class="num">${(r.winPct*100).toFixed(1)}%</td>
+        <td class="num streak-w">${r.maxWin}</td>
+        <td class="num streak-l">${r.maxLoss}</td>
+        <td class="num ${csClass}">${r.currentStreak}</td>
+        <td class="num">${r.gamesLeft}</td>
+        <td class="num ${winProbClass}">${(r.winStreakProb*100).toFixed(1)}%</td>
+        <td class="num ${lossProbClass}">${(r.lossStreakProb*100).toFixed(1)}%</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function wireSorting(){
+  document.querySelectorAll('#streakTable thead th').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.key;
+      if(SORT_KEY === key){
+        SORT_DIR = SORT_DIR === 'asc' ? 'desc' : 'asc';
+      } else {
+        SORT_KEY = key;
+        SORT_DIR = 'desc';
+      }
+      renderTable();
+    });
+  });
+}
+
+async function init(){
+  document.getElementById('rangeSub').textContent = "Loading real 2026 season from MLB's Stats API…";
+  const [season, closerData] = await Promise.all([fetchFullSeason(), fetchCloserData()]);
+  SEASON_DATA = season;
+  if(SEASON_DATA.length === 0){
+    document.getElementById('statusLine').textContent = 'Could not load season data — try refreshing.';
+    return;
+  }
+  document.getElementById('rangeSub').textContent = `${SEASON_DATA.length} completed games this season`;
+
+  const streakLenSel = document.getElementById('streakLen');
+  function recompute(){
+    const n = parseInt(streakLenSel.value);
+    document.querySelectorAll('.streak-len-label').forEach(el => el.textContent = n);
+    TEAM_ROWS = computeTeamStreakStats(n);
+    document.getElementById('statusLine').textContent = `Computed live from ${SEASON_DATA.length} completed games. Games-left estimate assumes a standard 162-game season.`;
+    renderTable();
+  }
+  streakLenSel.addEventListener('change', recompute);
+  recompute();
+  wireSorting();
+
+  CLOSER_ROWS = Object.values(closerData);
+  renderCloserTable();
+  wireCloserSorting();
+
+  document.getElementById('closerStatus').textContent = 'Checking each closer\'s recent history…';
+  await fetchLastBlownSaveInfo(closerData);
+  CLOSER_ROWS = Object.values(closerData);
+  renderCloserTable();
+  document.getElementById('closerStatus').textContent = '';
+}
+
+function renderVersionTag(){
+  const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  const d = new Date(document.lastModified);
+  const stamp = `${d.getFullYear()}_${months[d.getMonth()]}_${String(d.getDate()).padStart(2,'0')} ${d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
+  const el = document.getElementById('versionTag');
+  if(el) el.textContent = `version: ${stamp}`;
+}
+renderVersionTag();
+
+init();
+</script>
+</body>
+</html>

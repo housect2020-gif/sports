@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Picks — MLB Site</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --page-bg: #eef1f6;
+    --surface: #ffffff;
+    --grid: #e3e7ee;
+    --grid-strong: #ccd3de;
+    --header-bg: linear-gradient(135deg, #002d72 0%, #001a46 100%);
+    --header-fg: #ffffff;
+    --colhead-bg: #f2f4f8;
+    --accent: #002d72;
+    --accent-soft: rgba(0,45,114,.08);
+    --live: #d50032;
+    --live-soft: rgba(213,0,50,.09);
+    --win: #0a7d3f;
+    --win-soft: rgba(10,125,63,.10);
+    --warn: #c2660a;
+    --warn-soft: rgba(194,102,10,.13);
+    --text: #14213b;
+    --sub: #64708a;
+    --radius: 12px;
+    --radius-sm: 7px;
+    --shadow: 0 1px 2px rgba(0,20,60,.05), 0 8px 24px -12px rgba(0,20,60,.22);
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Consolas', 'SF Mono', 'Roboto Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--page-bg);font-family:var(--font-ui);color:var(--text);}
+
+  .titlebar{
+    background:var(--header-bg); color:var(--header-fg);
+    padding:16px 22px; display:flex; align-items:center; justify-content:space-between;
+    flex-wrap:wrap; gap:10px; box-shadow:0 2px 10px rgba(0,20,60,.3);
+    border-bottom:3px solid var(--live);
+  }
+  .titlebar h1{font-size:16px; margin:0; font-weight:700;}
+  .titlebar .sub{font-size:12px; color:#9fb3d9; margin-top:3px;}
+  .nav-links{display:flex; align-items:center; gap:16px; flex-wrap:wrap;}
+  .nav-links a{color:#cfe0ff; text-decoration:none; font-size:13px; font-weight:600;}
+  .nav-links a:hover{color:#fff;}
+
+  .page-wrap{max-width:1200px; margin:22px auto; padding:0 18px 40px;}
+
+  .disclaimer{
+    background:var(--accent-soft); border:1px solid rgba(0,45,114,.2); color:var(--accent);
+    border-radius:var(--radius-sm); padding:10px 14px; font-size:12.5px; margin-bottom:20px; line-height:1.55;
+  }
+
+  .card{background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow); border:1px solid var(--grid-strong); padding:20px; margin-bottom:20px;}
+  .card h2{font-size:14px; margin:0 0 6px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.4px;}
+  .card-sub{font-size:12.5px; color:var(--sub); margin-bottom:16px;}
+
+  .top-bar{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px;}
+  .top-bar .summary{font-size:13px; color:var(--sub);}
+  .top-bar .summary strong{color:var(--text);}
+  .btn-danger{
+    font-family:var(--font-ui); font-size:12.5px; font-weight:700; padding:8px 16px;
+    border:1px solid var(--live); border-radius:var(--radius-sm); background:var(--surface);
+    color:var(--live); cursor:pointer;
+  }
+  .btn-danger:hover{background:var(--live-soft);}
+  .btn-secondary{
+    font-family:var(--font-ui); font-size:12.5px; font-weight:700; padding:8px 16px;
+    border:1px solid var(--accent); border-radius:var(--radius-sm); background:var(--surface);
+    color:var(--accent); cursor:pointer;
+  }
+  .btn-secondary:hover{background:var(--accent-soft);}
+  .btn-secondary:disabled{opacity:.4; cursor:not-allowed;}
+
+  .empty-state{color:var(--sub); font-size:13px; padding:24px; text-align:center;}
+
+  table{border-collapse:collapse; width:100%; font-size:13px;}
+  thead th{
+    background:var(--colhead-bg); border:1px solid var(--grid); padding:9px 10px; text-align:left;
+    font-weight:700; color:var(--sub); text-transform:uppercase; letter-spacing:.3px; font-size:10.5px;
+  }
+  tbody td{border:1px solid var(--grid); padding:9px 10px; vertical-align:middle;}
+  tbody tr:nth-child(even){background:var(--colhead-bg);}
+  td.team{font-weight:800;}
+  td.source-tag{font-size:11px; color:var(--sub); text-transform:capitalize;}
+  .remove-btn{
+    font-family:var(--font-ui); font-size:11.5px; font-weight:600; padding:4px 10px;
+    border:1px solid var(--live); border-radius:99px; background:var(--surface); color:var(--live); cursor:pointer;
+  }
+  .remove-btn:hover{background:var(--live-soft);}
+
+  .combo-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:14px;}
+  .combo-card{
+    background:var(--colhead-bg); border:1px solid var(--grid-strong); border-radius:var(--radius-sm);
+    padding:14px 16px; position:relative;
+  }
+  .combo-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;}
+  .combo-source{font-size:10.5px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.3px;}
+  .combo-legs{list-style:none; margin:0 0 10px; padding:0;}
+  .combo-legs li{display:flex; justify-content:space-between; font-size:12.5px; padding:3px 0; border-bottom:1px dashed var(--grid);}
+  .combo-legs li:last-child{border-bottom:none;}
+  .leg-pick{font-weight:800; color:var(--accent);}
+  .combo-footer{display:flex; align-items:center; justify-content:space-between; padding-top:8px; border-top:1px solid var(--grid-strong);}
+  .combo-value{font-family:var(--font-mono); font-weight:700; font-size:15px; color:var(--win);}
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <div>
+    <h1>My Picks</h1>
+    <div class="sub" id="rangeSub">Straight picks and parlay/combo picks you've checked across the site</div>
+  </div>
+  <div class="nav-links">
+    <a href="index.html">Schedule sheet</a>
+    <a href="parlays.html">Parlay builder</a>
+    <a href="bestbet.html">Best Bet</a>
+    <a href="guarantee.html">Guarantee</a>
+    <a href="edge.html">Edge</a>
+    <a href="streaks.html">Streaks</a>
+  </div>
+</div>
+
+<div class="page-wrap">
+
+  <div class="disclaimer">
+    <strong>What this is:</strong> a personal watchlist, built entirely from checkboxes you've checked on the Schedule sheet, Edge, and Parlays pages. It's stored only in this browser (via localStorage) — nothing is sent anywhere, and it won't show up on a different device or browser. Unchecking a box on its original page removes it from here too; removing it here does the same in reverse. Not betting advice — just a place to collect what you've flagged.
+  </div>
+
+  <div class="card">
+    <div class="top-bar">
+      <div class="summary" id="summaryLine">Loading…</div>
+      <div style="display:flex; gap:10px;">
+        <button class="btn-secondary" id="downloadPdfBtn" disabled>Download PDF</button>
+        <button class="btn-danger" id="clearAllBtn">Clear all picks</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Straight picks</h2>
+    <div class="card-sub">Individual game picks, checked from the Schedule sheet's H2H Record column or Edge's "Pick's hit rate when picked" column.</div>
+    <div id="straightPicksWrap"><div class="empty-state">Loading…</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Combo &amp; parlay picks</h2>
+    <div class="card-sub">Full parlays checked from Edge's Generated Combos, the Parlay Builder's Generated Parlays, or Guarantee's Guarantee Combos.</div>
+    <div id="comboPicksWrap"><div class="empty-state">Loading…</div></div>
+  </div>
+
+</div>
+
+<div id="printArea" style="position:fixed; left:-9999px; top:0; width:720px; background:#fff; padding:30px; font-family:'Inter',Arial,sans-serif; color:#14213b;"></div>
+
+<footer style="padding:12px 18px; font-size:11px; color:#8189a0; background:var(--colhead-bg); border-top:1px solid var(--grid); text-align:center;">
+  <div id="versionTag">version: loading…</div>
+</footer>
+
+<script>window.CLOUD_RELOAD_ON_REMOTE=true;</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="../cloud.js"></script>
+<script>
+const PICKS_STORAGE_KEY = 'mlb_site_picks_v1';
+
+// Computes today's date in US Eastern time — same convention every other
+// page on the site uses (MLB's own schedule data is anchored to US Eastern),
+// so the PDF export's date/filename matches what the rest of the site
+// considers "today" regardless of which timezone the viewer is actually in.
+function dateStrET(d){
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(d || new Date());
+  const get = (type) => parts.find(p => p.type === type).value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+function todayStr(){ return dateStrET(); }
+
+
+function loadSavedPicks(){
+  try{ return JSON.parse(localStorage.getItem(PICKS_STORAGE_KEY) || '[]'); }
+  catch(e){ return []; }
+}
+function saveSavedPicksList(picks){
+  try{ localStorage.setItem(PICKS_STORAGE_KEY, JSON.stringify(picks)); }
+  catch(e){ console.error('Could not save picks', e); }
+}
+function removePick(id){
+  const picks = loadSavedPicks().filter(p => p.id !== id);
+  saveSavedPicksList(picks);
+  render();
+}
+
+function formatAddedAt(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month:'short', day:'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
+}
+
+const SOURCE_LABEL = { schedule: 'Schedule sheet', edge: 'Edge', parlays: 'Parlay builder', guarantee: 'Guarantee' };
+
+function renderStraightPicks(picks){
+  const wrap = document.getElementById('straightPicksWrap');
+  const straight = picks.filter(p => p.type === 'straight');
+  if(straight.length === 0){
+    wrap.innerHTML = '<div class="empty-state">No straight picks saved yet — check a box on the Schedule sheet or Edge page to add one.</div>';
+    return;
+  }
+  straight.sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || ''));
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Added</th><th>Source</th><th>Date</th><th>Matchup</th><th>Pick</th><th>Detail</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${straight.map(p => `
+          <tr>
+            <td>${formatAddedAt(p.addedAt)}</td>
+            <td class="source-tag">${SOURCE_LABEL[p.source] || p.source}</td>
+            <td>${p.date || '—'}</td>
+            <td>${p.away} @ ${p.home}</td>
+            <td class="team">${p.pick}</td>
+            <td style="font-size:12px; color:var(--sub);">${p.detail || ''}</td>
+            <td><button class="remove-btn" data-remove-id="${p.id}">Remove</button></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderComboPicks(picks){
+  const wrap = document.getElementById('comboPicksWrap');
+  const combos = picks.filter(p => p.type === 'combo');
+  if(combos.length === 0){
+    wrap.innerHTML = '<div class="empty-state">No combo or parlay picks saved yet — check a box inside a generated combo on Edge or Parlays to add one.</div>';
+    return;
+  }
+  combos.sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || ''));
+  wrap.innerHTML = `<div class="combo-grid">
+    ${combos.map(p => `
+      <div class="combo-card">
+        <div class="combo-header">
+          <span class="combo-source">${SOURCE_LABEL[p.source] || p.source} &middot; ${(p.legs || []).length} legs</span>
+          <button class="remove-btn" data-remove-id="${p.id}">Remove</button>
+        </div>
+        <ul class="combo-legs">
+          ${(p.legs || []).map(g => `<li><span>${g.away} @ ${g.home}</span><span class="leg-pick">${g.pick}</span></li>`).join('')}
+        </ul>
+        <div class="combo-footer">
+          <span style="font-size:11.5px; color:var(--sub);">Added ${formatAddedAt(p.addedAt)}</span>
+          <span class="combo-value">${((p.combinedEstimate || 0) * 100).toFixed(1)}%</span>
+        </div>
+      </div>
+    `).join('')}
+  </div>`;
+}
+
+function render(){
+  const picks = loadSavedPicks();
+  const straightCount = picks.filter(p => p.type === 'straight').length;
+  const comboCount = picks.filter(p => p.type === 'combo').length;
+  document.getElementById('summaryLine').innerHTML = `<strong>${straightCount}</strong> straight pick${straightCount === 1 ? '' : 's'} &middot; <strong>${comboCount}</strong> combo/parlay pick${comboCount === 1 ? '' : 's'} saved`;
+  renderStraightPicks(picks);
+  renderComboPicks(picks);
+  document.getElementById('downloadPdfBtn').disabled = picks.length === 0;
+}
+
+function todayLongStr(){
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  }).format(new Date());
+}
+function todayFileStr(){
+  return todayStr(); // US Eastern "today"
+}
+
+// Builds a clean, self-contained summary (independent of the page's own
+// styling) and hands it to html2pdf — same approach as the Parlay Builder's
+// PDF export. Covers both straight picks and combo/parlay picks, in whatever
+// order they're currently saved.
+function downloadPdf(){
+  const picks = loadSavedPicks();
+  if(picks.length === 0) return;
+
+  const straight = picks.filter(p => p.type === 'straight').sort((a,b) => (b.addedAt||'').localeCompare(a.addedAt||''));
+  const combos = picks.filter(p => p.type === 'combo').sort((a,b) => (b.addedAt||'').localeCompare(a.addedAt||''));
+
+  const straightRows = straight.length === 0 ? '' : `
+    <div style="font-size:14px; font-weight:800; color:#002d72; margin:20px 0 10px;">Straight Picks</div>
+    ${straight.map(p => `
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #e3e7ee; font-size:13px;">
+        <span style="color:#64708a;">${SOURCE_LABEL[p.source] || p.source} &middot; ${p.away} @ ${p.home}${p.date ? ' &middot; ' + p.date : ''}</span>
+        <span style="font-weight:700;">${p.pick}</span>
+      </div>
+    `).join('')}
+  `;
+
+  const comboRows = combos.length === 0 ? '' : `
+    <div style="font-size:14px; font-weight:800; color:#002d72; margin:24px 0 10px;">Combo &amp; Parlay Picks</div>
+    ${combos.map((p, i) => `
+      <div style="margin-bottom:14px; padding:14px 16px; border:1px solid #d8dde6; border-radius:8px;">
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#64708a; margin-bottom:8px;">
+          ${SOURCE_LABEL[p.source] || p.source} &middot; ${(p.legs||[]).length} legs
+        </div>
+        <div>
+          ${(p.legs||[]).map(g => `
+            <div style="display:flex; justify-content:space-between; font-size:13px; padding:3px 0;">
+              <span style="color:#64708a;">${g.away} @ ${g.home}</span>
+              <span style="font-weight:700;">${g.pick}</span>
+            </div>
+          `).join('')}
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:8px; border-top:1px dashed #d8dde6; font-size:13px;">
+          <span>Combined estimate</span>
+          <span style="font-weight:700; font-family:'JetBrains Mono',monospace; font-size:15px; color:#0a7d3f;">${((p.combinedEstimate||0)*100).toFixed(1)}%</span>
+        </div>
+      </div>
+    `).join('')}
+  `;
+
+  const printArea = document.getElementById('printArea');
+  printArea.innerHTML = `
+    <div style="border-bottom:3px solid #d50032; padding-bottom:14px; margin-bottom:10px;">
+      <div style="font-size:20px; font-weight:800; color:#002d72;">My Picks</div>
+      <div style="font-size:13px; color:#64708a; margin-top:4px;">${todayLongStr()}</div>
+    </div>
+    <div style="font-size:11px; color:#64708a; background:#eef1f9; border:1px solid #ccd8ef; border-radius:6px; padding:8px 12px; margin-bottom:10px; line-height:1.5;">
+      A personal watchlist saved from across the site — not real sportsbook odds or payouts, and not betting advice. Entertainment only.
+    </div>
+    ${straightRows}
+    ${comboRows}
+  `;
+
+  const opt = {
+    margin: 10,
+    filename: `my-picks-${todayFileStr()}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2 },
+    jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' }
+  };
+
+  html2pdf().set(opt).from(printArea).save();
+}
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-remove-id]');
+  if(btn) removePick(btn.dataset.removeId);
+});
+
+document.getElementById('downloadPdfBtn').addEventListener('click', downloadPdf);
+
+document.getElementById('clearAllBtn').addEventListener('click', () => {
+  if(confirm('Remove all saved picks? This can\'t be undone.')){
+    saveSavedPicksList([]);
+    render();
+  }
+});
+
+function renderVersionTag(){
+  const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  const d = new Date(document.lastModified);
+  const stamp = `${d.getFullYear()}_${months[d.getMonth()]}_${String(d.getDate()).padStart(2,'0')} ${d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
+  const el = document.getElementById('versionTag');
+  if(el) el.textContent = `version: ${stamp}`;
+}
+renderVersionTag();
+
+render();
+</script>
+</body>
+</html>

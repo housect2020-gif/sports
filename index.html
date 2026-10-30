@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sports Hub — Live Sheets</title>
+<style>
+  :root{
+    --bg:#f4f5f7; --surface:#fff; --line:#d9dde3; --text:#202124; --sub:#5f6368; --accent:#1a5cff;
+    --nba:#c8102e; --wnba:#e0662a; --mlb:#0b3d91; --nfl:#0a6b3a;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){ --bg:#14171c; --surface:#1d2128; --line:#323843; --text:#e8eaed; --sub:#a0a6af; --accent:#7ba5ff; }
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI",Calibri,Arial,sans-serif;}
+  header{padding:34px 20px 8px;max-width:1000px;margin:0 auto;}
+  h1{margin:0;font-size:28px;font-weight:700;letter-spacing:.2px;}
+  header p{margin:6px 0 0;color:var(--sub);font-size:15px;}
+  .grid{max-width:1000px;margin:18px auto 40px;padding:0 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;}
+  .card .top{padding:18px 18px 14px;color:#fff;}
+  .card.NBA .top{background:var(--nba);} .card.WNBA .top{background:var(--wnba);}
+  .card.MLB .top{background:var(--mlb);} .card.NFL .top{background:var(--nfl);}
+  .card h2{margin:0;font-size:24px;letter-spacing:.5px;}
+  .card .main{display:inline-block;margin-top:10px;background:#fff;color:#111;text-decoration:none;font-weight:700;font-size:14px;padding:8px 14px;border-radius:8px;}
+  .links{padding:12px 18px 16px;display:flex;flex-wrap:wrap;gap:8px 14px;}
+  .links a{color:var(--accent);text-decoration:none;font-size:14px;font-weight:600;}
+  .links a:hover{text-decoration:underline;}
+  .links a.hist{margin-left:auto;color:var(--sub);}
+  footer{max-width:1000px;margin:0 auto 40px;padding:0 20px;color:var(--sub);font-size:12.5px;line-height:1.5;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Sports Hub</h1>
+  <p>Pick a sport to open its live sheet. Your history is saved in the cloud, so it follows you across devices.</p>
+</header>
+<div class="grid" id="grid"></div>
+<footer>
+  One sign-in covers every sport. You'll be asked to sign in the first time you open a sheet, and new accounts need approval.
+  For entertainment only. Not betting advice.
+</footer>
+<script src="sites.js"></script>
+<script>
+const grid = document.getElementById("grid");
+Object.entries(window.SITES).forEach(([key, s]) => {
+  const card = document.createElement("div");
+  card.className = "card " + key;
+  const first = s.pages[0];
+  const rest = s.pages.slice(1).map(p => `<a href="${s.base}${p[1]}">${p[0]}</a>`).join("");
+  card.innerHTML = `
+    <div class="top"><h2>${s.name}</h2><a class="main" href="${s.base}${first[1]}">Open ${first[0].toLowerCase()} →</a></div>
+    <div class="links">${rest}<a class="hist" href="history.html?league=${key}">History</a></div>`;
+  grid.appendChild(card);
+});
+</script>
+</body>
+</html>

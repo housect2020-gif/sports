@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLB Schedule & Records — Live Sheet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --page-bg: #eef1f6;
+    --surface: #ffffff;
+    --grid: #e3e7ee;
+    --grid-strong: #ccd3de;
+    --header-bg: linear-gradient(135deg, #002d72 0%, #001a46 100%);
+    --header-fg: #ffffff;
+    --colhead-bg: #f2f4f8;
+    --row-alt: #f8f9fc;
+    --row-hover: #eaf0fb;
+    --accent: #002d72;
+    --accent-soft: rgba(0,45,114,.08);
+    --live: #d50032;
+    --live-soft: rgba(213,0,50,.09);
+    --win: #0a7d3f;
+    --win-soft: rgba(10,125,63,.10);
+    --warn: #c2660a;
+    --warn-soft: rgba(194,102,10,.13);
+    --today-soft: #fff4d6;
+    --text: #14213b;
+    --sub: #64708a;
+    --radius: 12px;
+    --radius-sm: 7px;
+    --shadow: 0 1px 2px rgba(0,20,60,.05), 0 8px 24px -12px rgba(0,20,60,.22);
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Consolas', 'SF Mono', 'Roboto Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--page-bg);font-family:var(--font-ui);color:var(--text);}
+
+  /* ---- Top app bar, styled like a spreadsheet title bar ---- */
+  .titlebar{
+    background:var(--header-bg); color:var(--header-fg);
+    padding:16px 22px; display:flex; align-items:center; justify-content:space-between;
+    flex-wrap:wrap; gap:10px; box-shadow:0 2px 10px rgba(0,20,60,.3);
+    border-bottom:3px solid var(--live);
+  }
+  .titlebar h1{font-size:16px; margin:0; font-weight:700; letter-spacing:.1px;}
+  .titlebar .sub{font-size:12px; color:#9fb3d9; margin-top:3px;}
+  .live-pill{
+    display:inline-flex; align-items:center; gap:6px;
+    background:rgba(213,0,50,.18); border:1px solid rgba(213,0,50,.5);
+    color:#ff9eb4; padding:6px 12px; border-radius:99px; font-size:12px; font-weight:600;
+  }
+  .live-dot{width:7px;height:7px;border-radius:50%;background:var(--live);animation:pulse 1.4s infinite;}
+  @keyframes pulse{0%{opacity:1;transform:scale(1);}50%{opacity:.35;transform:scale(1.4);}100%{opacity:1;transform:scale(1);}}
+  .refresh-note{font-size:11px; color:#8fa0c7;}
+
+  .page-wrap{max-width:1400px; margin:18px auto; padding:0 18px 28px;}
+  .sheet-card{background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; border:1px solid var(--grid-strong);}
+
+  /* ---- Formula bar ---- */
+  .formula-bar{
+    background:var(--surface); border-bottom:1px solid var(--grid);
+    display:flex; align-items:center; padding:9px 16px; gap:10px; font-size:13px;
+    position:sticky; top:0; z-index:30;
+  }
+  .cell-ref{
+    font-family:var(--font-mono); background:var(--colhead-bg); border:1px solid var(--grid-strong);
+    border-radius:var(--radius-sm); padding:4px 10px; min-width:64px; text-align:center; color:var(--sub); font-size:12px; font-weight:600;
+  }
+  .fx{color:var(--sub); font-style:italic; font-size:12px; user-select:none;}
+  .formula-content{
+    flex:1; font-family:var(--font-mono); font-size:13px; color:var(--text);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .h2h-stat-box{
+    font-family:var(--font-mono); font-size:12px; font-weight:600; color:var(--text);
+    background:var(--colhead-bg); border:1px solid var(--grid-strong); border-radius:var(--radius-sm);
+    padding:5px 12px; white-space:nowrap; flex-shrink:0;
+  }
+  .h2h-stat-box .stat-label{
+    font-family:var(--font-ui); font-size:9.5px; font-weight:700; color:var(--sub);
+    text-transform:uppercase; letter-spacing:.3px; margin-right:5px;
+  }
+  .h2h-stat-box .stat-pct{font-weight:800; margin-left:4px;}
+  .h2h-stat-box .stat-pct.good{color:var(--win);}
+  .h2h-stat-box .stat-pct.bad{color:var(--live);}
+
+  /* ---- Toolbar: filters ---- */
+  .toolbar{
+    background:var(--colhead-bg); border-bottom:1px solid var(--grid);
+    display:flex; align-items:center; gap:16px; padding:10px 16px; flex-wrap:wrap;
+    position:sticky; top:39px; z-index:29; font-size:13px;
+  }
+  .toolbar label{color:var(--sub); font-size:12px; margin-right:5px; font-weight:500;}
+  .toolbar select, .toolbar input[type="text"]{
+    font-family:var(--font-ui); font-size:13px; padding:6px 10px; border:1px solid var(--grid-strong);
+    border-radius:var(--radius-sm); background:var(--surface); color:var(--text); transition:border-color .15s;
+  }
+  .toolbar select:hover, .toolbar input[type="text"]:hover{border-color:var(--accent);}
+  .toolbar .count{margin-left:auto; color:var(--sub); font-size:12px; font-weight:500;}
+  .legend{display:flex; align-items:center; gap:14px; font-size:12px; color:var(--sub);}
+  .legend-item{display:inline-flex; align-items:center; gap:5px;}
+  .swatch{width:11px; height:11px; border-radius:3px; display:inline-block; border:1px solid rgba(0,0,0,.08);}
+  .swatch-today{background:var(--today-soft);}
+  .swatch-live{background:var(--live-soft);}
+  .swatch-final{background:var(--win-soft);}
+  .swatch-dateband{background:#e7ecf8; border-color:#c3ceec;}
+
+  /* ---- Sheet ---- */
+  .sheet-wrap{overflow:auto; max-height:calc(100vh - 130px);}
+  table{border-collapse:collapse; width:100%; background:var(--surface); font-size:13px;}
+  thead th{
+    position:sticky; top:0; z-index:20;
+    background:var(--colhead-bg); border:1px solid var(--grid);
+    padding:9px 12px; text-align:left; font-weight:700; color:var(--text);
+    white-space:nowrap; letter-spacing:.1px;
+  }
+  thead tr.colletters th{
+    background:#f0f2f8; color:var(--sub); font-family:var(--font-mono); font-weight:500;
+    font-size:11px; padding:4px 12px; top:0; z-index:21;
+  }
+  thead tr.headers th{top:23px;}
+  tbody th.rownum{
+    position:sticky; left:0; z-index:10;
+    background:#f0f2f8; color:var(--sub); font-family:var(--font-mono); font-weight:500;
+    border:1px solid var(--grid); text-align:center; font-size:11px; min-width:36px;
+  }
+  tbody td{
+    border:1px solid var(--grid); padding:8px 12px; white-space:nowrap; vertical-align:middle;
+  }
+  tbody tr:nth-child(even){background:var(--row-alt);}
+  tr.date-band{background:#e7ecf8 !important;}
+  tr.date-band:hover{background:#d7dff2 !important;}
+  tbody tr:hover{background:var(--row-hover);}
+  td.date{font-family:var(--font-mono); color:var(--sub); font-size:12px;}
+  .game-time{color:var(--accent); font-size:10.5px; opacity:.8;}
+  .dh-badge{
+    font-size:9.5px; font-weight:700; color:var(--warn); background:var(--warn-soft);
+    padding:1px 6px; border-radius:99px; margin-left:4px; white-space:nowrap;
+  }
+  .playoff-badge{
+    font-size:9.5px; font-weight:700; color:#7a3bd6; background:#efe4fc;
+    padding:1px 6px; border-radius:99px; margin-left:4px; white-space:nowrap;
+  }
+  .hist-score{font-size:10.5px; color:var(--sub); font-family:var(--font-mono); font-weight:400;}
+  .h2h-actual-winner{font-size:10.5px; color:var(--sub); opacity:.85;}
+  td.team{font-weight:700; letter-spacing:.2px;}
+  td.winner{font-weight:700;}
+  td.winner.dash{color:var(--sub); font-weight:400;}
+  td.record{font-family:var(--font-mono); font-size:12px; color:var(--sub);}
+  td.h2h{font-size:12px; color:var(--sub);}
+  .badge-win{color:var(--win);}
+  .badge-live{color:var(--live); font-weight:700;}
+  tr.today-row{background:var(--today-soft) !important;}
+  tr.today-row:hover{background:#fcecc0 !important;}
+  tr.live-row{background:var(--live-soft) !important;}
+  tr.live-row:hover{background:rgba(224,57,63,.16) !important;}
+  .score-live{
+    font-family:var(--font-mono); font-weight:700; color:var(--live);
+  }
+  .status-tag{
+    font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; margin-left:6px;
+    background:var(--live-soft); color:var(--live); vertical-align:middle;
+  }
+  .status-final{background:var(--win-soft); color:var(--win);}
+  .status-pre{background:rgba(107,115,135,.12); color:var(--sub);}
+  .h2h-match{background:var(--win-soft) !important; color:var(--win) !important; font-weight:700;}
+  .h2h-mismatch{background:var(--live-soft) !important; color:var(--live) !important; font-weight:700;}
+  .h2h-loc{font-weight:400; font-size:11px; color:var(--sub); opacity:.85;}
+  .h2h-actual-loser{font-weight:400; font-size:10.5px; color:var(--sub); opacity:.7;}
+  .h2h-tier-tag{font-weight:600; font-size:10px; color:var(--accent); opacity:.75;}
+  .h2h-pretied{font-weight:400; font-size:9.5px; color:var(--sub); opacity:.65; font-style:italic;}
+
+  footer{padding:12px 18px; font-size:11px; color:#8189a0; background:var(--colhead-bg); border-top:1px solid var(--grid);}
+  footer a{color:var(--accent);}
+
+  ::-webkit-scrollbar{height:10px; width:10px;}
+  ::-webkit-scrollbar-thumb{background:#c3cadb; border-radius:6px;}
+  ::-webkit-scrollbar-track{background:var(--page-bg);}
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <div>
+    <h1>MLB Games — Schedule, Results, Records &amp; Head-to-Head</h1>
+    <div class="sub" id="rangeSub">Loading range…</div>
+  </div>
+  <div style="display:flex; align-items:center; gap:12px;">
+    <a href="parlays.html" style="color:#cfe0ff; text-decoration:none; font-size:13px; font-weight:600;">Parlay builder →</a>
+    <a href="bestbet.html" style="color:#cfe0ff; text-decoration:none; font-size:13px; font-weight:600;">Best Bet →</a>
+    <a href="guarantee.html" style="color:#cfe0ff; text-decoration:none; font-size:13px; font-weight:600;">Guarantee →</a>
+    <a href="edge.html" style="color:#cfe0ff; text-decoration:none; font-size:13px; font-weight:600;">Edge →</a>
+    <a href="streaks.html" style="color:#cfe0ff; text-decoration:none; font-size:13px; font-weight:600;">Streaks →</a>
+    <a href="picks.html" style="color:#cfe0ff; text-decoration:none; font-size:13px; font-weight:600;">My Picks →</a>
+    <span class="refresh-note" id="lastUpdated">—</span>
+    <span class="live-pill" id="livePill"><span class="live-dot"></span>LIVE · auto-refresh 30s</span>
+  </div>
+</div>
+
+<div class="page-wrap">
+<div class="sheet-card">
+
+<div class="formula-bar">
+  <div class="cell-ref" id="cellRef">A1</div>
+  <div class="fx">fx</div>
+  <div class="formula-content" id="cellContent">MLB Games - Schedule, Results, Records &amp; Head-to-Head Analysis</div>
+  <div class="h2h-stat-box" id="prevDayStatBox">Loading…</div>
+  <div class="h2h-stat-box" id="last5StatBox">Loading…</div>
+  <div class="h2h-stat-box" id="seasonStatBox">Loading…</div>
+</div>
+
+<div class="toolbar">
+  <div>
+    <label>Team</label>
+    <select id="teamFilter"><option value="">All teams</option></select>
+  </div>
+  <div>
+    <label>Date</label>
+    <select id="dateFilter"><option value="">All dates</option></select>
+  </div>
+  <div>
+    <label>Show</label>
+    <select id="viewFilter">
+      <option value="all">All games</option>
+      <option value="today" selected>Today &amp; live</option>
+      <option value="finished">Completed only</option>
+    </select>
+  </div>
+  <div class="legend">
+    <span class="legend-item"><span class="swatch swatch-today"></span>Scheduled today</span>
+    <span class="legend-item"><span class="swatch swatch-live"></span>Live now</span>
+    <span class="legend-item"><span class="swatch swatch-final"></span>Final</span>
+    <span class="legend-item"><span class="swatch swatch-dateband"></span>Alternating by date</span>
+  </div>
+  <button id="exportCsvBtn" style="font-family:var(--font-ui); font-size:12.5px; font-weight:700; padding:6px 14px; border:1px solid var(--accent); border-radius:var(--radius-sm); background:var(--surface); color:var(--accent); cursor:pointer;">Export CSV</button>
+  <div class="count" id="countLabel">0 rows</div>
+</div>
+
+<div class="sheet-wrap">
+<table id="sheet">
+  <thead>
+    <tr class="colletters">
+      <th></th>
+      <th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th><th>G</th>
+    </tr>
+    <tr class="headers">
+      <th></th>
+      <th id="dateHeader" style="cursor:pointer; user-select:none;" title="Click to sort by game time (only active in Today &amp; Live view)">Date <span id="dateSortArrow"></span></th>
+      <th>Away</th>
+      <th>Home</th>
+      <th>Winner</th>
+      <th>Current / Winner Record</th>
+      <th>Head-to-Head Record</th>
+      <th>H2H Outcome Winner</th>
+    </tr>
+  </thead>
+  <tbody id="sheetBody"></tbody>
+</table>
+</div>
+
+<footer>
+  Season history is pulled live from MLB's official Stats API for the full season (through <span id="histThrough">—</span>) each time this page loads. Today's games refresh automatically every 30 seconds while this page is open. No API key required. If MLB's data can't be reached, the page falls back to sample data instead of showing nothing.
+  <div style="margin-top:6px; color:#a7b2c2;" id="versionTag">version: loading…</div>
+</footer>
+
+</div>
+</div>
+
+<script>window.CLOUD_RELOAD_ON_REMOTE=true;</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="../cloud.js"></script>
+<script>
+const FALLBACK_DATA = JSON.parse('[{"date": "2026-07-17", "away": "WSH", "home": "TEX", "winner": "WSH", "record": "45-52", "h2h": "WSH leads 3-2", "h2h_winner": "WSH"}, {"date": "2026-07-17", "away": "HOU", "home": "COL", "winner": "COL", "record": "36-61", "h2h": "COL leads 4-3", "h2h_winner": "COL"}, {"date": "2026-07-17", "away": "MIL", "home": "CLE", "winner": "CLE", "record": "60-37", "h2h": "CLE leads 2-1", "h2h_winner": "CLE"}, {"date": "2026-07-17", "away": "CWS", "home": "ATH", "winner": "ATH", "record": "40-57", "h2h": "ATH leads 4-1", "h2h_winner": "ATH"}, {"date": "2026-07-17", "away": "LAA", "home": "ATL", "winner": "LAA", "record": "39-58", "h2h": "Tied 3-3", "h2h_winner": "LAA"}, {"date": "2026-07-17", "away": "MIN", "home": "AZ", "winner": "AZ", "record": "50-48", "h2h": "AZ leads 4-2", "h2h_winner": "AZ"}, {"date": "2026-07-17", "away": "SF", "home": "CIN", "winner": "SF", "record": "48-49", "h2h": "SF leads 4-2", "h2h_winner": "SF"}, {"date": "2026-07-17", "away": "MIA", "home": "LAD", "winner": "MIA", "record": "34-63", "h2h": "MIA leads 3-2", "h2h_winner": "MIA"}, {"date": "2026-07-17", "away": "NYY", "home": "SEA", "winner": "SEA", "record": "53-44", "h2h": "SEA leads 3-1", "h2h_winner": "SEA"}, {"date": "2026-07-17", "away": "PHI", "home": "BAL", "winner": "PHI", "record": "63-34", "h2h": "PHI leads 4-1", "h2h_winner": "PHI"}, {"date": "2026-07-17", "away": "NYM", "home": "SD", "winner": "SD", "record": "51-47", "h2h": "SD leads 3-2", "h2h_winner": "SD"}, {"date": "2026-07-17", "away": "TOR", "home": "STL", "winner": "STL", "record": "50-47", "h2h": "STL leads 3-1", "h2h_winner": "STL"}, {"date": "2026-07-17", "away": "DET", "home": "KC", "winner": "KC", "record": "54-43", "h2h": "KC leads 4-1", "h2h_winner": "KC"}, {"date": "2026-07-17", "away": "PIT", "home": "BOS", "winner": "BOS", "record": "53-44", "h2h": "BOS leads 2-1", "h2h_winner": "BOS"}, {"date": "2026-07-17", "away": "TB", "home": "CHC", "winner": "CHC", "record": "47-50", "h2h": "CHC leads 2-1", "h2h_winner": "CHC"}, {"date": "2026-07-18", "away": "WSH", "home": "TEX", "winner": "TEX", "record": "47-51", "h2h": "Tied 3-3", "h2h_winner": "TEX"}, {"date": "2026-07-18", "away": "HOU", "home": "COL", "winner": "HOU", "record": "51-47", "h2h": "Tied 4-4", "h2h_winner": "HOU"}, {"date": "2026-07-18", "away": "MIL", "home": "CLE", "winner": "MIL", "record": "56-42", "h2h": "Tied 2-2", "h2h_winner": "MIL"}, {"date": "2026-07-18", "away": "CWS", "home": "ATH", "winner": "ATH", "record": "41-57", "h2h": "ATH leads 5-1", "h2h_winner": "ATH"}, {"date": "2026-07-18", "away": "LAA", "home": "ATL", "winner": "LAA", "record": "40-58", "h2h": "LAA leads 4-3", "h2h_winner": "LAA"}, {"date": "2026-07-18", "away": "MIN", "home": "AZ", "winner": "MIN", "record": "54-44", "h2h": "AZ leads 4-3", "h2h_winner": "MIN"}, {"date": "2026-07-18", "away": "SF", "home": "CIN", "winner": "SF", "record": "49-49", "h2h": "SF leads 5-2", "h2h_winner": "SF"}, {"date": "2026-07-18", "away": "MIA", "home": "LAD", "winner": "LAD", "record": "58-40", "h2h": "Tied 3-3", "h2h_winner": "LAD"}, {"date": "2026-07-18", "away": "NYY", "home": "SEA", "winner": "NYY", "record": "59-39", "h2h": "SEA leads 3-2", "h2h_winner": "NYY"}, {"date": "2026-07-18", "away": "PHI", "home": "BAL", "winner": "PHI", "record": "64-34", "h2h": "PHI leads 5-1", "h2h_winner": "PHI"}, {"date": "2026-07-18", "away": "NYM", "home": "SD", "winner": "SD", "record": "52-47", "h2h": "SD leads 4-2", "h2h_winner": "SD"}, {"date": "2026-07-18", "away": "TOR", "home": "STL", "winner": "TOR", "record": "45-53", "h2h": "STL leads 3-2", "h2h_winner": "TOR"}, {"date": "2026-07-18", "away": "DET", "home": "KC", "winner": "DET", "record": "48-50", "h2h": "KC leads 4-2", "h2h_winner": "DET"}, {"date": "2026-07-18", "away": "PIT", "home": "BOS", "winner": "PIT", "record": "49-49", "h2h": "Tied 2-2", "h2h_winner": "PIT"}, {"date": "2026-07-18", "away": "TB", "home": "CHC", "winner": "TB", "record": "49-49", "h2h": "Tied 2-2", "h2h_winner": "TB"}, {"date": "2026-07-19", "away": "WSH", "home": "TEX", "winner": "WSH", "record": "46-53", "h2h": "WSH leads 4-3", "h2h_winner": "WSH"}, {"date": "2026-07-19", "away": "HOU", "home": "COL", "winner": "HOU", "record": "52-47", "h2h": "HOU leads 5-4", "h2h_winner": "HOU"}, {"date": "2026-07-19", "away": "MIL", "home": "CLE", "winner": "MIL", "record": "57-42", "h2h": "MIL leads 3-2", "h2h_winner": "MIL"}, {"date": "2026-07-19", "away": "CWS", "home": "ATH", "winner": "ATH", "record": "42-57", "h2h": "ATH leads 6-1", "h2h_winner": "ATH"}, {"date": "2026-07-19", "away": "LAA", "home": "ATL", "winner": "LAA", "record": "41-58", "h2h": "LAA leads 5-3", "h2h_winner": "LAA"}, {"date": "2026-07-19", "away": "MIN", "home": "AZ", "winner": "MIN", "record": "55-44", "h2h": "Tied 4-4", "h2h_winner": "MIN"}, {"date": "2026-07-19", "away": "SF", "home": "CIN", "winner": "SF", "record": "50-49", "h2h": "SF leads 6-2", "h2h_winner": "SF"}, {"date": "2026-07-19", "away": "MIA", "home": "LAD", "winner": "MIA", "record": "35-64", "h2h": "MIA leads 4-3", "h2h_winner": "MIA"}, {"date": "2026-07-19", "away": "NYY", "home": "SEA", "winner": "SEA", "record": "54-45", "h2h": "SEA leads 4-2", "h2h_winner": "SEA"}, {"date": "2026-07-19", "away": "PHI", "home": "BAL", "winner": "BAL", "record": "58-41", "h2h": "PHI leads 5-2", "h2h_winner": "BAL"}, {"date": "2026-07-19", "away": "NYM", "home": "SD", "winner": "SD", "record": "53-47", "h2h": "SD leads 5-2", "h2h_winner": "SD"}, {"date": "2026-07-19", "away": "TOR", "home": "STL", "winner": "TOR", "record": "46-53", "h2h": "Tied 3-3", "h2h_winner": "TOR"}, {"date": "2026-07-19", "away": "DET", "home": "KC", "winner": "KC", "record": "55-44", "h2h": "KC leads 5-2", "h2h_winner": "KC"}, {"date": "2026-07-19", "away": "PIT", "home": "BOS", "winner": "PIT", "record": "50-49", "h2h": "PIT leads 3-2", "h2h_winner": "PIT"}, {"date": "2026-07-19", "away": "TB", "home": "CHC", "winner": "CHC", "record": "48-51", "h2h": "CHC leads 3-2", "h2h_winner": "CHC"}, {"date": "2026-07-20", "away": "TEX", "home": "PIT", "winner": "PIT", "record": "51-49", "h2h": "Tied 2-2", "h2h_winner": "PIT"}, {"date": "2026-07-20", "away": "ATL", "home": "LAA", "winner": "ATL", "record": "55-45", "h2h": "LAA leads 5-4", "h2h_winner": "ATL"}, {"date": "2026-07-20", "away": "MIA", "home": "CHC", "winner": "CHC", "record": "49-51", "h2h": "CHC leads 2-1", "h2h_winner": "CHC"}, {"date": "2026-07-20", "away": "NYM", "home": "DET", "winner": "DET", "record": "49-51", "h2h": "DET leads 4-3", "h2h_winner": "DET"}, {"date": "2026-07-20", "away": "COL", "home": "WSH", "winner": "WSH", "record": "47-53", "h2h": "WSH leads 3-1", "h2h_winner": "WSH"}, {"date": "2026-07-20", "away": "MIN", "home": "ATH", "winner": "MIN", "record": "56-44", "h2h": "MIN leads 4-2", "h2h_winner": "MIN"}, {"date": "2026-07-20", "away": "LAD", "home": "NYY", "winner": "LAD", "record": "59-41", "h2h": "Tied 2-2", "h2h_winner": "LAD"}, {"date": "2026-07-20", "away": "SF", "home": "BAL", "winner": "BAL", "record": "59-41", "h2h": "BAL leads 3-1", "h2h_winner": "BAL"}, {"date": "2026-07-20", "away": "TB", "home": "CIN", "winner": "TB", "record": "50-50", "h2h": "CIN leads 3-2", "h2h_winner": "TB"}, {"date": "2026-07-20", "away": "CLE", "home": "TOR", "winner": "CLE", "record": "61-39", "h2h": "CLE leads 4-1", "h2h_winner": "CLE"}, {"date": "2026-07-20", "away": "SD", "home": "HOU", "winner": "SD", "record": "54-47", "h2h": "Tied 3-3", "h2h_winner": "SD"}, {"date": "2026-07-20", "away": "SEA", "home": "MIL", "winner": "MIL", "record": "58-42", "h2h": "MIL leads 4-3", "h2h_winner": "MIL"}, {"date": "2026-07-20", "away": "CWS", "home": "STL", "winner": "CWS", "record": "28-72", "h2h": "CWS leads 4-1", "h2h_winner": "CWS"}, {"date": "2026-07-20", "away": "BOS", "home": "AZ", "winner": "AZ", "record": "51-50", "h2h": "AZ leads 3-2", "h2h_winner": "AZ"}, {"date": "2026-07-20", "away": "KC", "home": "PHI", "winner": "KC", "record": "56-44", "h2h": "Tied 3-3", "h2h_winner": "KC"}, {"date": "2026-07-21", "away": "TEX", "home": "PIT", "winner": "TEX", "record": "48-53", "h2h": "TEX leads 3-2", "h2h_winner": "TEX"}, {"date": "2026-07-21", "away": "ATL", "home": "LAA", "winner": "LAA", "record": "42-59", "h2h": "LAA leads 6-4", "h2h_winner": "LAA"}, {"date": "2026-07-21", "away": "MIA", "home": "CHC", "winner": "CHC", "record": "50-51", "h2h": "CHC leads 3-1", "h2h_winner": "CHC"}, {"date": "2026-07-21", "away": "NYM", "home": "DET", "winner": "NYM", "record": "50-51", "h2h": "Tied 4-4", "h2h_winner": "NYM"}, {"date": "2026-07-21", "away": "COL", "home": "WSH", "winner": "WSH", "record": "48-53", "h2h": "WSH leads 4-1", "h2h_winner": "WSH"}, {"date": "2026-07-21", "away": "MIN", "home": "ATH", "winner": "ATH", "record": "43-58", "h2h": "MIN leads 4-3", "h2h_winner": "ATH"}, {"date": "2026-07-21", "away": "LAD", "home": "NYY", "winner": "LAD", "record": "60-41", "h2h": "LAD leads 3-2", "h2h_winner": "LAD"}, {"date": "2026-07-21", "away": "SF", "home": "BAL", "winner": "BAL", "record": "60-41", "h2h": "BAL leads 4-1", "h2h_winner": "BAL"}, {"date": "2026-07-21", "away": "TB", "home": "CIN", "winner": "TB", "record": "51-50", "h2h": "Tied 3-3", "h2h_winner": "TB"}, {"date": "2026-07-21", "away": "CLE", "home": "TOR", "winner": "CLE", "record": "62-39", "h2h": "CLE leads 5-1", "h2h_winner": "CLE"}, {"date": "2026-07-21", "away": "SD", "home": "HOU", "winner": "HOU", "record": "53-48", "h2h": "HOU leads 4-3", "h2h_winner": "HOU"}, {"date": "2026-07-21", "away": "SEA", "home": "MIL", "winner": "SEA", "record": "55-46", "h2h": "Tied 4-4", "h2h_winner": "SEA"}, {"date": "2026-07-21", "away": "CWS", "home": "STL", "winner": "CWS", "record": "29-72", "h2h": "CWS leads 5-1", "h2h_winner": "CWS"}, {"date": "2026-07-21", "away": "BOS", "home": "AZ", "winner": "BOS", "record": "54-47", "h2h": "Tied 3-3", "h2h_winner": "BOS"}, {"date": "2026-07-21", "away": "KC", "home": "PHI", "winner": "PHI", "record": "65-36", "h2h": "PHI leads 4-3", "h2h_winner": "PHI"}, {"date": "2026-07-22", "away": "TEX", "home": "PIT", "winner": "PIT", "record": "52-50", "h2h": "Tied 3-3", "h2h_winner": "PIT"}, {"date": "2026-07-22", "away": "ATL", "home": "LAA", "winner": "ATL", "record": "56-46", "h2h": "LAA leads 6-5", "h2h_winner": "ATL"}, {"date": "2026-07-22", "away": "MIA", "home": "CHC", "winner": "CHC", "record": "51-51", "h2h": "CHC leads 4-1", "h2h_winner": "CHC"}, {"date": "2026-07-22", "away": "NYM", "home": "DET", "winner": "NYM", "record": "51-51", "h2h": "NYM leads 5-4", "h2h_winner": "NYM"}, {"date": "2026-07-22", "away": "COL", "home": "WSH", "winner": "WSH", "record": "49-53", "h2h": "WSH leads 5-1", "h2h_winner": "WSH"}, {"date": "2026-07-22", "away": "MIN", "home": "ATH", "winner": "ATH", "record": "44-58", "h2h": "Tied 4-4", "h2h_winner": "ATH"}, {"date": "2026-07-22", "away": "LAD", "home": "NYY", "winner": "NYY", "record": "60-42", "h2h": "Tied 3-3", "h2h_winner": "NYY"}, {"date": "2026-07-22", "away": "SF", "home": "BAL", "winner": "SF", "record": "51-51", "h2h": "BAL leads 4-2", "h2h_winner": "SF"}, {"date": "2026-07-22", "away": "TB", "home": "CIN", "winner": "TB", "record": "52-50", "h2h": "TB leads 4-3", "h2h_winner": "TB"}, {"date": "2026-07-22", "away": "CLE", "home": "TOR", "winner": "TOR", "record": "47-55", "h2h": "CLE leads 5-2", "h2h_winner": "TOR"}, {"date": "2026-07-22", "away": "SD", "home": "HOU", "winner": "HOU", "record": "54-48", "h2h": "HOU leads 5-3", "h2h_winner": "HOU"}, {"date": "2026-07-22", "away": "SEA", "home": "MIL", "winner": "SEA", "record": "56-46", "h2h": "SEA leads 5-4", "h2h_winner": "SEA"}, {"date": "2026-07-22", "away": "CWS", "home": "STL", "winner": "CWS", "record": "30-72", "h2h": "CWS leads 6-1", "h2h_winner": "CWS"}, {"date": "2026-07-22", "away": "BOS", "home": "AZ", "winner": "AZ", "record": "52-51", "h2h": "AZ leads 4-3", "h2h_winner": "AZ"}, {"date": "2026-07-22", "away": "KC", "home": "PHI", "winner": "KC", "record": "57-45", "h2h": "Tied 4-4", "h2h_winner": "KC"}, {"date": "2026-07-23", "away": "SEA", "home": "TEX", "winner": "TEX", "record": "49-54", "h2h": "TEX leads 4-3", "h2h_winner": "TEX"}, {"date": "2026-07-23", "away": "STL", "home": "CIN", "winner": "STL", "record": "51-52", "h2h": "STL leads 4-3", "h2h_winner": "STL"}, {"date": "2026-07-23", "away": "BOS", "home": "ATL", "winner": "ATL", "record": "57-46", "h2h": "ATL leads 4-3", "h2h_winner": "ATL"}, {"date": "2026-07-23", "away": "KC", "home": "MIA", "winner": "MIA", "record": "36-67", "h2h": "MIA leads 4-3", "h2h_winner": "MIA"}, {"date": "2026-07-23", "away": "LAD", "home": "SF", "winner": "LAD", "record": "61-42", "h2h": "LAD leads 2-1", "h2h_winner": "LAD"}, {"date": "2026-07-23", "away": "AZ", "home": "CWS", "winner": "AZ", "record": "53-51", "h2h": "AZ leads 2-1", "h2h_winner": "AZ"}, {"date": "2026-07-23", "away": "HOU", "home": "NYM", "winner": "HOU", "record": "55-48", "h2h": "Tied 2-2", "h2h_winner": "HOU"}, {"date": "2026-07-23", "away": "TOR", "home": "ATH", "winner": "TOR", "record": "48-55", "h2h": "TOR leads 2-1", "h2h_winner": "TOR"}, {"date": "2026-07-23", "away": "TB", "home": "SD", "winner": "TB", "record": "53-50", "h2h": "TB leads 4-3", "h2h_winner": "TB"}, {"date": "2026-07-23", "away": "PIT", "home": "MIN", "winner": "MIN", "record": "57-46", "h2h": "PIT leads 3-2", "h2h_winner": "MIN"}, {"date": "2026-07-23", "away": "DET", "home": "NYY", "winner": "DET", "record": "50-53", "h2h": "NYY leads 3-2", "h2h_winner": "DET"}, {"date": "2026-07-23", "away": "BAL", "home": "MIL", "winner": "MIL", "record": "59-44", "h2h": "MIL leads 4-2", "h2h_winner": "MIL"}, {"date": "2026-07-23", "away": "CLE", "home": "PHI", "winner": "CLE", "record": "63-40", "h2h": "CLE leads 4-2", "h2h_winner": "CLE"}, {"date": "2026-07-23", "away": "LAA", "home": "WSH", "winner": "LAA", "record": "43-60", "h2h": "Tied 2-2", "h2h_winner": "LAA"}, {"date": "2026-07-23", "away": "CHC", "home": "COL", "winner": "COL", "record": "37-66", "h2h": "COL leads 2-1", "h2h_winner": "COL"}, {"date": "2026-07-24", "away": "SEA", "home": "TEX", "winner": "TEX", "record": "50-54", "h2h": "TEX leads 5-3", "h2h_winner": "TEX"}, {"date": "2026-07-24", "away": "STL", "home": "CIN", "winner": "STL", "record": "52-52", "h2h": "STL leads 5-3", "h2h_winner": "STL"}, {"date": "2026-07-24", "away": "BOS", "home": "ATL", "winner": "ATL", "record": "58-46", "h2h": "ATL leads 5-3", "h2h_winner": "ATL"}, {"date": "2026-07-24", "away": "KC", "home": "MIA", "winner": "KC", "record": "58-46", "h2h": "Tied 4-4", "h2h_winner": "KC"}, {"date": "2026-07-24", "away": "LAD", "home": "SF", "winner": "LAD", "record": "62-42", "h2h": "LAD leads 3-1", "h2h_winner": "LAD"}, {"date": "2026-07-24", "away": "AZ", "home": "CWS", "winner": "AZ", "record": "54-51", "h2h": "AZ leads 3-1", "h2h_winner": "AZ"}, {"date": "2026-07-24", "away": "HOU", "home": "NYM", "winner": "NYM", "record": "52-52", "h2h": "NYM leads 3-2", "h2h_winner": "NYM"}, {"date": "2026-07-24", "away": "TOR", "home": "ATH", "winner": "ATH", "record": "45-59", "h2h": "Tied 2-2", "h2h_winner": "ATH"}, {"date": "2026-07-24", "away": "TB", "home": "SD", "winner": "TB", "record": "54-50", "h2h": "TB leads 5-3", "h2h_winner": "TB"}, {"date": "2026-07-24", "away": "PIT", "home": "MIN", "winner": "PIT", "record": "53-51", "h2h": "PIT leads 4-2", "h2h_winner": "PIT"}, {"date": "2026-07-24", "away": "DET", "home": "NYY", "winner": "DET", "record": "51-53", "h2h": "Tied 3-3", "h2h_winner": "DET"}, {"date": "2026-07-24", "away": "BAL", "home": "MIL", "winner": "BAL", "record": "61-43", "h2h": "MIL leads 4-3", "h2h_winner": "BAL"}, {"date": "2026-07-24", "away": "CLE", "home": "PHI", "winner": "PHI", "record": "66-38", "h2h": "CLE leads 4-3", "h2h_winner": "PHI"}, {"date": "2026-07-24", "away": "LAA", "home": "WSH", "winner": "LAA", "record": "44-60", "h2h": "LAA leads 3-2", "h2h_winner": "LAA"}, {"date": "2026-07-24", "away": "CHC", "home": "COL", "winner": "CHC", "record": "52-52", "h2h": "Tied 2-2", "h2h_winner": "CHC"}, {"date": "2026-07-25", "away": "SEA", "home": "TEX", "winner": "TEX", "record": "51-54", "h2h": "TEX leads 6-3", "h2h_winner": "TEX"}, {"date": "2026-07-25", "away": "STL", "home": "CIN", "winner": "CIN", "record": "48-57", "h2h": "STL leads 5-4", "h2h_winner": "CIN"}, {"date": "2026-07-25", "away": "BOS", "home": "ATL", "winner": "BOS", "record": "55-50", "h2h": "ATL leads 5-4", "h2h_winner": "BOS"}, {"date": "2026-07-25", "away": "KC", "home": "MIA", "winner": "MIA", "record": "37-68", "h2h": "MIA leads 5-4", "h2h_winner": "MIA"}, {"date": "2026-07-25", "away": "LAD", "home": "SF", "winner": "LAD", "record": "63-42", "h2h": "LAD leads 4-1", "h2h_winner": "LAD"}, {"date": "2026-07-25", "away": "AZ", "home": "CWS", "winner": "AZ", "record": "55-51", "h2h": "AZ leads 4-1", "h2h_winner": "AZ"}, {"date": "2026-07-25", "away": "HOU", "home": "NYM", "winner": "NYM", "record": "53-52", "h2h": "NYM leads 4-2", "h2h_winner": "NYM"}, {"date": "2026-07-25", "away": "TOR", "home": "ATH", "winner": "TOR", "record": "49-56", "h2h": "TOR leads 3-2", "h2h_winner": "TOR"}, {"date": "2026-07-25", "away": "TB", "home": "SD", "winner": "SD", "record": "55-51", "h2h": "TB leads 5-4", "h2h_winner": "SD"}, {"date": "2026-07-25", "away": "PIT", "home": "MIN", "winner": "PIT", "record": "54-51", "h2h": "PIT leads 5-2", "h2h_winner": "PIT"}, {"date": "2026-07-25", "away": "DET", "home": "NYY", "winner": "DET", "record": "52-53", "h2h": "DET leads 4-3", "h2h_winner": "DET"}, {"date": "2026-07-25", "away": "BAL", "home": "MIL", "winner": "MIL", "record": "60-45", "h2h": "MIL leads 5-3", "h2h_winner": "MIL"}, {"date": "2026-07-25", "away": "CLE", "home": "PHI", "winner": "PHI", "record": "67-38", "h2h": "Tied 4-4", "h2h_winner": "PHI"}, {"date": "2026-07-25", "away": "LAA", "home": "WSH", "winner": "WSH", "record": "50-55", "h2h": "Tied 3-3", "h2h_winner": "WSH"}, {"date": "2026-07-25", "away": "CHC", "home": "COL", "winner": "CHC", "record": "53-52", "h2h": "CHC leads 3-2", "h2h_winner": "CHC"}, {"date": "2026-07-26", "away": "SD", "home": "COL", "winner": "SD", "record": "56-51", "h2h": "SD leads 3-2", "h2h_winner": "SD"}, {"date": "2026-07-26", "away": "BOS", "home": "BAL", "winner": "BOS", "record": "56-50", "h2h": "BOS leads 4-1", "h2h_winner": "BOS"}, {"date": "2026-07-26", "away": "SEA", "home": "LAA", "winner": "SEA", "record": "57-49", "h2h": "Tied 3-3", "h2h_winner": "SEA"}, {"date": "2026-07-26", "away": "MIA", "home": "CLE", "winner": "CLE", "record": "64-42", "h2h": "CLE leads 4-3", "h2h_winner": "CLE"}, {"date": "2026-07-26", "away": "PHI", "home": "ATL", "winner": "ATL", "record": "59-47", "h2h": "ATL leads 3-2", "h2h_winner": "ATL"}, {"date": "2026-07-26", "away": "SF", "home": "MIN", "winner": "MIN", "record": "58-48", "h2h": "MIN leads 3-1", "h2h_winner": "MIN"}, {"date": "2026-07-26", "away": "TB", "home": "PIT", "winner": "TB", "record": "55-51", "h2h": "Tied 2-2", "h2h_winner": "TB"}, {"date": "2026-07-26", "away": "TOR", "home": "LAD", "winner": "LAD", "record": "64-42", "h2h": "LAD leads 4-2", "h2h_winner": "LAD"}, {"date": "2026-07-26", "away": "AZ", "home": "WSH", "winner": "WSH", "record": "51-55", "h2h": "WSH leads 3-2", "h2h_winner": "WSH"}, {"date": "2026-07-26", "away": "STL", "home": "NYY", "winner": "NYY", "record": "61-45", "h2h": "NYY leads 4-1", "h2h_winner": "NYY"}, {"date": "2026-07-26", "away": "HOU", "home": "CIN", "winner": "CIN", "record": "49-57", "h2h": "CIN leads 2-1", "h2h_winner": "CIN"}, {"date": "2026-07-26", "away": "DET", "home": "NYM", "winner": "DET", "record": "53-53", "h2h": "Tied 5-5", "h2h_winner": "DET"}, {"date": "2026-07-26", "away": "MIL", "home": "CHC", "winner": "MIL", "record": "61-45", "h2h": "CHC leads 3-2", "h2h_winner": "MIL"}, {"date": "2026-07-26", "away": "KC", "home": "ATH", "winner": "ATH", "record": "46-60", "h2h": "ATH leads 4-2", "h2h_winner": "ATH"}, {"date": "2026-07-26", "away": "TEX", "home": "CWS", "winner": "TEX", "record": "52-54", "h2h": "Tied 3-3", "h2h_winner": "TEX"}, {"date": "2026-07-27", "away": "SD", "home": "COL", "winner": "COL", "record": "38-69", "h2h": "Tied 3-3", "h2h_winner": "COL"}, {"date": "2026-07-27", "away": "BOS", "home": "BAL", "winner": "BOS", "record": "57-50", "h2h": "BOS leads 5-1", "h2h_winner": "BOS"}, {"date": "2026-07-27", "away": "SEA", "home": "LAA", "winner": "SEA", "record": "58-49", "h2h": "SEA leads 4-3", "h2h_winner": "SEA"}, {"date": "2026-07-27", "away": "MIA", "home": "CLE", "winner": "CLE", "record": "65-42", "h2h": "CLE leads 5-3", "h2h_winner": "CLE"}, {"date": "2026-07-27", "away": "PHI", "home": "ATL", "winner": "ATL", "record": "60-47", "h2h": "ATL leads 4-2", "h2h_winner": "ATL"}, {"date": "2026-07-27", "away": "SF", "home": "MIN", "winner": "MIN", "record": "59-48", "h2h": "MIN leads 4-1", "h2h_winner": "MIN"}, {"date": "2026-07-27", "away": "TB", "home": "PIT", "winner": "PIT", "record": "55-52", "h2h": "PIT leads 3-2", "h2h_winner": "PIT"}, {"date": "2026-07-27", "away": "TOR", "home": "LAD", "winner": "TOR", "record": "50-57", "h2h": "LAD leads 4-3", "h2h_winner": "TOR"}, {"date": "2026-07-27", "away": "AZ", "home": "WSH", "winner": "WSH", "record": "52-55", "h2h": "WSH leads 4-2", "h2h_winner": "WSH"}, {"date": "2026-07-27", "away": "STL", "home": "NYY", "winner": "STL", "record": "53-54", "h2h": "NYY leads 4-2", "h2h_winner": "STL"}, {"date": "2026-07-27", "away": "HOU", "home": "CIN", "winner": "CIN", "record": "50-57", "h2h": "CIN leads 3-1", "h2h_winner": "CIN"}, {"date": "2026-07-27", "away": "DET", "home": "NYM", "winner": "DET", "record": "54-53", "h2h": "DET leads 6-5", "h2h_winner": "DET"}, {"date": "2026-07-27", "away": "MIL", "home": "CHC", "winner": "CHC", "record": "54-53", "h2h": "CHC leads 4-2", "h2h_winner": "CHC"}, {"date": "2026-07-27", "away": "KC", "home": "ATH", "winner": "KC", "record": "59-48", "h2h": "ATH leads 4-3", "h2h_winner": "KC"}, {"date": "2026-07-27", "away": "TEX", "home": "CWS", "winner": "TEX", "record": "53-54", "h2h": "TEX leads 4-3", "h2h_winner": "TEX"}, {"date": "2026-07-28", "away": "SD", "home": "COL", "winner": "COL", "record": "39-69", "h2h": "COL leads 4-3", "h2h_winner": "COL"}, {"date": "2026-07-28", "away": "BOS", "home": "BAL", "winner": "BAL", "record": "62-46", "h2h": "BOS leads 5-2", "h2h_winner": "BAL"}, {"date": "2026-07-28", "away": "SEA", "home": "LAA", "winner": "SEA", "record": "59-49", "h2h": "SEA leads 5-3", "h2h_winner": "SEA"}, {"date": "2026-07-28", "away": "MIA", "home": "CLE", "winner": "CLE", "record": "66-42", "h2h": "CLE leads 6-3", "h2h_winner": "CLE"}, {"date": "2026-07-28", "away": "PHI", "home": "ATL", "winner": "ATL", "record": "61-47", "h2h": "ATL leads 5-2", "h2h_winner": "ATL"}, {"date": "2026-07-28", "away": "SF", "home": "MIN", "winner": "SF", "record": "52-56", "h2h": "MIN leads 4-2", "h2h_winner": "SF"}, {"date": "2026-07-28", "away": "TB", "home": "PIT", "winner": "PIT", "record": "56-52", "h2h": "PIT leads 4-2", "h2h_winner": "PIT"}, {"date": "2026-07-28", "away": "TOR", "home": "LAD", "winner": "LAD", "record": "65-43", "h2h": "LAD leads 5-3", "h2h_winner": "LAD"}, {"date": "2026-07-28", "away": "AZ", "home": "WSH", "winner": "WSH", "record": "53-55", "h2h": "WSH leads 5-2", "h2h_winner": "WSH"}, {"date": "2026-07-28", "away": "STL", "home": "NYY", "winner": "NYY", "record": "62-46", "h2h": "NYY leads 5-2", "h2h_winner": "NYY"}, {"date": "2026-07-28", "away": "HOU", "home": "CIN", "winner": "CIN", "record": "51-57", "h2h": "CIN leads 4-1", "h2h_winner": "CIN"}, {"date": "2026-07-28", "away": "DET", "home": "NYM", "winner": "NYM", "record": "54-54", "h2h": "Tied 6-6", "h2h_winner": "NYM"}, {"date": "2026-07-28", "away": "MIL", "home": "CHC", "winner": "MIL", "record": "62-46", "h2h": "CHC leads 4-3", "h2h_winner": "MIL"}, {"date": "2026-07-28", "away": "KC", "home": "ATH", "winner": "KC", "record": "60-48", "h2h": "Tied 4-4", "h2h_winner": "KC"}, {"date": "2026-07-28", "away": "TEX", "home": "CWS", "winner": "CWS", "record": "31-77", "h2h": "Tied 4-4", "h2h_winner": "CWS"}, {"date": "2026-07-29", "away": "AZ", "home": "WSH", "winner": "WSH", "record": "54-55", "h2h": "WSH leads 6-2", "h2h_winner": "WSH"}, {"date": "2026-07-29", "away": "MIN", "home": "CWS", "winner": "MIN", "record": "60-49", "h2h": "MIN leads 3-2", "h2h_winner": "MIN"}, {"date": "2026-07-29", "away": "MIL", "home": "COL", "winner": "COL", "record": "40-69", "h2h": "COL leads 4-3", "h2h_winner": "COL"}, {"date": "2026-07-29", "away": "TB", "home": "TEX", "winner": "TEX", "record": "54-55", "h2h": "TEX leads 4-1", "h2h_winner": "TEX"}, {"date": "2026-07-29", "away": "CLE", "home": "CHC", "winner": "CLE", "record": "67-42", "h2h": "Tied 3-3", "h2h_winner": "CLE"}, {"date": "2026-07-29", "away": "HOU", "home": "LAD", "winner": "LAD", "record": "66-43", "h2h": "LAD leads 4-2", "h2h_winner": "LAD"}, {"date": "2026-07-29", "away": "NYY", "home": "BOS", "winner": "BOS", "record": "58-51", "h2h": "BOS leads 4-1", "h2h_winner": "BOS"}, {"date": "2026-07-29", "away": "CIN", "home": "BAL", "winner": "CIN", "record": "52-57", "h2h": "CIN leads 3-1", "h2h_winner": "CIN"}, {"date": "2026-07-29", "away": "ATL", "home": "MIA", "winner": "MIA", "record": "38-71", "h2h": "MIA leads 4-3", "h2h_winner": "MIA"}, {"date": "2026-07-29", "away": "TOR", "home": "DET", "winner": "DET", "record": "55-54", "h2h": "DET leads 4-2", "h2h_winner": "DET"}, {"date": "2026-07-29", "away": "LAA", "home": "ATH", "winner": "ATH", "record": "47-62", "h2h": "ATH leads 3-1", "h2h_winner": "ATH"}, {"date": "2026-07-29", "away": "STL", "home": "SEA", "winner": "SEA", "record": "60-49", "h2h": "SEA leads 2-1", "h2h_winner": "SEA"}, {"date": "2026-07-29", "away": "PHI", "home": "SF", "winner": "SF", "record": "53-56", "h2h": "Tied 2-2", "h2h_winner": "SF"}, {"date": "2026-07-29", "away": "KC", "home": "SD", "winner": "KC", "record": "61-48", "h2h": "SD leads 3-2", "h2h_winner": "KC"}, {"date": "2026-07-29", "away": "NYM", "home": "PIT", "winner": "PIT", "record": "57-52", "h2h": "PIT leads 4-2", "h2h_winner": "PIT"}, {"date": "2026-07-30", "away": "AZ", "home": "WSH", "winner": "AZ", "record": "56-55", "h2h": "WSH leads 6-3", "h2h_winner": "AZ"}, {"date": "2026-07-30", "away": "MIN", "home": "CWS", "winner": "MIN", "record": "61-49", "h2h": "MIN leads 4-2", "h2h_winner": "MIN"}, {"date": "2026-07-30", "away": "MIL", "home": "COL", "winner": "COL", "record": "41-69", "h2h": "COL leads 5-3", "h2h_winner": "COL"}, {"date": "2026-07-30", "away": "TB", "home": "TEX", "winner": "TEX", "record": "55-55", "h2h": "TEX leads 5-1", "h2h_winner": "TEX"}, {"date": "2026-07-30", "away": "CLE", "home": "CHC", "winner": "CLE", "record": "68-42", "h2h": "CLE leads 4-3", "h2h_winner": "CLE"}, {"date": "2026-07-30", "away": "HOU", "home": "LAD", "winner": "HOU", "record": "56-54", "h2h": "LAD leads 4-3", "h2h_winner": "HOU"}, {"date": "2026-07-30", "away": "NYY", "home": "BOS", "winner": "BOS", "record": "59-51", "h2h": "BOS leads 5-1", "h2h_winner": "BOS"}, {"date": "2026-07-30", "away": "CIN", "home": "BAL", "winner": "CIN", "record": "53-57", "h2h": "CIN leads 4-1", "h2h_winner": "CIN"}, {"date": "2026-07-30", "away": "ATL", "home": "MIA", "winner": "ATL", "record": "62-48", "h2h": "Tied 4-4", "h2h_winner": "ATL"}, {"date": "2026-07-30", "away": "TOR", "home": "DET", "winner": "TOR", "record": "51-59", "h2h": "DET leads 4-3", "h2h_winner": "TOR"}, {"date": "2026-07-30", "away": "LAA", "home": "ATH", "winner": "LAA", "record": "45-65", "h2h": "ATH leads 3-2", "h2h_winner": "LAA"}, {"date": "2026-07-30", "away": "STL", "home": "SEA", "winner": "STL", "record": "54-56", "h2h": "Tied 2-2", "h2h_winner": "STL"}, {"date": "2026-07-30", "away": "PHI", "home": "SF", "winner": "PHI", "record": "68-42", "h2h": "PHI leads 3-2", "h2h_winner": "PHI"}, {"date": "2026-07-30", "away": "KC", "home": "SD", "winner": "SD", "record": "57-54", "h2h": "SD leads 4-2", "h2h_winner": "SD"}, {"date": "2026-07-30", "away": "NYM", "home": "PIT", "winner": "NYM", "record": "55-55", "h2h": "PIT leads 4-3", "h2h_winner": "NYM"}, {"date": "2026-07-31", "away": "AZ", "home": "WSH", "winner": "WSH", "record": "55-56", "h2h": "WSH leads 7-3", "h2h_winner": "WSH"}, {"date": "2026-07-31", "away": "MIN", "home": "CWS", "winner": "CWS", "record": "32-79", "h2h": "MIN leads 4-3", "h2h_winner": "CWS"}, {"date": "2026-07-31", "away": "MIL", "home": "COL", "winner": "MIL", "record": "63-48", "h2h": "COL leads 5-4", "h2h_winner": "MIL"}, {"date": "2026-07-31", "away": "TB", "home": "TEX", "winner": "TEX", "record": "56-55", "h2h": "TEX leads 6-1", "h2h_winner": "TEX"}, {"date": "2026-07-31", "away": "CLE", "home": "CHC", "winner": "CHC", "record": "55-56", "h2h": "Tied 4-4", "h2h_winner": "CHC"}, {"date": "2026-07-31", "away": "HOU", "home": "LAD", "winner": "LAD", "record": "67-44", "h2h": "LAD leads 5-3", "h2h_winner": "LAD"}, {"date": "2026-07-31", "away": "NYY", "home": "BOS", "winner": "NYY", "record": "63-48", "h2h": "BOS leads 5-2", "h2h_winner": "NYY"}, {"date": "2026-07-31", "away": "CIN", "home": "BAL", "winner": "CIN", "record": "54-57", "h2h": "CIN leads 5-1", "h2h_winner": "CIN"}, {"date": "2026-07-31", "away": "ATL", "home": "MIA", "winner": "ATL", "record": "63-48", "h2h": "ATL leads 5-4", "h2h_winner": "ATL"}, {"date": "2026-07-31", "away": "TOR", "home": "DET", "winner": "TOR", "record": "52-59", "h2h": "Tied 4-4", "h2h_winner": "TOR"}, {"date": "2026-07-31", "away": "LAA", "home": "ATH", "winner": "ATH", "record": "48-63", "h2h": "ATH leads 4-2", "h2h_winner": "ATH"}, {"date": "2026-07-31", "away": "STL", "home": "SEA", "winner": "STL", "record": "55-56", "h2h": "STL leads 3-2", "h2h_winner": "STL"}, {"date": "2026-07-31", "away": "PHI", "home": "SF", "winner": "PHI", "record": "69-42", "h2h": "PHI leads 4-2", "h2h_winner": "PHI"}, {"date": "2026-07-31", "away": "KC", "home": "SD", "winner": "SD", "record": "58-54", "h2h": "SD leads 5-2", "h2h_winner": "SD"}, {"date": "2026-07-31", "away": "NYM", "home": "PIT", "winner": "NYM", "record": "56-55", "h2h": "Tied 4-4", "h2h_winner": "NYM"}, {"date": "2026-08-01", "away": "WSH", "home": "PHI", "winner": "WSH", "record": "56-56", "h2h": "WSH leads 4-2", "h2h_winner": "WSH"}, {"date": "2026-08-01", "away": "MIA", "home": "TEX", "winner": "MIA", "record": "39-73", "h2h": "Tied 3-3", "h2h_winner": "MIA"}, {"date": "2026-08-01", "away": "MIL", "home": "ATL", "winner": "ATL", "record": "64-48", "h2h": "MIL leads 3-2", "h2h_winner": "ATL"}, {"date": "2026-08-01", "away": "CLE", "home": "NYY", "winner": "CLE", "record": "69-43", "h2h": "CLE leads 4-1", "h2h_winner": "CLE"}, {"date": "2026-08-01", "away": "BAL", "home": "AZ", "winner": "AZ", "record": "57-56", "h2h": "BAL leads 3-2", "h2h_winner": "AZ"}, {"date": "2026-08-01", "away": "TOR", "home": "ATH", "winner": "ATH", "record": "49-63", "h2h": "Tied 3-3", "h2h_winner": "ATH"}, {"date": "2026-08-01", "away": "LAA", "home": "SD", "winner": "SD", "record": "59-54", "h2h": "Tied 2-2", "h2h_winner": "SD"}, {"date": "2026-08-01", "away": "DET", "home": "CWS", "winner": "CWS", "record": "33-79", "h2h": "CWS leads 4-2", "h2h_winner": "CWS"}, {"date": "2026-08-01", "away": "SEA", "home": "MIN", "winner": "MIN", "record": "62-50", "h2h": "MIN leads 2-1", "h2h_winner": "MIN"}, {"date": "2026-08-01", "away": "STL", "home": "HOU", "winner": "STL", "record": "56-56", "h2h": "Tied 2-2", "h2h_winner": "STL"}, {"date": "2026-08-01", "away": "CHC", "home": "KC", "winner": "KC", "record": "62-50", "h2h": "Tied 2-2", "h2h_winner": "KC"}, {"date": "2026-08-01", "away": "SF", "home": "COL", "winner": "COL", "record": "42-70", "h2h": "COL leads 4-3", "h2h_winner": "COL"}, {"date": "2026-08-01", "away": "TB", "home": "PIT", "winner": "PIT", "record": "58-54", "h2h": "PIT leads 5-2", "h2h_winner": "PIT"}, {"date": "2026-08-01", "away": "CIN", "home": "BOS", "winner": "CIN", "record": "55-57", "h2h": "Tied 2-2", "h2h_winner": "CIN"}, {"date": "2026-08-01", "away": "LAD", "home": "NYM", "winner": "NYM", "record": "57-55", "h2h": "NYM leads 3-1", "h2h_winner": "NYM"}, {"date": "2026-08-02", "away": "WSH", "home": "PHI", "winner": "PHI", "record": "70-43", "h2h": "WSH leads 4-3", "h2h_winner": "PHI"}, {"date": "2026-08-02", "away": "MIA", "home": "TEX", "winner": "MIA", "record": "40-73", "h2h": "MIA leads 4-3", "h2h_winner": "MIA"}, {"date": "2026-08-02", "away": "MIL", "home": "ATL", "winner": "ATL", "record": "65-48", "h2h": "Tied 3-3", "h2h_winner": "ATL"}, {"date": "2026-08-02", "away": "CLE", "home": "NYY", "winner": "NYY", "record": "64-49", "h2h": "CLE leads 4-2", "h2h_winner": "NYY"}, {"date": "2026-08-02", "away": "BAL", "home": "AZ", "winner": "BAL", "record": "63-50", "h2h": "BAL leads 4-2", "h2h_winner": "BAL"}, {"date": "2026-08-02", "away": "TOR", "home": "ATH", "winner": "ATH", "record": "50-63", "h2h": "ATH leads 4-3", "h2h_winner": "ATH"}, {"date": "2026-08-02", "away": "LAA", "home": "SD", "winner": "LAA", "record": "46-67", "h2h": "LAA leads 3-2", "h2h_winner": "LAA"}, {"date": "2026-08-02", "away": "DET", "home": "CWS", "winner": "CWS", "record": "34-79", "h2h": "CWS leads 5-2", "h2h_winner": "CWS"}, {"date": "2026-08-02", "away": "SEA", "home": "MIN", "winner": "MIN", "record": "63-50", "h2h": "MIN leads 3-1", "h2h_winner": "MIN"}, {"date": "2026-08-02", "away": "STL", "home": "HOU", "winner": "HOU", "record": "57-56", "h2h": "HOU leads 3-2", "h2h_winner": "HOU"}, {"date": "2026-08-02", "away": "CHC", "home": "KC", "winner": "CHC", "record": "56-57", "h2h": "CHC leads 3-2", "h2h_winner": "CHC"}, {"date": "2026-08-02", "away": "SF", "home": "COL", "winner": "SF", "record": "54-59", "h2h": "Tied 4-4", "h2h_winner": "SF"}, {"date": "2026-08-02", "away": "TB", "home": "PIT", "winner": "TB", "record": "56-57", "h2h": "PIT leads 5-3", "h2h_winner": "TB"}, {"date": "2026-08-02", "away": "CIN", "home": "BOS", "winner": "CIN", "record": "56-57", "h2h": "CIN leads 3-2", "h2h_winner": "CIN"}, {"date": "2026-08-02", "away": "LAD", "home": "NYM", "winner": "NYM", "record": "58-55", "h2h": "NYM leads 4-1", "h2h_winner": "NYM"}, {"date": "2026-08-03", "away": "WSH", "home": "PHI", "winner": "WSH", "record": "57-57", "h2h": "WSH leads 5-3", "h2h_winner": "WSH"}, {"date": "2026-08-03", "away": "MIA", "home": "TEX", "winner": "MIA", "record": "41-73", "h2h": "MIA leads 5-3", "h2h_winner": "MIA"}, {"date": "2026-08-03", "away": "MIL", "home": "ATL", "winner": "MIL", "record": "64-50", "h2h": "MIL leads 4-3", "h2h_winner": "MIL"}, {"date": "2026-08-03", "away": "CLE", "home": "NYY", "winner": "NYY", "record": "65-49", "h2h": "CLE leads 4-3", "h2h_winner": "NYY"}, {"date": "2026-08-03", "away": "BAL", "home": "AZ", "winner": "AZ", "record": "58-57", "h2h": "BAL leads 4-3", "h2h_winner": "AZ"}, {"date": "2026-08-03", "away": "TOR", "home": "ATH", "winner": "ATH", "record": "51-63", "h2h": "ATH leads 5-3", "h2h_winner": "ATH"}, {"date": "2026-08-03", "away": "LAA", "home": "SD", "winner": "SD", "record": "60-55", "h2h": "Tied 3-3", "h2h_winner": "SD"}, {"date": "2026-08-03", "away": "DET", "home": "CWS", "winner": "CWS", "record": "35-79", "h2h": "CWS leads 6-2", "h2h_winner": "CWS"}, {"date": "2026-08-03", "away": "SEA", "home": "MIN", "winner": "SEA", "record": "61-53", "h2h": "MIN leads 3-2", "h2h_winner": "SEA"}, {"date": "2026-08-03", "away": "STL", "home": "HOU", "winner": "STL", "record": "57-57", "h2h": "Tied 3-3", "h2h_winner": "STL"}, {"date": "2026-08-03", "away": "CHC", "home": "KC", "winner": "KC", "record": "63-51", "h2h": "Tied 3-3", "h2h_winner": "KC"}, {"date": "2026-08-03", "away": "SF", "home": "COL", "winner": "COL", "record": "43-71", "h2h": "COL leads 5-4", "h2h_winner": "COL"}, {"date": "2026-08-03", "away": "TB", "home": "PIT", "winner": "TB", "record": "57-57", "h2h": "PIT leads 5-4", "h2h_winner": "TB"}, {"date": "2026-08-03", "away": "CIN", "home": "BOS", "winner": "BOS", "record": "60-54", "h2h": "Tied 3-3", "h2h_winner": "BOS"}, {"date": "2026-08-03", "away": "LAD", "home": "NYM", "winner": "NYM", "record": "59-55", "h2h": "NYM leads 5-1", "h2h_winner": "NYM"}, {"date": "2026-08-04", "away": "CHC", "home": "MIL", "winner": "CHC", "record": "57-58", "h2h": "CHC leads 5-3", "h2h_winner": "CHC"}, {"date": "2026-08-04", "away": "TOR", "home": "CLE", "winner": "CLE", "record": "70-45", "h2h": "CLE leads 6-2", "h2h_winner": "CLE"}, {"date": "2026-08-04", "away": "TEX", "home": "SD", "winner": "SD", "record": "61-55", "h2h": "Tied 2-2", "h2h_winner": "SD"}, {"date": "2026-08-04", "away": "SEA", "home": "BAL", "winner": "BAL", "record": "64-51", "h2h": "BAL leads 4-2", "h2h_winner": "BAL"}, {"date": "2026-08-04", "away": "KC", "home": "PHI", "winner": "PHI", "record": "71-44", "h2h": "PHI leads 5-4", "h2h_winner": "PHI"}, {"date": "2026-08-04", "away": "AZ", "home": "ATH", "winner": "AZ", "record": "59-57", "h2h": "Tied 3-3", "h2h_winner": "AZ"}, {"date": "2026-08-04", "away": "CIN", "home": "LAD", "winner": "LAD", "record": "68-47", "h2h": "Tied 2-2", "h2h_winner": "LAD"}, {"date": "2026-08-04", "away": "PIT", "home": "NYY", "winner": "PIT", "record": "59-56", "h2h": "PIT leads 4-3", "h2h_winner": "PIT"}, {"date": "2026-08-04", "away": "DET", "home": "MIN", "winner": "MIN", "record": "64-51", "h2h": "MIN leads 3-1", "h2h_winner": "MIN"}, {"date": "2026-08-04", "away": "LAA", "home": "TB", "winner": "TB", "record": "58-57", "h2h": "TB leads 4-3", "h2h_winner": "TB"}, {"date": "2026-08-04", "away": "COL", "home": "ATL", "winner": "ATL", "record": "66-49", "h2h": "ATL leads 4-2", "h2h_winner": "ATL"}, {"date": "2026-08-04", "away": "HOU", "home": "WSH", "winner": "HOU", "record": "58-57", "h2h": "HOU leads 3-2", "h2h_winner": "HOU"}, {"date": "2026-08-04", "away": "BOS", "home": "MIA", "winner": "MIA", "record": "42-73", "h2h": "Tied 2-2", "h2h_winner": "MIA"}, {"date": "2026-08-04", "away": "SF", "home": "NYM", "winner": "NYM", "record": "60-55", "h2h": "Tied 2-2", "h2h_winner": "NYM"}, {"date": "2026-08-04", "away": "CWS", "home": "STL", "winner": "STL", "record": "58-57", "h2h": "CWS leads 6-2", "h2h_winner": "STL"}, {"date": "2026-08-05", "away": "CHC", "home": "MIL", "winner": "CHC", "record": "58-58", "h2h": "CHC leads 6-3", "h2h_winner": "CHC"}, {"date": "2026-08-05", "away": "TOR", "home": "CLE", "winner": "CLE", "record": "71-45", "h2h": "CLE leads 7-2", "h2h_winner": "CLE"}, {"date": "2026-08-05", "away": "TEX", "home": "SD", "winner": "TEX", "record": "57-59", "h2h": "TEX leads 3-2", "h2h_winner": "TEX"}, {"date": "2026-08-05", "away": "SEA", "home": "BAL", "winner": "SEA", "record": "62-54", "h2h": "BAL leads 4-3", "h2h_winner": "SEA"}, {"date": "2026-08-05", "away": "KC", "home": "PHI", "winner": "PHI", "record": "72-44", "h2h": "PHI leads 6-4", "h2h_winner": "PHI"}, {"date": "2026-08-05", "away": "AZ", "home": "ATH", "winner": "AZ", "record": "60-57", "h2h": "AZ leads 4-3", "h2h_winner": "AZ"}, {"date": "2026-08-05", "away": "CIN", "home": "LAD", "winner": "CIN", "record": "57-59", "h2h": "CIN leads 3-2", "h2h_winner": "CIN"}, {"date": "2026-08-05", "away": "PIT", "home": "NYY", "winner": "NYY", "record": "66-50", "h2h": "Tied 4-4", "h2h_winner": "NYY"}, {"date": "2026-08-05", "away": "DET", "home": "MIN", "winner": "DET", "record": "56-60", "h2h": "MIN leads 3-2", "h2h_winner": "DET"}, {"date": "2026-08-05", "away": "LAA", "home": "TB", "winner": "TB", "record": "59-57", "h2h": "TB leads 5-3", "h2h_winner": "TB"}, {"date": "2026-08-05", "away": "COL", "home": "ATL", "winner": "COL", "record": "44-72", "h2h": "ATL leads 4-3", "h2h_winner": "COL"}, {"date": "2026-08-05", "away": "HOU", "home": "WSH", "winner": "HOU", "record": "59-57", "h2h": "HOU leads 4-2", "h2h_winner": "HOU"}, {"date": "2026-08-05", "away": "BOS", "home": "MIA", "winner": "MIA", "record": "43-73", "h2h": "MIA leads 3-2", "h2h_winner": "MIA"}, {"date": "2026-08-05", "away": "SF", "home": "NYM", "winner": "NYM", "record": "61-55", "h2h": "NYM leads 3-2", "h2h_winner": "NYM"}, {"date": "2026-08-05", "away": "CWS", "home": "STL", "winner": "STL", "record": "59-57", "h2h": "CWS leads 6-3", "h2h_winner": "STL"}, {"date": "2026-08-06", "away": "CHC", "home": "MIL", "winner": "CHC", "record": "59-58", "h2h": "CHC leads 7-3", "h2h_winner": "CHC"}, {"date": "2026-08-06", "away": "TOR", "home": "CLE", "winner": "CLE", "record": "72-45", "h2h": "CLE leads 8-2", "h2h_winner": "CLE"}, {"date": "2026-08-06", "away": "TEX", "home": "SD", "winner": "SD", "record": "62-56", "h2h": "Tied 3-3", "h2h_winner": "SD"}, {"date": "2026-08-06", "away": "SEA", "home": "BAL", "winner": "BAL", "record": "65-52", "h2h": "BAL leads 5-3", "h2h_winner": "BAL"}, {"date": "2026-08-06", "away": "KC", "home": "PHI", "winner": "PHI", "record": "73-44", "h2h": "PHI leads 7-4", "h2h_winner": "PHI"}, {"date": "2026-08-06", "away": "AZ", "home": "ATH", "winner": "ATH", "record": "52-65", "h2h": "Tied 4-4", "h2h_winner": "ATH"}, {"date": "2026-08-06", "away": "CIN", "home": "LAD", "winner": "LAD", "record": "69-48", "h2h": "Tied 3-3", "h2h_winner": "LAD"}, {"date": "2026-08-06", "away": "PIT", "home": "NYY", "winner": "NYY", "record": "67-50", "h2h": "NYY leads 5-4", "h2h_winner": "NYY"}, {"date": "2026-08-06", "away": "DET", "home": "MIN", "winner": "DET", "record": "57-60", "h2h": "Tied 3-3", "h2h_winner": "DET"}, {"date": "2026-08-06", "away": "LAA", "home": "TB", "winner": "TB", "record": "60-57", "h2h": "TB leads 6-3", "h2h_winner": "TB"}, {"date": "2026-08-06", "away": "COL", "home": "ATL", "winner": "COL", "record": "45-72", "h2h": "Tied 4-4", "h2h_winner": "COL"}, {"date": "2026-08-06", "away": "HOU", "home": "WSH", "winner": "HOU", "record": "60-57", "h2h": "HOU leads 5-2", "h2h_winner": "HOU"}, {"date": "2026-08-06", "away": "BOS", "home": "MIA", "winner": "MIA", "record": "44-73", "h2h": "MIA leads 4-2", "h2h_winner": "MIA"}, {"date": "2026-08-06", "away": "SF", "home": "NYM", "winner": "SF", "record": "55-62", "h2h": "Tied 3-3", "h2h_winner": "SF"}, {"date": "2026-08-06", "away": "CWS", "home": "STL", "winner": "CWS", "record": "36-81", "h2h": "CWS leads 7-3", "h2h_winner": "CWS"}, {"date": "2026-08-07", "away": "WSH", "home": "DET", "winner": "WSH", "record": "58-60", "h2h": "Tied 2-2", "h2h_winner": "WSH"}, {"date": "2026-08-07", "away": "BAL", "home": "LAD", "winner": "BAL", "record": "66-52", "h2h": "BAL leads 4-3", "h2h_winner": "BAL"}, {"date": "2026-08-07", "away": "HOU", "home": "CIN", "winner": "HOU", "record": "61-57", "h2h": "CIN leads 4-2", "h2h_winner": "HOU"}, {"date": "2026-08-07", "away": "TOR", "home": "SEA", "winner": "TOR", "record": "53-65", "h2h": "TOR leads 3-1", "h2h_winner": "TOR"}, {"date": "2026-08-07", "away": "KC", "home": "COL", "winner": "KC", "record": "64-54", "h2h": "Tied 2-2", "h2h_winner": "KC"}, {"date": "2026-08-07", "away": "BOS", "home": "CWS", "winner": "BOS", "record": "61-57", "h2h": "BOS leads 4-1", "h2h_winner": "BOS"}, {"date": "2026-08-07", "away": "NYY", "home": "SD", "winner": "NYY", "record": "68-50", "h2h": "NYY leads 3-2", "h2h_winner": "NYY"}, {"date": "2026-08-07", "away": "ATL", "home": "TB", "winner": "ATL", "record": "67-51", "h2h": "ATL leads 4-1", "h2h_winner": "ATL"}, {"date": "2026-08-07", "away": "PHI", "home": "MIA", "winner": "MIA", "record": "45-73", "h2h": "MIA leads 3-2", "h2h_winner": "MIA"}, {"date": "2026-08-07", "away": "TEX", "home": "LAA", "winner": "TEX", "record": "58-60", "h2h": "TEX leads 2-1", "h2h_winner": "TEX"}, {"date": "2026-08-07", "away": "CHC", "home": "ATH", "winner": "CHC", "record": "60-58", "h2h": "ATH leads 3-2", "h2h_winner": "CHC"}, {"date": "2026-08-07", "away": "MIN", "home": "AZ", "winner": "AZ", "record": "61-58", "h2h": "AZ leads 5-4", "h2h_winner": "AZ"}, {"date": "2026-08-07", "away": "SF", "home": "MIL", "winner": "MIL", "record": "65-53", "h2h": "Tied 3-3", "h2h_winner": "MIL"}, {"date": "2026-08-07", "away": "PIT", "home": "STL", "winner": "STL", "record": "60-58", "h2h": "PIT leads 3-2", "h2h_winner": "STL"}, {"date": "2026-08-07", "away": "NYM", "home": "CLE", "winner": "NYM", "record": "62-56", "h2h": "CLE leads 3-2", "h2h_winner": "NYM"}, {"date": "2026-08-08", "away": "WSH", "home": "DET", "winner": "WSH", "record": "59-60", "h2h": "WSH leads 3-2", "h2h_winner": "WSH"}, {"date": "2026-08-08", "away": "BAL", "home": "LAD", "winner": "BAL", "record": "67-52", "h2h": "BAL leads 5-3", "h2h_winner": "BAL"}, {"date": "2026-08-08", "away": "HOU", "home": "CIN", "winner": "CIN", "record": "58-61", "h2h": "CIN leads 5-2", "h2h_winner": "CIN"}, {"date": "2026-08-08", "away": "TOR", "home": "SEA", "winner": "TOR", "record": "54-65", "h2h": "TOR leads 4-1", "h2h_winner": "TOR"}, {"date": "2026-08-08", "away": "KC", "home": "COL", "winner": "KC", "record": "65-54", "h2h": "KC leads 3-2", "h2h_winner": "KC"}, {"date": "2026-08-08", "away": "BOS", "home": "CWS", "winner": "CWS", "record": "37-82", "h2h": "BOS leads 4-2", "h2h_winner": "CWS"}, {"date": "2026-08-08", "away": "NYY", "home": "SD", "winner": "SD", "record": "63-57", "h2h": "Tied 3-3", "h2h_winner": "SD"}, {"date": "2026-08-08", "away": "ATL", "home": "TB", "winner": "TB", "record": "61-58", "h2h": "ATL leads 4-2", "h2h_winner": "TB"}, {"date": "2026-08-08", "away": "PHI", "home": "MIA", "winner": "PHI", "record": "74-45", "h2h": "Tied 3-3", "h2h_winner": "PHI"}, {"date": "2026-08-08", "away": "TEX", "home": "LAA", "winner": "TEX", "record": "59-60", "h2h": "TEX leads 3-1", "h2h_winner": "TEX"}, {"date": "2026-08-08", "away": "CHC", "home": "ATH", "winner": "CHC", "record": "61-58", "h2h": "Tied 3-3", "h2h_winner": "CHC"}, {"date": "2026-08-08", "away": "MIN", "home": "AZ", "winner": "MIN", "record": "65-54", "h2h": "Tied 5-5", "h2h_winner": "MIN"}, {"date": "2026-08-08", "away": "SF", "home": "MIL", "winner": "MIL", "record": "66-53", "h2h": "MIL leads 4-3", "h2h_winner": "MIL"}, {"date": "2026-08-08", "away": "PIT", "home": "STL", "winner": "PIT", "record": "60-59", "h2h": "PIT leads 4-2", "h2h_winner": "PIT"}, {"date": "2026-08-08", "away": "NYM", "home": "CLE", "winner": "NYM", "record": "63-56", "h2h": "Tied 3-3", "h2h_winner": "NYM"}, {"date": "2026-08-09", "away": "WSH", "home": "DET", "winner": "DET", "record": "58-62", "h2h": "Tied 3-3", "h2h_winner": "DET"}, {"date": "2026-08-09", "away": "BAL", "home": "LAD", "winner": "LAD", "record": "70-50", "h2h": "BAL leads 5-4", "h2h_winner": "LAD"}, {"date": "2026-08-09", "away": "HOU", "home": "CIN", "winner": "CIN", "record": "59-61", "h2h": "CIN leads 6-2", "h2h_winner": "CIN"}, {"date": "2026-08-09", "away": "TOR", "home": "SEA", "winner": "TOR", "record": "55-65", "h2h": "TOR leads 5-1", "h2h_winner": "TOR"}, {"date": "2026-08-09", "away": "KC", "home": "COL", "winner": "COL", "record": "46-74", "h2h": "Tied 3-3", "h2h_winner": "COL"}, {"date": "2026-08-09", "away": "BOS", "home": "CWS", "winner": "BOS", "record": "62-58", "h2h": "BOS leads 5-2", "h2h_winner": "BOS"}, {"date": "2026-08-09", "away": "NYY", "home": "SD", "winner": "SD", "record": "64-57", "h2h": "SD leads 4-3", "h2h_winner": "SD"}, {"date": "2026-08-09", "away": "ATL", "home": "TB", "winner": "TB", "record": "62-58", "h2h": "ATL leads 4-3", "h2h_winner": "TB"}, {"date": "2026-08-09", "away": "PHI", "home": "MIA", "winner": "PHI", "record": "75-45", "h2h": "PHI leads 4-3", "h2h_winner": "PHI"}, {"date": "2026-08-09", "away": "TEX", "home": "LAA", "winner": "LAA", "record": "47-73", "h2h": "TEX leads 3-2", "h2h_winner": "LAA"}, {"date": "2026-08-09", "away": "CHC", "home": "ATH", "winner": "ATH", "record": "53-67", "h2h": "ATH leads 4-3", "h2h_winner": "ATH"}, {"date": "2026-08-09", "away": "MIN", "home": "AZ", "winner": "AZ", "record": "62-59", "h2h": "AZ leads 6-5", "h2h_winner": "AZ"}, {"date": "2026-08-09", "away": "SF", "home": "MIL", "winner": "SF", "record": "56-64", "h2h": "Tied 4-4", "h2h_winner": "SF"}, {"date": "2026-08-09", "away": "PIT", "home": "STL", "winner": "STL", "record": "61-59", "h2h": "PIT leads 4-3", "h2h_winner": "STL"}, {"date": "2026-08-09", "away": "NYM", "home": "CLE", "winner": "NYM", "record": "64-56", "h2h": "NYM leads 4-3", "h2h_winner": "NYM"}, {"date": "2026-08-10", "away": "MIL", "home": "BOS", "winner": "BOS", "record": "63-58", "h2h": "Tied 2-2", "h2h_winner": "BOS"}, {"date": "2026-08-10", "away": "SEA", "home": "PHI", "winner": "PHI", "record": "76-45", "h2h": "PHI leads 4-2", "h2h_winner": "PHI"}, {"date": "2026-08-10", "away": "CWS", "home": "COL", "winner": "COL", "record": "47-74", "h2h": "Tied 2-2", "h2h_winner": "COL"}, {"date": "2026-08-10", "away": "AZ", "home": "LAA", "winner": "LAA", "record": "48-73", "h2h": "LAA leads 4-3", "h2h_winner": "LAA"}, {"date": "2026-08-10", "away": "MIN", "home": "LAD", "winner": "LAD", "record": "71-50", "h2h": "LAD leads 2-1", "h2h_winner": "LAD"}, {"date": "2026-08-10", "away": "TB", "home": "WSH", "winner": "WSH", "record": "60-61", "h2h": "Tied 2-2", "h2h_winner": "WSH"}, {"date": "2026-08-10", "away": "TEX", "home": "STL", "winner": "TEX", "record": "60-61", "h2h": "TEX leads 2-1", "h2h_winner": "TEX"}, {"date": "2026-08-10", "away": "ATH", "home": "PIT", "winner": "ATH", "record": "54-67", "h2h": "ATH leads 4-3", "h2h_winner": "ATH"}, {"date": "2026-08-10", "away": "CHC", "home": "TOR", "winner": "TOR", "record": "56-65", "h2h": "TOR leads 2-1", "h2h_winner": "TOR"}, {"date": "2026-08-10", "away": "NYM", "home": "CLE", "winner": "CLE", "record": "73-48", "h2h": "Tied 4-4", "h2h_winner": "CLE"}, {"date": "2026-08-10", "away": "ATL", "home": "CIN", "winner": "ATL", "record": "68-53", "h2h": "ATL leads 4-2", "h2h_winner": "ATL"}, {"date": "2026-08-10", "away": "KC", "home": "SF", "winner": "SF", "record": "57-64", "h2h": "Tied 2-2", "h2h_winner": "SF"}, {"date": "2026-08-10", "away": "MIA", "home": "SD", "winner": "SD", "record": "65-57", "h2h": "SD leads 2-1", "h2h_winner": "SD"}, {"date": "2026-08-10", "away": "HOU", "home": "NYY", "winner": "NYY", "record": "69-52", "h2h": "NYY leads 3-1", "h2h_winner": "NYY"}, {"date": "2026-08-10", "away": "BAL", "home": "DET", "winner": "BAL", "record": "68-53", "h2h": "BAL leads 3-1", "h2h_winner": "BAL"}, {"date": "2026-08-11", "away": "MIL", "home": "BOS", "winner": "BOS", "record": "64-58", "h2h": "BOS leads 3-2", "h2h_winner": "BOS"}, {"date": "2026-08-11", "away": "SEA", "home": "PHI", "winner": "PHI", "record": "77-45", "h2h": "PHI leads 5-2", "h2h_winner": "PHI"}, {"date": "2026-08-11", "away": "CWS", "home": "COL", "winner": "CWS", "record": "38-84", "h2h": "CWS leads 3-2", "h2h_winner": "CWS"}, {"date": "2026-08-11", "away": "AZ", "home": "LAA", "winner": "LAA", "record": "49-73", "h2h": "LAA leads 5-3", "h2h_winner": "LAA"}, {"date": "2026-08-11", "away": "MIN", "home": "LAD", "winner": "MIN", "record": "66-56", "h2h": "Tied 2-2", "h2h_winner": "MIN"}, {"date": "2026-08-11", "away": "TB", "home": "WSH", "winner": "WSH", "record": "61-61", "h2h": "WSH leads 3-2", "h2h_winner": "WSH"}, {"date": "2026-08-11", "away": "TEX", "home": "STL", "winner": "STL", "record": "62-60", "h2h": "Tied 2-2", "h2h_winner": "STL"}, {"date": "2026-08-11", "away": "ATH", "home": "PIT", "winner": "PIT", "record": "61-61", "h2h": "Tied 4-4", "h2h_winner": "PIT"}, {"date": "2026-08-11", "away": "CHC", "home": "TOR", "winner": "TOR", "record": "57-65", "h2h": "TOR leads 3-1", "h2h_winner": "TOR"}, {"date": "2026-08-11", "away": "NYM", "home": "CLE", "winner": "CLE", "record": "74-48", "h2h": "CLE leads 5-4", "h2h_winner": "CLE"}, {"date": "2026-08-11", "away": "ATL", "home": "CIN", "winner": "ATL", "record": "69-53", "h2h": "ATL leads 5-2", "h2h_winner": "ATL"}, {"date": "2026-08-11", "away": "KC", "home": "SF", "winner": "KC", "record": "66-56", "h2h": "KC leads 3-2", "h2h_winner": "KC"}, {"date": "2026-08-11", "away": "MIA", "home": "SD", "winner": "MIA", "record": "46-76", "h2h": "Tied 2-2", "h2h_winner": "MIA"}, {"date": "2026-08-11", "away": "HOU", "home": "NYY", "winner": "HOU", "record": "62-60", "h2h": "NYY leads 3-2", "h2h_winner": "HOU"}, {"date": "2026-08-11", "away": "BAL", "home": "DET", "winner": "DET", "record": "59-63", "h2h": "BAL leads 3-2", "h2h_winner": "DET"}, {"date": "2026-08-12", "away": "MIL", "home": "BOS", "winner": "BOS", "record": "65-58", "h2h": "BOS leads 4-2", "h2h_winner": "BOS"}, {"date": "2026-08-12", "away": "SEA", "home": "PHI", "winner": "SEA", "record": "63-60", "h2h": "PHI leads 5-3", "h2h_winner": "SEA"}, {"date": "2026-08-12", "away": "CWS", "home": "COL", "winner": "COL", "record": "48-75", "h2h": "Tied 3-3", "h2h_winner": "COL"}, {"date": "2026-08-12", "away": "AZ", "home": "LAA", "winner": "LAA", "record": "50-73", "h2h": "LAA leads 6-3", "h2h_winner": "LAA"}, {"date": "2026-08-12", "away": "MIN", "home": "LAD", "winner": "LAD", "record": "72-51", "h2h": "LAD leads 3-2", "h2h_winner": "LAD"}, {"date": "2026-08-12", "away": "TB", "home": "WSH", "winner": "TB", "record": "63-60", "h2h": "Tied 3-3", "h2h_winner": "TB"}, {"date": "2026-08-12", "away": "TEX", "home": "STL", "winner": "TEX", "record": "61-62", "h2h": "TEX leads 3-2", "h2h_winner": "TEX"}, {"date": "2026-08-12", "away": "ATH", "home": "PIT", "winner": "PIT", "record": "62-61", "h2h": "PIT leads 5-4", "h2h_winner": "PIT"}, {"date": "2026-08-12", "away": "CHC", "home": "TOR", "winner": "CHC", "record": "62-61", "h2h": "TOR leads 3-2", "h2h_winner": "CHC"}, {"date": "2026-08-12", "away": "NYM", "home": "CLE", "winner": "CLE", "record": "75-48", "h2h": "CLE leads 6-4", "h2h_winner": "CLE"}, {"date": "2026-08-12", "away": "ATL", "home": "CIN", "winner": "ATL", "record": "70-53", "h2h": "ATL leads 6-2", "h2h_winner": "ATL"}, {"date": "2026-08-12", "away": "KC", "home": "SF", "winner": "SF", "record": "58-65", "h2h": "Tied 3-3", "h2h_winner": "SF"}, {"date": "2026-08-12", "away": "MIA", "home": "SD", "winner": "SD", "record": "66-58", "h2h": "SD leads 3-2", "h2h_winner": "SD"}, {"date": "2026-08-12", "away": "HOU", "home": "NYY", "winner": "NYY", "record": "70-53", "h2h": "NYY leads 4-2", "h2h_winner": "NYY"}, {"date": "2026-08-12", "away": "BAL", "home": "DET", "winner": "DET", "record": "60-63", "h2h": "Tied 3-3", "h2h_winner": "DET"}, {"date": "2026-08-13", "away": "KC", "home": "SEA", "winner": "SEA", "record": "64-60", "h2h": "KC leads 3-2", "h2h_winner": "SEA"}, {"date": "2026-08-13", "away": "MIL", "home": "MIA", "winner": "MIA", "record": "47-77", "h2h": "Tied 3-3", "h2h_winner": "MIA"}, {"date": "2026-08-13", "away": "STL", "home": "CWS", "winner": "CWS", "record": "39-85", "h2h": "CWS leads 8-3", "h2h_winner": "CWS"}, {"date": "2026-08-13", "away": "BOS", "home": "MIN", "winner": "MIN", "record": "67-57", "h2h": "MIN leads 2-1", "h2h_winner": "MIN"}, {"date": "2026-08-13", "away": "LAA", "home": "AZ", "winner": "AZ", "record": "63-62", "h2h": "LAA leads 6-4", "h2h_winner": "AZ"}, {"date": "2026-08-13", "away": "SF", "home": "LAD", "winner": "LAD", "record": "73-51", "h2h": "LAD leads 5-1", "h2h_winner": "LAD"}, {"date": "2026-08-13", "away": "ATL", "home": "BAL", "winner": "BAL", "record": "69-55", "h2h": "BAL leads 4-1", "h2h_winner": "BAL"}, {"date": "2026-08-13", "away": "PHI", "home": "TOR", "winner": "PHI", "record": "78-46", "h2h": "PHI leads 4-3", "h2h_winner": "PHI"}, {"date": "2026-08-13", "away": "TEX", "home": "NYM", "winner": "TEX", "record": "62-62", "h2h": "NYM leads 3-2", "h2h_winner": "TEX"}, {"date": "2026-08-13", "away": "WSH", "home": "CLE", "winner": "WSH", "record": "62-62", "h2h": "WSH leads 2-1", "h2h_winner": "WSH"}, {"date": "2026-08-13", "away": "DET", "home": "COL", "winner": "COL", "record": "49-75", "h2h": "COL leads 2-1", "h2h_winner": "COL"}, {"date": "2026-08-13", "away": "HOU", "home": "PIT", "winner": "HOU", "record": "63-61", "h2h": "HOU leads 3-2", "h2h_winner": "HOU"}, {"date": "2026-08-13", "away": "ATH", "home": "NYY", "winner": "ATH", "record": "55-69", "h2h": "ATH leads 4-2", "h2h_winner": "ATH"}, {"date": "2026-08-13", "away": "TB", "home": "SD", "winner": "TB", "record": "64-60", "h2h": "TB leads 6-4", "h2h_winner": "TB"}, {"date": "2026-08-13", "away": "CHC", "home": "CIN", "winner": "CHC", "record": "63-61", "h2h": "CHC leads 4-1", "h2h_winner": "CHC"}, {"date": "2026-08-14", "away": "KC", "home": "SEA", "winner": "SEA", "record": "65-60", "h2h": "Tied 3-3", "h2h_winner": "SEA"}, {"date": "2026-08-14", "away": "MIL", "home": "MIA", "winner": "MIA", "record": "48-77", "h2h": "MIA leads 4-3", "h2h_winner": "MIA"}, {"date": "2026-08-14", "away": "STL", "home": "CWS", "winner": "CWS", "record": "40-85", "h2h": "CWS leads 9-3", "h2h_winner": "CWS"}, {"date": "2026-08-14", "away": "BOS", "home": "MIN", "winner": "BOS", "record": "66-59", "h2h": "Tied 2-2", "h2h_winner": "BOS"}, {"date": "2026-08-14", "away": "LAA", "home": "AZ", "winner": "LAA", "record": "51-74", "h2h": "LAA leads 7-4", "h2h_winner": "LAA"}, {"date": "2026-08-14", "away": "SF", "home": "LAD", "winner": "LAD", "record": "74-51", "h2h": "LAD leads 6-1", "h2h_winner": "LAD"}, {"date": "2026-08-14", "away": "ATL", "home": "BAL", "winner": "ATL", "record": "71-54", "h2h": "BAL leads 4-2", "h2h_winner": "ATL"}, {"date": "2026-08-14", "away": "PHI", "home": "TOR", "winner": "TOR", "record": "58-67", "h2h": "Tied 4-4", "h2h_winner": "TOR"}, {"date": "2026-08-14", "away": "TEX", "home": "NYM", "winner": "TEX", "record": "63-62", "h2h": "Tied 3-3", "h2h_winner": "TEX"}, {"date": "2026-08-14", "away": "WSH", "home": "CLE", "winner": "CLE", "record": "76-49", "h2h": "Tied 2-2", "h2h_winner": "CLE"}, {"date": "2026-08-14", "away": "DET", "home": "COL", "winner": "DET", "record": "61-64", "h2h": "Tied 2-2", "h2h_winner": "DET"}, {"date": "2026-08-14", "away": "HOU", "home": "PIT", "winner": "HOU", "record": "64-61", "h2h": "HOU leads 4-2", "h2h_winner": "HOU"}, {"date": "2026-08-14", "away": "ATH", "home": "NYY", "winner": "NYY", "record": "71-54", "h2h": "ATH leads 4-3", "h2h_winner": "NYY"}, {"date": "2026-08-14", "away": "TB", "home": "SD", "winner": "TB", "record": "65-60", "h2h": "TB leads 7-4", "h2h_winner": "TB"}, {"date": "2026-08-14", "away": "CHC", "home": "CIN", "winner": "CHC", "record": "64-61", "h2h": "CHC leads 5-1", "h2h_winner": "CHC"}, {"date": "2026-08-15", "away": "CWS", "home": "DET", "winner": "CWS", "record": "41-85", "h2h": "CWS leads 7-2", "h2h_winner": "CWS"}, {"date": "2026-08-15", "away": "STL", "home": "CHC", "winner": "STL", "record": "63-63", "h2h": "STL leads 2-1", "h2h_winner": "STL"}, {"date": "2026-08-15", "away": "NYY", "home": "TOR", "winner": "TOR", "record": "59-67", "h2h": "Tied 3-3", "h2h_winner": "TOR"}, {"date": "2026-08-15", "away": "COL", "home": "SF", "winner": "SF", "record": "59-67", "h2h": "Tied 5-5", "h2h_winner": "SF"}, {"date": "2026-08-15", "away": "WSH", "home": "NYM", "winner": "NYM", "record": "65-61", "h2h": "WSH leads 3-2", "h2h_winner": "NYM"}, {"date": "2026-08-15", "away": "BAL", "home": "TB", "winner": "BAL", "record": "70-56", "h2h": "BAL leads 4-3", "h2h_winner": "BAL"}, {"date": "2026-08-15", "away": "MIA", "home": "CIN", "winner": "MIA", "record": "49-77", "h2h": "MIA leads 2-1", "h2h_winner": "MIA"}, {"date": "2026-08-15", "away": "SEA", "home": "HOU", "winner": "SEA", "record": "66-60", "h2h": "SEA leads 4-3", "h2h_winner": "SEA"}, {"date": "2026-08-15", "away": "PHI", "home": "MIN", "winner": "PHI", "record": "79-47", "h2h": "PHI leads 3-1", "h2h_winner": "PHI"}, {"date": "2026-08-15", "away": "SD", "home": "CLE", "winner": "CLE", "record": "77-49", "h2h": "CLE leads 4-1", "h2h_winner": "CLE"}, {"date": "2026-08-15", "away": "AZ", "home": "ATL", "winner": "AZ", "record": "64-63", "h2h": "Tied 3-3", "h2h_winner": "AZ"}, {"date": "2026-08-15", "away": "MIL", "home": "LAD", "winner": "MIL", "record": "67-59", "h2h": "LAD leads 3-2", "h2h_winner": "MIL"}, {"date": "2026-08-15", "away": "BOS", "home": "PIT", "winner": "BOS", "record": "67-59", "h2h": "Tied 3-3", "h2h_winner": "BOS"}, {"date": "2026-08-15", "away": "KC", "home": "LAA", "winner": "LAA", "record": "52-74", "h2h": "LAA leads 4-1", "h2h_winner": "LAA"}, {"date": "2026-08-15", "away": "TEX", "home": "ATH", "winner": "TEX", "record": "64-62", "h2h": "ATH leads 3-2", "h2h_winner": "TEX"}, {"date": "2026-08-16", "away": "CWS", "home": "DET", "winner": "DET", "record": "62-65", "h2h": "CWS leads 7-3", "h2h_winner": "DET"}, {"date": "2026-08-16", "away": "STL", "home": "CHC", "winner": "CHC", "record": "65-62", "h2h": "Tied 2-2", "h2h_winner": "CHC"}, {"date": "2026-08-16", "away": "NYY", "home": "TOR", "winner": "NYY", "record": "72-55", "h2h": "NYY leads 4-3", "h2h_winner": "NYY"}, {"date": "2026-08-16", "away": "COL", "home": "SF", "winner": "SF", "record": "60-67", "h2h": "SF leads 6-5", "h2h_winner": "SF"}, {"date": "2026-08-16", "away": "WSH", "home": "NYM", "winner": "NYM", "record": "66-61", "h2h": "Tied 3-3", "h2h_winner": "NYM"}, {"date": "2026-08-16", "away": "BAL", "home": "TB", "winner": "TB", "record": "66-61", "h2h": "Tied 4-4", "h2h_winner": "TB"}, {"date": "2026-08-16", "away": "MIA", "home": "CIN", "winner": "CIN", "record": "60-67", "h2h": "Tied 2-2", "h2h_winner": "CIN"}, {"date": "2026-08-16", "away": "SEA", "home": "HOU", "winner": "HOU", "record": "65-62", "h2h": "Tied 4-4", "h2h_winner": "HOU"}, {"date": "2026-08-16", "away": "PHI", "home": "MIN", "winner": "PHI", "record": "80-47", "h2h": "PHI leads 4-1", "h2h_winner": "PHI"}, {"date": "2026-08-16", "away": "SD", "home": "CLE", "winner": "SD", "record": "67-61", "h2h": "CLE leads 4-2", "h2h_winner": "SD"}, {"date": "2026-08-16", "away": "AZ", "home": "ATL", "winner": "ATL", "record": "72-55", "h2h": "ATL leads 4-3", "h2h_winner": "ATL"}, {"date": "2026-08-16", "away": "MIL", "home": "LAD", "winner": "LAD", "record": "75-52", "h2h": "LAD leads 4-2", "h2h_winner": "LAD"}, {"date": "2026-08-16", "away": "BOS", "home": "PIT", "winner": "BOS", "record": "68-59", "h2h": "BOS leads 4-3", "h2h_winner": "BOS"}, {"date": "2026-08-16", "away": "KC", "home": "LAA", "winner": "KC", "record": "67-60", "h2h": "LAA leads 4-2", "h2h_winner": "KC"}, {"date": "2026-08-16", "away": "TEX", "home": "ATH", "winner": "ATH", "record": "56-71", "h2h": "ATH leads 4-2", "h2h_winner": "ATH"}, {"date": "2026-08-17", "away": "NYY", "home": "BOS", "winner": "\\u2014", "record": "NYY (72-55) @ BOS (68-59)", "h2h": "BOS leads 5-2", "h2h_winner": "\\u2014"}, {"date": "2026-08-17", "away": "TB", "home": "BAL", "winner": "\\u2014", "record": "TB (66-61) @ BAL (70-57)", "h2h": "Tied 4-4", "h2h_winner": "\\u2014"}, {"date": "2026-08-17", "away": "TOR", "home": "CWS", "winner": "\\u2014", "record": "TOR (59-68) @ CWS (41-86)", "h2h": "Tied 3-3", "h2h_winner": "\\u2014"}, {"date": "2026-08-17", "away": "DET", "home": "CLE", "winner": "\\u2014", "record": "DET (62-65) @ CLE (77-50)", "h2h": "CLE leads 2-1", "h2h_winner": "\\u2014"}, {"date": "2026-08-17", "away": "MIN", "home": "KC", "winner": "\\u2014", "record": "MIN (67-60) @ KC (67-60)", "h2h": "MIN leads 3-2", "h2h_winner": "\\u2014"}, {"date": "2026-08-17", "away": "LAA", "home": "TEX", "winner": "\\u2014", "record": "LAA (52-75) @ TEX (64-63)", "h2h": "TEX leads 3-2", "h2h_winner": "\\u2014"}, {"date": "2026-08-17", "away": "HOU", "home": "ATH", "winner": "\\u2014", "record": "HOU (65-62) @ ATH (56-71)", "h2h": "Tied 2-2", "h2h_winner": "\\u2014"}, {"date": "2026-08-17", "away": "SEA", "home": "SF", "winner": "\\u2014", "record": "SEA (66-61) @ SF (60-67)", "h2h": "SF leads 3-2", "h2h_winner": "\\u2014"}, {"date": "2026-08-17", "away": "ATL", "home": "PHI", "winner": "\\u2014", "record": "ATL (72-55) @ PHI (80-47)", "h2h": "ATL leads 5-2", "h2h_winner": "\\u2014"}, {"date": "2026-08-17", "away": "NYM", "home": "MIA", "winner": "\\u2014", "record": "NYM (66-61) @ MIA (49-78)", "h2h": "MIA leads 2-1", "h2h_winner": "\\u2014"}, {"date": "2026-08-17", "away": "WSH", "home": "CIN", "winner": "\\u2014", "record": "WSH (62-65) @ CIN (60-67)", "h2h": "Tied 2-2", "h2h_winner": "\\u2014"}, {"date": "2026-08-17", "away": "CHC", "home": "MIL", "winner": "\\u2014", "record": "CHC (65-62) @ MIL (67-60)", "h2h": "CHC leads 7-3", "h2h_winner": "\\u2014"}, {"date": "2026-08-17", "away": "PIT", "home": "STL", "winner": "\\u2014", "record": "PIT (62-65) @ STL (63-64)", "h2h": "PIT leads 4-3", "h2h_winner": "\\u2014"}, {"date": "2026-08-17", "away": "LAD", "home": "AZ", "winner": "\\u2014", "record": "LAD (75-52) @ AZ (64-64)", "h2h": "LAD leads 3-1", "h2h_winner": "\\u2014"}, {"date": "2026-08-17", "away": "SD", "home": "COL", "winner": "\\u2014", "record": "SD (67-61) @ COL (49-78)", "h2h": "COL leads 4-3", "h2h_winner": "\\u2014"}]');
+
+// The official MLB Stats API's numeric team IDs, mapped to the same display
+// abbreviations used throughout the site.
+const TEAM_ID_MAP = {
+  108:'LAA', 109:'AZ', 110:'BAL', 111:'BOS', 112:'CHC', 113:'CIN', 114:'CLE', 115:'COL',
+  116:'DET', 117:'HOU', 118:'KC', 119:'LAD', 120:'WSH', 121:'NYM', 133:'ATH', 134:'PIT',
+  135:'SD', 136:'SEA', 137:'SF', 138:'STL', 139:'TB', 140:'TEX', 141:'TOR', 142:'MIN',
+  143:'PHI', 144:'ATL', 145:'CWS', 146:'MIA', 147:'NYY', 158:'MIL'
+};
+function teamAbbr(id){ return TEAM_ID_MAP[id] || null; }
+
+// Computes "today" in US Eastern time — the timezone MLB's own schedule data
+// is actually anchored to (a game's "officialDate" reflects the US baseball
+// day, not UTC or the viewer's own clock). Using the viewer's local time here
+// was a real bug: someone viewing from well ahead of US time (Europe, say)
+// could have their local calendar day roll over while it's still "today" by
+// MLB's own reckoning, making every row's date/highlighting logic silently
+// work off the wrong day. Intl.DateTimeFormat handles the EDT/EST switch
+// automatically, so this stays correct across the whole season.
+function todayStr(){
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(new Date());
+  const get = (type) => parts.find(p => p.type === type).value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+let LIVE_MAP = {}; // key: "AWAY@HOME" (display abbrs) for today -> {awayScore, homeScore, status, winner}
+let allRows = []; // combined rows to render
+let CURRENT_FILTERED = []; // the rows currently shown in the table, after filters — used by CSV export
+let TODAY_SORT_DIR = 'asc'; // 'asc' (earliest game first) or 'desc' — only applies in the "Today & live" view, since every row there shares the same date and sorting by date alone doesn't distinguish anything; sorts by actual game start time instead
+
+// Shared "My Picks" storage — used identically on this page, Edge, Parlays,
+// and the Picks page itself. Since these are separate static pages with no
+// backend, localStorage (shared across all pages on the same site) is what
+// lets a checkbox checked here show up on picks.html.
+const PICKS_STORAGE_KEY = 'mlb_site_picks_v1';
+function loadSavedPicks(){
+  try{ return JSON.parse(localStorage.getItem(PICKS_STORAGE_KEY) || '[]'); }
+  catch(e){ return []; }
+}
+function saveSavedPicksList(picks){
+  try{ localStorage.setItem(PICKS_STORAGE_KEY, JSON.stringify(picks)); }
+  catch(e){ console.error('Could not save picks', e); }
+}
+function isPickSaved(id){
+  return loadSavedPicks().some(p => p.id === id);
+}
+function toggleSavedPick(pick, isChecked){
+  let picks = loadSavedPicks();
+  if(isChecked){
+    if(!picks.some(p => p.id === pick.id)) picks.push({ ...pick, addedAt: new Date().toISOString() });
+  } else {
+    picks = picks.filter(p => p.id !== pick.id);
+  }
+  saveSavedPicksList(picks);
+}
+let SEASON_DATA = []; // populated at init() from the MLB Stats API, falls back to FALLBACK_DATA if that fails
+let STANDINGS = {}; // team -> {w, l} current overall season record, set by backfillSeasonRecords()
+let STANDINGS_BY_DATE = {}; // date -> {team -> {w, l}} — each team's record as of that specific date, for the H2H tiebreak
+
+const SEASON_START = '2026-03-26'; // Opening Day 2026
+// gameType codes: F = Wild Card, D = Division Series, L = League Championship Series, W = World Series
+const POSTSEASON_TYPES = new Set(['F', 'D', 'L', 'W']);
+const POSTSEASON_LABELS = { F: 'Wild Card', D: 'Division Series', L: 'Championship Series', W: 'World Series' };
+function playoffLabel(gameType){
+  return POSTSEASON_LABELS[gameType] || (POSTSEASON_TYPES.has(gameType) ? 'Playoffs' : '');
+}
+
+// Pulls the ENTIRE season's completed games in one request. Switched from
+// ESPN's unofficial scoreboard endpoint (which started hard-blocking browser
+// requests with CORS/403 errors — a server-side block that no client-side
+// retry or throttling can work around) to MLB's own official Stats API, which
+// both supports CORS for browser use and supports a date-range query, so this
+// no longer needs ~150 separate day-by-day requests at all.
+async function fetchFullSeason(){
+  try{
+    const endStr = todayStr(); // US Eastern "today" — see todayStr() above
+    const res = await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate=${SEASON_START}&endDate=${endStr}`);
+    if(!res.ok) return [];
+    const json = await res.json();
+    const games = [];
+    (json.dates || []).forEach(d => {
+      (d.games || []).forEach(g => {
+        if(!POSTSEASON_TYPES.has(g.gameType) && g.gameType !== 'R') return; // regular season + postseason — excludes the All-Star Game, spring training
+        if(!g.status || g.status.detailedState !== 'Final') return; // completed games only
+        const awayAbbr = teamAbbr(g.teams.away.team.id);
+        const homeAbbr = teamAbbr(g.teams.home.team.id);
+        if(!awayAbbr || !homeAbbr) return;
+        const winner = g.teams.away.isWinner ? awayAbbr : (g.teams.home.isWinner ? homeAbbr : null);
+        if(!winner) return; // guards against a suspended/no-decision game with no declared winner
+        games.push({
+          id: g.gamePk,
+          eventTime: g.gameDate, // exact start timestamp — distinguishes a real
+                                  // doubleheader (two different times) from the
+                                  // same game counted twice (identical time)
+          date: g.officialDate, // MLB's own "which calendar day this game belongs
+                                 // to" field — more reliable than slicing a timestamp
+          gameNumber: g.gameNumber, // 1 or 2 — used below to label a real doubleheader
+          gameType: g.gameType, // R = regular season, F/D/L/W = postseason rounds
+          away: awayAbbr,
+          home: homeAbbr,
+          winner,
+          awayScore: g.teams.away.score,
+          homeScore: g.teams.home.score,
+          record: '', // filled in by backfillSeasonRecords() once the full season is loaded
+          h2h: '',
+          h2h_winner: '—'
+        });
+      });
+    });
+    const byKey = new Map();
+    games.forEach(g => {
+      const key = `${g.eventTime}|${g.away}|${g.home}`;
+      if(!byKey.has(key)) byKey.set(key, g);
+    });
+    const merged = Array.from(byKey.values()).map(({id, ...rest}) => rest);
+
+    // Tags every game that shares a date+matchup with another game as part of
+    // a real doubleheader (confirmed: these are genuinely two separate,
+    // complete games — e.g. a rain-delayed game made up same-day — not a
+    // duplicate). Labeled rather than merged, since merging would erase real
+    // information: each game has its own winner and its own contribution to
+    // the season record and H2H tally.
+    const pairCounts = {};
+    merged.forEach(g => {
+      const pairKey = `${g.date}|${g.away}|${g.home}`;
+      pairCounts[pairKey] = (pairCounts[pairKey] || 0) + 1;
+    });
+    merged.forEach(g => {
+      const pairKey = `${g.date}|${g.away}|${g.home}`;
+      g.isDoubleheader = pairCounts[pairKey] > 1;
+    });
+
+    merged.sort((a, b) => a.date.localeCompare(b.date));
+    return merged;
+  } catch(e){
+    console.error('season fetch failed', e);
+    return [];
+  }
+}
+
+
+// Computes each team's actual win-loss record for the season and stamps it onto
+// every game as of that date (games played that date included). This is what
+// column E ("Current / Winner Record") is supposed to show — the teams' season
+// standing, not that individual game's final score.
+function backfillSeasonRecords(rows){
+  const record = {}; // team -> {w, l}
+  const byDate = {};
+  rows.forEach(r => { (byDate[r.date] = byDate[r.date] || []).push(r); });
+  Object.keys(byDate).sort().forEach(date => {
+    const gamesToday = byDate[date];
+    gamesToday.forEach(r => {
+      if(!r.winner || r.winner === '—') return;
+      const loser = r.winner === r.away ? r.home : r.away;
+      record[r.winner] = record[r.winner] || { w: 0, l: 0 };
+      record[loser] = record[loser] || { w: 0, l: 0 };
+      record[r.winner].w++;
+      record[loser].l++;
+    });
+    gamesToday.forEach(r => {
+      const awayRec = record[r.away] ? `${record[r.away].w}-${record[r.away].l}` : '0-0';
+      const homeRec = record[r.home] ? `${record[r.home].w}-${record[r.home].l}` : '0-0';
+      r.record = `${r.away} (${awayRec}) @ ${r.home} (${homeRec})`;
+    });
+    // Snapshot every team's cumulative record AS OF this date (i.e. including
+    // this date's own games, matching exactly what column E displays for any
+    // row on this date) — a deep copy, since `record` keeps mutating as later
+    // dates get processed. This is what the H2H tiebreak now uses instead of
+    // today's final standings: backtesting showed the tiebreak is meaningfully
+    // more accurate (56.4% vs 50.8% on this season's tied-H2H games) when it
+    // reflects what was actually known on that date, not months of games that
+    // hadn't happened yet.
+    const snapshot = {};
+    Object.keys(record).forEach(team => { snapshot[team] = { w: record[team].w, l: record[team].l }; });
+    STANDINGS_BY_DATE[date] = snapshot;
+  });
+  STANDINGS = record; // final cumulative record per team — still used as a fallback
+                       // for dates outside the snapshot map (e.g. today, before
+                       // it's been through this same backfill pass)
+}
+
+function buildKey(away, home){ return `${away}@${home}`; }
+
+// The workbook's "H2H Outcome Winner" column was left as — for any game not yet
+// final, even though the current series leader is already stated in plain text
+// in the "Head-to-Head Record" column (e.g. "BOS leads 5-2"). Parse that instead
+// of waiting for the game to finish, so the leader shows regardless of live status.
+// Formats a game's exact start timestamp as a readable local time (e.g. "4:35 PM").
+// Shown next to the date so that two rows for the same matchup on the same date
+// are visibly either the same game (identical time — would indicate a real bug)
+// or a genuine doubleheader (different times).
+// Always shows the game's start time in US Eastern (labeled explicitly),
+// instead of silently converting to the viewer's own local timezone. That
+// matters for the same reason todayStr() does: a time silently converted to,
+// say, a European viewer's local clock could display a time that rolls into
+// a different calendar day than the date printed right next to it in the
+// same row — showing the real ET time avoids that mismatch for everyone,
+// everywhere, regardless of where they're viewing from.
+function formatGameTime(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  const timeStr = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit'
+  }).format(d);
+  const tzName = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', timeZoneName: 'short'
+  }).formatToParts(d).find(p => p.type === 'timeZoneName').value; // "EDT" or "EST", correct for the date
+  return `${timeStr} ${tzName}`;
+}
+
+function deriveH2HLeader(h2hText){
+  if(!h2hText) return '—';
+  const m = h2hText.match(/^([A-Z]{2,3})\s+leads/);
+  if(m) return m[1];
+  if(/^Tied/i.test(h2hText)) return 'Tied';
+  return '—';
+}
+
+// Pulls the actual team abbreviation out of a G-column display value so it can be
+// compared against the game's real winner. "Tied - NYY" -> "NYY"; a bare "Tied"
+// or "—" has no determinable team, so returns null (no color applied for those).
+function extractH2HTeam(displayVal){
+  if(!displayVal || displayVal === '—' || displayVal === 'Tied') return null;
+  const m = displayVal.match(/^Tied - (.+)$/);
+  return m ? m[1] : displayVal;
+}
+
+// Same tier classification the Edge page uses (Strong: 3+ game H2H lead,
+// Moderate: 1-2 game lead, Coinflip: tied series, No data: no meetings yet)
+// — derived here from the already-computed H2H text rather than recomputing
+// the raw head-to-head tally a second time.
+function classifyTierFromH2HText(h2hText){
+  if(!h2hText) return null;
+  if(h2hText === 'No meetings yet') return 'nodata';
+  if(h2hText.startsWith('Tied')) return 'coinflip';
+  const m = h2hText.match(/^.+ leads (\d+)-(\d+)$/);
+  if(!m) return null;
+  const margin = parseInt(m[1], 10) - parseInt(m[2], 10);
+  return margin >= 3 ? 'strong' : 'moderate';
+}
+const TIER_DISPLAY_NAME = { strong: 'Strong', moderate: 'Moderate', coinflip: 'Coinflip', nodata: 'No data' };
+
+// Computes a head-to-head record between two teams by scanning every completed
+// game in the full dataset (regardless of which side was home/away), so it works
+// for ANY matchup — including today's real matchups that may not match the
+// specific pairing the workbook happened to list for this date. When the series
+// is tied, the tiebreak uses each team's record AS OF asOfDate (that row's own
+// date) rather than today's final standings — validated to be meaningfully more
+// accurate (56.4% vs 50.8% backtested on this season's tied-H2H games), since a
+// team's record back then is what was actually knowable on that date. Falls
+// back to the final STANDINGS when asOfDate has no snapshot yet (e.g. today,
+// before that date has been through backfillSeasonRecords).
+function computeH2H(teamA, teamB, asOfDate){
+  let winsA = 0, winsB = 0;
+  SEASON_DATA.forEach(r => {
+    if(!r.winner || r.winner === '—') return;
+    const pair = new Set([r.away, r.home]);
+    if(!pair.has(teamA) || !pair.has(teamB)) return;
+    // Only count meetings STRICTLY BEFORE this row's own date — otherwise a
+    // game that itself broke a tie (the leading team also won this exact
+    // game) silently erases the fact that it started from a tied series,
+    // since the tally would already include that game's own result by the
+    // time we check. This matters for real pre-game decisions: what mattered
+    // going in was the record BEFORE this game, not after it.
+    if(asOfDate && r.date >= asOfDate) return;
+    if(r.winner === teamA) winsA++;
+    else if(r.winner === teamB) winsB++;
+  });
+  if(winsA === 0 && winsB === 0) return { text: 'No meetings yet', leader: '—' };
+  if(winsA === winsB){
+    const text = `Tied ${winsA}-${winsB}`;
+    const pointInTime = asOfDate ? STANDINGS_BY_DATE[asOfDate] : null;
+    const standingsSource = pointInTime || STANDINGS;
+    const recA = standingsSource[teamA], recB = standingsSource[teamB];
+    if(recA && recB){
+      const gamesA = recA.w + recA.l, gamesB = recB.w + recB.l;
+      const pctA = gamesA > 0 ? recA.w / gamesA : 0;
+      const pctB = gamesB > 0 ? recB.w / gamesB : 0;
+      if(pctA > pctB) return { text, leader: `Tied - ${teamA}` };
+      if(pctB > pctA) return { text, leader: `Tied - ${teamB}` };
+    }
+    return { text, leader: 'Tied' };
+  }
+  return winsA > winsB
+    ? { text: `${teamA} leads ${winsA}-${winsB}`, leader: teamA }
+    : { text: `${teamB} leads ${winsB}-${winsA}`, leader: teamB };
+}
+
+async function fetchLiveToday(){
+  const dateParam = todayStr();
+  try{
+    const res = await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${dateParam}`);
+    if(!res.ok) throw new Error('bad response');
+    const json = await res.json();
+    const map = {};
+    (json.dates || []).forEach(d => {
+      (d.games || []).forEach(g => {
+        if(!POSTSEASON_TYPES.has(g.gameType) && g.gameType !== 'R') return; // regular season + postseason — excludes the All-Star Game, spring training
+        const awayAbbr = teamAbbr(g.teams.away.team.id);
+        const homeAbbr = teamAbbr(g.teams.home.team.id);
+        if(!awayAbbr || !homeAbbr) return;
+        let state = 'pre';
+        if(g.status.abstractGameState === 'Live') state = 'in';
+        else if(g.status.abstractGameState === 'Final') state = 'post';
+        const shortDetail = g.status.detailedState || '';
+        let awayScore = g.teams.away.score;
+        let homeScore = g.teams.home.score;
+        if(state === 'in' || state === 'post'){
+          if(awayScore === undefined || awayScore === null) awayScore = 0;
+          if(homeScore === undefined || homeScore === null) homeScore = 0;
+        } else {
+          awayScore = null; homeScore = null;
+        }
+        let winner = '—';
+        if(state === 'post'){
+          if(g.teams.home.isWinner) winner = homeAbbr;
+          else if(g.teams.away.isWinner) winner = awayAbbr;
+        }
+        const homeRec = g.teams.home.leagueRecord ? `${g.teams.home.leagueRecord.wins}-${g.teams.home.leagueRecord.losses}` : '';
+        const awayRec = g.teams.away.leagueRecord ? `${g.teams.away.leagueRecord.wins}-${g.teams.away.leagueRecord.losses}` : '';
+
+        map[buildKey(awayAbbr, homeAbbr)] = {
+          state, shortDetail, homeScore, awayScore, winner, homeAbbr, awayAbbr, homeRec, awayRec,
+          eventTime: g.gameDate,
+          gameType: g.gameType
+        };
+      });
+    });
+    LIVE_MAP = map;
+    document.getElementById('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  } catch(e){
+    document.getElementById('lastUpdated').textContent = 'Live fetch failed — showing last known data';
+    console.error('MLB Stats API fetch failed', e);
+  }
+}
+
+function mergeRows(){
+  const today = todayStr();
+  // Historical (non-today) rows come straight from the workbook, unchanged.
+  const rows = SEASON_DATA.filter(r => r.date !== today).map(r => ({...r}));
+
+  const liveEntries = Object.values(LIVE_MAP);
+
+  if(liveEntries.length > 0){
+    // We have a real MLB slate for today — build today's rows ENTIRELY from it.
+    // The workbook's placeholder matchups for today are dropped so we never show
+    // both a fictional and a real version of "today" at once.
+    liveEntries.forEach(live => {
+      const h2h = computeH2H(live.awayAbbr, live.homeAbbr, today);
+      rows.push({
+        date: today,
+        away: live.awayAbbr,
+        home: live.homeAbbr,
+        winner: live.state === 'post' ? live.winner : '—',
+        record: `${live.awayAbbr} (${live.awayRec}) @ ${live.homeAbbr} (${live.homeRec})`,
+        h2h: h2h.text,
+        h2h_winner: live.state === 'post' ? h2h.leader : '—',
+        eventTime: live.eventTime,
+        gameType: live.gameType,
+        _live: live
+      });
+    });
+  } else {
+    // MLB Stats API fetch hasn't returned anything yet (or failed) — fall back to whatever
+    // the workbook had for today so the page isn't empty.
+    SEASON_DATA.filter(r => r.date === today).forEach(r => rows.push({...r}));
+  }
+
+  rows.sort((a,b) => a.date.localeCompare(b.date));
+  return rows;
+}
+
+function populateFilters(rows){
+  const teamSel = document.getElementById('teamFilter');
+  const dateSel = document.getElementById('dateFilter');
+  const teams = new Set();
+  const dates = new Set();
+  rows.forEach(r => { teams.add(r.away); teams.add(r.home); dates.add(r.date); });
+
+  const prevTeam = teamSel.value, prevDate = dateSel.value;
+  teamSel.innerHTML = '<option value="">All teams</option>' +
+    [...teams].sort().map(t => `<option value="${t}">${t}</option>`).join('');
+  dateSel.innerHTML = '<option value="">All dates</option>' +
+    [...dates].sort().reverse().map(d => `<option value="${d}">${d}</option>`).join('');
+  teamSel.value = prevTeam; dateSel.value = prevDate;
+}
+
+function render(){
+  const rows = allRows;
+  const teamFilter = document.getElementById('teamFilter').value;
+  const dateFilter = document.getElementById('dateFilter').value;
+  const viewFilter = document.getElementById('viewFilter').value;
+  const today = todayStr();
+
+  let filtered = rows.filter(r => {
+    if(teamFilter && r.away !== teamFilter && r.home !== teamFilter) return false;
+    if(dateFilter && r.date !== dateFilter) return false;
+    if(viewFilter === 'today' && r.date !== today) return false;
+    if(viewFilter === 'finished' && (r.winner === '—' || !r.winner)) return false;
+    return true;
+  });
+
+  // newest first for readability — except in the "Today & live" view, where
+  // every row shares the same date, so a plain reverse doesn't mean anything;
+  // that view sorts by actual game start time instead, direction controlled
+  // by clicking the Date column header.
+  if(viewFilter === 'today'){
+    filtered = filtered.slice().sort((a, b) => {
+      const ta = a.eventTime || '';
+      const tb = b.eventTime || '';
+      return TODAY_SORT_DIR === 'asc' ? ta.localeCompare(tb) : tb.localeCompare(ta);
+    });
+  } else {
+    filtered = filtered.slice().reverse();
+  }
+  CURRENT_FILTERED = filtered;
+
+  const dateHeader = document.getElementById('dateHeader');
+  const dateSortArrow = document.getElementById('dateSortArrow');
+  if(dateHeader && dateSortArrow){
+    if(viewFilter === 'today'){
+      dateHeader.style.opacity = '1';
+      dateSortArrow.textContent = TODAY_SORT_DIR === 'asc' ? '▲' : '▼';
+    } else {
+      dateHeader.style.opacity = '.55';
+      dateSortArrow.textContent = '';
+    }
+  }
+
+  const tbody = document.getElementById('sheetBody');
+  tbody.innerHTML = '';
+
+  filtered.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    const isToday = r.date === today;
+    const live = r._live;
+    const isLiveInProgress = live && live.state === 'in';
+
+    if(isLiveInProgress) tr.classList.add('live-row');
+    else if(isToday) tr.classList.add('today-row');
+    else {
+      // Alternate a subtle background per calendar date (even day-of-month vs
+      // odd) so consecutive games on the same date are visually grouped, and
+      // the shading flips every time the date changes — deterministic, so it
+      // doesn't shift around when filters or sort order change.
+      const dayOfMonth = parseInt(r.date.split('-')[2], 10);
+      if(!isNaN(dayOfMonth) && dayOfMonth % 2 === 0) tr.classList.add('date-band');
+    }
+
+    let winnerHtml, recordHtml;
+    if(live){
+      if(live.state === 'in'){
+        winnerHtml = `<span class="score-live">${live.awayAbbr} ${live.awayScore} – ${live.homeScore} ${live.homeAbbr}</span><span class="status-tag">${live.shortDetail || 'LIVE'}</span>`;
+        recordHtml = `${live.awayAbbr} (${live.awayRec}) @ ${live.homeAbbr} (${live.homeRec})`;
+      } else if(live.state === 'post'){
+        winnerHtml = `<span class="badge-win">${live.winner}</span><span class="status-tag status-final">FINAL ${live.awayScore}-${live.homeScore}</span>`;
+        recordHtml = `${live.awayAbbr} (${live.awayRec}) @ ${live.homeAbbr} (${live.homeRec})`;
+      } else {
+        winnerHtml = `<span class="badge-live" style="color:var(--sub); font-weight:400;">—</span><span class="status-tag status-pre">${live.shortDetail || 'Scheduled'}</span>`;
+        recordHtml = `${live.awayAbbr} (${live.awayRec}) @ ${live.homeAbbr} (${live.homeRec})`;
+      }
+    } else {
+      const isDash = (r.winner === '—' || !r.winner);
+      if(isDash){
+        winnerHtml = '—';
+      } else {
+        const hasScore = r.awayScore !== undefined && r.awayScore !== null && r.homeScore !== undefined && r.homeScore !== null;
+        winnerHtml = r.winner + (hasScore ? ` <span class="hist-score">(${r.awayScore}-${r.homeScore})</span>` : '');
+      }
+      recordHtml = r.record || '';
+    }
+
+    // Determine this game's actual final winner (from live data if today's game
+    // has finished, otherwise from the row itself) so we can check whether the
+    // head-to-head favorite actually called it right.
+    const actualWinner = (live && live.state === 'post') ? live.winner
+      : (r.winner && r.winner !== '—' ? r.winner : null);
+
+    const h2hDisplay = (!r.h2h_winner || r.h2h_winner === '—') ? deriveH2HLeader(r.h2h) : r.h2h_winner;
+    const h2hTeam = extractH2HTeam(h2hDisplay);
+    let h2hCellClass = '';
+    if(actualWinner && h2hTeam){
+      h2hCellClass = (h2hTeam === actualWinner) ? 'h2h-match' : 'h2h-mismatch';
+    }
+
+    // The actual loser of THIS game — the complement of actualWinner.
+    const actualLoser = actualWinner ? (actualWinner === r.away ? r.home : r.away) : null;
+
+    // Whether the H2H series was tied BEFORE this game (i.e. today's pick came
+    // from the season-record tiebreak, not a real head-to-head lead). We
+    // backtested this specific case: the tiebreak lands at exactly 50% — a
+    // coin flip — versus ~82% for a real 3+ game lead. Flagging it keeps a
+    // correct or incorrect result from looking like a "real" H2H signal when
+    // it was actually a coin flip that happened to land one way or the other.
+    const wasPreGameTied = !!(r.h2h && r.h2h.startsWith('Tied'));
+    const preTiedTag = wasPreGameTied ? ' <span class="h2h-pretied">(pre-tied)</span>' : '';
+
+    // Column G's main text is the ACTUAL winner of this game (not the H2H
+    // pick) with the actual loser in parentheses, colored green when the H2H
+    // pick called it correctly and red when it didn't — so the color itself
+    // tells you whether H2H got this one right, rather than requiring you to
+    // cross-reference column F. Before the game's played, there's no actual
+    // result yet, so this falls back to showing the H2H pick itself (uncolored).
+    const tierLabel = TIER_DISPLAY_NAME[classifyTierFromH2HText(r.h2h)];
+    const tierTag = tierLabel ? ` <span class="h2h-tier-tag">(${tierLabel})</span>` : '';
+
+    let g2hMainText;
+    if(actualWinner){
+      const winnerLoc = actualWinner === r.home ? ' <span class="h2h-loc">(H)</span>' : ' <span class="h2h-loc">(A)</span>';
+      g2hMainText = `${actualWinner}${winnerLoc}${tierTag}${actualLoser ? ' <span class="h2h-actual-loser">(' + actualLoser + ')</span>' : ''}${preTiedTag}`;
+    } else {
+      let pendingTag = '';
+      if(h2hTeam === r.home) pendingTag = ' <span class="h2h-loc">(H)</span>';
+      else if(h2hTeam === r.away) pendingTag = ' <span class="h2h-loc">(A)</span>';
+      g2hMainText = `${h2hDisplay}${pendingTag}${tierTag}`;
+    }
+
+    // Checkbox to send this game's straight H2H pick to the shared Picks
+    // page. Only offered when there's an actual favored team (not a bare,
+    // unresolved "Tied" with no lean) — there's nothing to pick otherwise.
+    const pickTeam = h2hTeam && h2hTeam !== 'Tied' ? h2hTeam : null;
+    let pickCheckbox = '';
+    if(pickTeam){
+      const pickId = `idx-${r.date}-${r.away}-${r.home}`;
+      const checked = isPickSaved(pickId) ? 'checked' : '';
+      const detailAttr = (r.h2h || '').replace(/"/g, '&quot;');
+      pickCheckbox = `<input type="checkbox" class="pick-checkbox" data-pick-id="${pickId}" data-date="${r.date}" data-away="${r.away}" data-home="${r.home}" data-pick="${pickTeam}" data-detail="${detailAttr}" ${checked} title="Add to My Picks">`;
+    }
+
+    tr.innerHTML = `
+      <th class="rownum">${i+1}</th>
+      <td class="date">${r.date}${r.eventTime ? ' <span class="game-time">' + formatGameTime(r.eventTime) + '</span>' : ''}${r.isDoubleheader ? ' <span class="dh-badge">DH · Game ' + (r.gameNumber || '?') + '</span>' : ''}${playoffLabel(r.gameType) ? ' <span class="playoff-badge">' + playoffLabel(r.gameType) + '</span>' : ''}</td>
+      <td class="team">${r.away}</td>
+      <td class="team">${r.home}</td>
+      <td class="winner ${(r.winner==='—'&&!live)?'dash':''}">${winnerHtml}</td>
+      <td class="record">${recordHtml}</td>
+      <td class="h2h">${pickCheckbox} ${r.h2h || ''}${actualWinner ? ' <span class="h2h-actual-winner">(' + actualWinner + ')</span>' : ''}</td>
+      <td class="team ${h2hCellClass}">${g2hMainText}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('countLabel').textContent = `${filtered.length} rows`;
+}
+
+// Finds the most recent date in SEASON_DATA strictly before `todayKey`. Not
+// just "sort and take the last one minus one" — SEASON_DATA can legitimately
+// include a few of TODAY's already-finished games (the season fetch covers
+// through today inclusive), so this explicitly excludes anything dated today
+// to land on the actual previous day's slate.
+function mostRecentPriorDate(seasonData, todayKey){
+  let best = null;
+  seasonData.forEach(r => {
+    if(r.date < todayKey && (!best || r.date > best)) best = r.date;
+  });
+  return best;
+}
+
+// The 5 most recent distinct completed dates strictly before today — used
+// for the "Last 5 Days" stat box, same exclusion rule as the others.
+function lastNDistinctDates(seasonData, todayKey, n){
+  const dates = new Set();
+  seasonData.forEach(r => { if(r.date < todayKey) dates.add(r.date); });
+  return Array.from(dates).sort().slice(-n);
+}
+
+// Tallies how often the pre-game H2H pick actually matched the real winner,
+// across whatever rows are passed in — deliberately EXCLUDING any game whose
+// H2H series was tied before it started. Those were backtested at exactly
+// 50% (a coin flip decided only by a season-record tiebreak), so folding them
+// into a "how good are our H2H picks" number would water down what's actually
+// a real signal (a genuine head-to-head lead) with games that were never
+// meant to be predictive in the first place.
+function computeH2HAccuracyExcludingTied(rows){
+  let wins = 0, losses = 0;
+  rows.forEach(r => {
+    if(!r.winner || r.winner === '—') return; // only finished games have a real result to check
+    const wasPreGameTied = !!(r.h2h && r.h2h.startsWith('Tied'));
+    if(wasPreGameTied) return;
+    const h2hDisplay = (!r.h2h_winner || r.h2h_winner === '—') ? deriveH2HLeader(r.h2h) : r.h2h_winner;
+    const h2hTeam = extractH2HTeam(h2hDisplay);
+    if(!h2hTeam) return; // no resolvable pick to check (shouldn't happen once tied games are excluded, but a safe guard)
+    if(h2hTeam === r.winner) wins++; else losses++;
+  });
+  return { wins, losses };
+}
+
+function renderH2HStatBoxes(){
+  const todayKey = todayStr();
+  const prevDate = mostRecentPriorDate(SEASON_DATA, todayKey);
+  const prevDayRows = prevDate ? SEASON_DATA.filter(r => r.date === prevDate) : [];
+  const prevStats = computeH2HAccuracyExcludingTied(prevDayRows);
+
+  const last5Dates = lastNDistinctDates(SEASON_DATA, todayKey, 5);
+  const last5Rows = SEASON_DATA.filter(r => last5Dates.includes(r.date));
+  const last5Stats = computeH2HAccuracyExcludingTied(last5Rows);
+
+  const seasonRows = SEASON_DATA.filter(r => r.date < todayKey);
+  const seasonStats = computeH2HAccuracyExcludingTied(seasonRows);
+
+  function fillBox(elId, stats, label, titleSuffix){
+    const total = stats.wins + stats.losses;
+    const pct = total > 0 ? (stats.wins / total * 100) : null;
+    const pctClass = pct === null ? '' : (pct >= 50 ? 'good' : 'bad');
+    const pctText = pct === null ? '—' : pct.toFixed(1) + '%';
+    const el = document.getElementById(elId);
+    el.innerHTML = `<span class="stat-label">${label}</span> W=${stats.wins} L=${stats.losses} <span class="stat-pct ${pctClass}">${pctText}</span>`;
+    el.title = `Pre-tied (coinflip) games excluded${titleSuffix ? ' — ' + titleSuffix : ''}`;
+  }
+
+  fillBox('prevDayStatBox', prevStats, 'Prev Day', prevDate ? prevDate : 'no prior completed day yet');
+  fillBox('last5StatBox', last5Stats, 'Last 5 Days', last5Dates.length > 0 ? `${last5Dates[0]} through ${last5Dates[last5Dates.length-1]}` : 'not enough completed days yet');
+  fillBox('seasonStatBox', seasonStats, 'Season', `through ${prevDate || todayKey}`);
+}
+
+function wireCellInspector(){
+  document.getElementById('sheetBody').addEventListener('click', (e) => {
+    const td = e.target.closest('td');
+    if(!td) return;
+    const tr = td.closest('tr');
+    const cells = Array.from(tr.children);
+    const colIdx = cells.indexOf(td); // 0 = rownum th
+    const rowNum = tr.querySelector('.rownum').textContent;
+    const colLetters = ['','A','B','C','D','E','F','G'];
+    document.getElementById('cellRef').textContent = colLetters[colIdx] + (parseInt(rowNum)+1);
+    document.getElementById('cellContent').textContent = td.textContent.trim();
+  });
+
+  document.getElementById('sheetBody').addEventListener('change', (e) => {
+    if(!e.target.classList.contains('pick-checkbox')) return;
+    const cb = e.target;
+    const pick = {
+      id: cb.dataset.pickId,
+      type: 'straight',
+      source: 'schedule',
+      date: cb.dataset.date,
+      away: cb.dataset.away,
+      home: cb.dataset.home,
+      pick: cb.dataset.pick,
+      detail: cb.dataset.detail
+    };
+    toggleSavedPick(pick, cb.checked);
+  });
+}
+
+// Wraps a CSV field in quotes and escapes any embedded quotes, only when needed.
+function csvField(val){
+  const s = String(val ?? '');
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// Exports exactly what's currently on screen (same filters, same order) as plain
+// text — not the HTML markup used for live-score styling, badges, etc.
+function exportCsv(){
+  const rows = CURRENT_FILTERED;
+  const today = todayStr();
+  const header = ['Date','Away','Home','Winner','Current / Winner Record','Head-to-Head Record','H2H Outcome Winner'];
+
+  const lines = [header.map(csvField).join(',')];
+
+  rows.forEach(r => {
+    const live = r._live;
+    let winnerText, recordText;
+    if(live){
+      if(live.state === 'in'){
+        winnerText = `${live.awayAbbr} ${live.awayScore}-${live.homeScore} ${live.homeAbbr} (${live.shortDetail || 'LIVE'})`;
+        recordText = `${live.awayAbbr} (${live.awayRec}) @ ${live.homeAbbr} (${live.homeRec})`;
+      } else if(live.state === 'post'){
+        winnerText = `${live.winner} (FINAL ${live.awayScore}-${live.homeScore})`;
+        recordText = `${live.awayAbbr} (${live.awayRec}) @ ${live.homeAbbr} (${live.homeRec})`;
+      } else {
+        winnerText = `— (${live.shortDetail || 'Scheduled'})`;
+        recordText = `${live.awayAbbr} (${live.awayRec}) @ ${live.homeAbbr} (${live.homeRec})`;
+      }
+    } else {
+      const isDash = (r.winner === '—' || !r.winner);
+      const hasScore = r.awayScore !== undefined && r.awayScore !== null && r.homeScore !== undefined && r.homeScore !== null;
+      winnerText = isDash ? '—' : (r.winner + (hasScore ? ` (${r.awayScore}-${r.homeScore})` : ''));
+      recordText = r.record || '';
+    }
+    const actualWinnerText = (live && live.state === 'post') ? live.winner
+      : (r.winner && r.winner !== '—' ? r.winner : null);
+    const h2hText = (r.h2h || '') + (actualWinnerText ? ` (${actualWinnerText})` : '');
+
+    // Mirrors what column G shows on screen: the actual winner with the loser
+    // in parens once the game's final, falling back to the H2H pick beforehand.
+    // A "(pre-tied)" note carries over too, since the CSV should tell the same
+    // story as the live table — a correct or incorrect pick that came from a
+    // tied-series coin flip (50% backtested) rather than a real H2H lead.
+    const wasPreGameTiedCsv = !!(r.h2h && r.h2h.startsWith('Tied'));
+    const tierLabelCsv = TIER_DISPLAY_NAME[classifyTierFromH2HText(r.h2h)];
+    const tierTagCsv = tierLabelCsv ? ` (${tierLabelCsv})` : '';
+    let h2hWinnerText;
+    if(actualWinnerText){
+      const actualLoserText = actualWinnerText === r.away ? r.home : r.away;
+      h2hWinnerText = `${actualWinnerText}${tierTagCsv} (${actualLoserText})${wasPreGameTiedCsv ? ' (pre-tied)' : ''}`;
+    } else {
+      const pendingH2hText = (!r.h2h_winner || r.h2h_winner === '—') ? deriveH2HLeader(r.h2h) : r.h2h_winner;
+      h2hWinnerText = `${pendingH2hText}${tierTagCsv}`;
+    }
+    // Includes the exact start time (not just the date) so a real doubleheader
+    // (two different times) is visibly distinct from a would-be duplicate bug
+    // (which would show the identical time twice) directly in the export.
+    let dateText = r.eventTime ? `${r.date} ${formatGameTime(r.eventTime)}` : r.date;
+    if(r.isDoubleheader) dateText += ` (DH Game ${r.gameNumber || '?'})`;
+    if(playoffLabel(r.gameType)) dateText += ` (${playoffLabel(r.gameType)})`;
+
+    lines.push([dateText, r.away, r.home, winnerText, recordText, h2hText, h2hWinnerText].map(csvField).join(','));
+  });
+
+  const csv = lines.join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `mlb-schedule-${today}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Whether any of today's games are currently in progress, per the last fetch.
+function hasLiveGameNow(){
+  return Object.values(LIVE_MAP).some(g => g.state === 'in');
+}
+
+// A real gap can exist between the bulk of an evening's games finishing and
+// the last couple of late-starting (often West coast) games actually
+// beginning. If we only check "is anything live right now" at exactly the
+// wrong moment — nothing currently in progress, but a game about to start —
+// we'd back off to a 1-hour refresh and miss that transition, leaving those
+// last games stuck showing "Scheduled" for up to an hour after they've
+// actually started. This checks scheduled games too, so we keep the fast
+// cadence through any such gap instead of falling asleep right before it.
+function hasUpcomingGameSoon(withinMs){
+  const now = Date.now();
+  return Object.values(LIVE_MAP).some(g => {
+    if(g.state !== 'pre' || !g.eventTime) return false;
+    const start = new Date(g.eventTime).getTime();
+    if(isNaN(start)) return false;
+    return start > now && start - now <= withinMs;
+  });
+}
+
+// Refreshes every 30s while a game is actually live, but backs off to once an
+// hour when nothing's in progress — no point hammering the API every 30 seconds
+// for a slate that's all "Scheduled" or already "Final". Re-checks after every
+// refresh, so it switches back to 30s automatically the moment a game goes live.
+function updateLivePill(){
+  const pill = document.getElementById('livePill');
+  if(!pill) return;
+  const live = hasLiveGameNow();
+  const soon = hasUpcomingGameSoon(60 * 60 * 1000);
+  if(live){
+    pill.innerHTML = '<span class="live-dot"></span>LIVE · auto-refresh 30s';
+  } else if(soon){
+    pill.innerHTML = '<span class="live-dot"></span>Game starting soon · auto-refresh 30s';
+  } else {
+    pill.innerHTML = '<span class="live-dot" style="animation:none; opacity:.5;"></span>No live games · refreshing hourly';
+  }
+}
+
+function scheduleNextRefresh(){
+  const soon = hasUpcomingGameSoon(60 * 60 * 1000); // any scheduled game starting within the next hour
+  const delay = (hasLiveGameNow() || soon) ? 30000 : 3600000; // 30s if something's live or about to start, 1hr otherwise
+  setTimeout(async () => {
+    await fetchLiveToday();
+    allRows = mergeRows();
+    render();
+    updateLivePill();
+    scheduleNextRefresh();
+  }, delay);
+}
+
+async function init(){
+  document.getElementById('rangeSub').textContent = "Loading real 2026 season from MLB's Stats API…";
+
+  let season = [];
+  try{
+    season = await fetchFullSeason();
+  } catch(e){
+    console.error('full season fetch failed', e);
+  }
+
+  if(season.length > 0){
+    SEASON_DATA = season;
+    // The fetch above only builds each row's own game info — season records and
+    // H2H weren't computed per-row yet. Backfill both now that the full season
+    // is loaded, so every row (not just today's) gets real values.
+    backfillSeasonRecords(SEASON_DATA);
+    SEASON_DATA.forEach(r => {
+      const h2h = computeH2H(r.away, r.home, r.date);
+      r.h2h = h2h.text;
+      r.h2h_winner = h2h.leader;
+    });
+  } else {
+    SEASON_DATA = FALLBACK_DATA;
+    console.warn('Falling back to sample data — MLB season fetch returned nothing.');
+  }
+
+  const dates = SEASON_DATA.map(r => r.date).sort();
+  document.getElementById('rangeSub').textContent = `${dates[0]} → ${dates[dates.length-1]} · ${SEASON_DATA.length} games` + (season.length > 0 ? ' · live from MLB Stats API' : ' · sample data');
+  document.getElementById('histThrough').textContent = dates[dates.length-1];
+
+  renderH2HStatBoxes();
+
+  await fetchLiveToday();
+  allRows = mergeRows();
+  populateFilters(allRows);
+  render();
+  wireCellInspector();
+  updateLivePill();
+
+  document.getElementById('teamFilter').addEventListener('change', render);
+  document.getElementById('dateFilter').addEventListener('change', render);
+  document.getElementById('viewFilter').addEventListener('change', render);
+  document.getElementById('exportCsvBtn').addEventListener('click', exportCsv);
+  document.getElementById('dateHeader').addEventListener('click', () => {
+    if(document.getElementById('viewFilter').value !== 'today') return; // only meaningful in this view
+    TODAY_SORT_DIR = TODAY_SORT_DIR === 'asc' ? 'desc' : 'asc';
+    render();
+  });
+
+  scheduleNextRefresh();
+}
+
+// Shows the file's actual last-modified date (as reported by the browser/server)
+// instead of a hand-typed version string, so it updates itself whenever the file
+// changes. Note: this depends on GitHub Pages' CDN correctly reporting a
+// Last-Modified header — usually reliable, but not guaranteed on every host.
+function renderVersionTag(){
+  const months = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  const d = new Date(document.lastModified);
+  const stamp = `${d.getFullYear()}_${months[d.getMonth()]}_${String(d.getDate()).padStart(2,'0')} ${d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
+  const el = document.getElementById('versionTag');
+  if(el) el.textContent = `version: ${stamp}`;
+}
+renderVersionTag();
+
+init();
+</script>
+</body>
+</html>

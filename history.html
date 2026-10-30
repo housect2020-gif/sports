@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sports History — Finished Games</title>
+<style>
+  :root{
+    --page-bg:#f4f5f7; --surface:#fff; --grid:#e3e7ee; --grid-strong:#d0d3d8;
+    --header-bg:#1a5cff; --accent:#1a5cff; --text:#202124; --sub:#5f6368;
+    --over:#2e7d32; --under:#c62828; --radius:10px;
+    --font-ui:"Segoe UI", Calibri, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--page-bg);font-family:var(--font-ui);color:var(--text);}
+  .titlebar{background:var(--header-bg);color:#fff;padding:14px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+  .titlebar h1{font-size:16px;margin:0;font-weight:700;}
+  .titlebar a{color:#dbe6ff;text-decoration:none;font-size:13px;font-weight:600;margin-left:14px;}
+  .titlebar a:hover{color:#fff;}
+  .page{max-width:1300px;margin:16px auto;padding:0 14px 40px;}
+  .controls{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:end;background:var(--surface);border:1px solid var(--grid-strong);border-radius:var(--radius);padding:10px 14px;margin-bottom:12px;}
+  .controls label{font-size:12px;color:var(--sub);display:flex;flex-direction:column;gap:3px;}
+  .controls label.chk{flex-direction:row;align-items:center;gap:6px;color:var(--text);font-size:13px;}
+  .controls select,.controls input[type=date],.controls input[type=text]{font-size:14px;padding:5px 7px;border:1px solid #b9bdc3;border-radius:6px;background:#fff;}
+  .controls button{font-size:13px;padding:7px 12px;border:1px solid var(--accent);background:#fff;color:var(--accent);border-radius:6px;cursor:pointer;}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px;}
+  .card{background:var(--surface);border:1px solid var(--grid-strong);border-radius:var(--radius);padding:8px 12px;}
+  .card .k{font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:.3px;}
+  .card .v{font-size:20px;font-weight:700;margin-top:2px;}
+  .card .s{font-size:11px;color:var(--sub);}
+  .tablewrap{background:var(--surface);border:1px solid var(--grid-strong);border-radius:var(--radius);overflow:auto;max-height:75vh;}
+  table{border-collapse:collapse;width:100%;font-size:13px;}
+  th,td{padding:5px 8px;border-bottom:1px solid var(--grid);text-align:center;white-space:nowrap;}
+  th{position:sticky;top:0;background:#eef1f4;font-size:11px;color:#3c4043;text-transform:uppercase;letter-spacing:.3px;z-index:2;}
+  td.l,th.l{text-align:left;}
+  tr:nth-child(even) td{background:#fafbfc;}
+  .over{color:var(--over);font-weight:700;} .under{color:var(--under);font-weight:700;} .push{color:var(--sub);font-weight:700;}
+  .badge{display:inline-block;font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:5px;background:#ffe9b3;color:#7a5200;}
+  .note{font-size:12px;color:var(--sub);margin:8px 2px;}
+  .hide{display:none;}
+</style>
+</head>
+<body>
+<div class="titlebar">
+  <h1>Finished Games — History</h1>
+  <div><a href="./">⌂ All sports</a><a id="liveLink" href="./">Live sheet →</a></div>
+</div>
+<div class="page">
+  <div class="controls">
+    <label>League
+      <select id="league"><option>NBA</option><option>WNBA</option><option>MLB</option><option>NFL</option></select>
+    </label>
+    <label>From <input type="date" id="from"></label>
+    <label>To <input type="date" id="to"></label>
+    <label>Team <input type="text" id="team" placeholder="e.g. BOS" size="6"></label>
+    <label class="chk"><input type="checkbox" id="showPre"> Include preseason</label>
+    <label class="chk"><input type="checkbox" id="showPo" checked> Include playoffs</label>
+    <button id="csv">Export CSV</button>
+  </div>
+  <div class="cards" id="cards"></div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr>
+        <th class="l">Date</th><th class="l">Game</th><th>Final</th><th>Total</th>
+        <th>Pre-game O/U</th><th>vs pre-game</th>
+        <th>My odds @ Q4 6:00</th><th>vs my odds</th><th>My pick (PPM)</th><th>My pick (Cons.)</th><th>My proj.</th>
+      </tr></thead>
+      <tbody id="body"><tr><td colspan="11" style="color:#80868b">Loading…</td></tr></tbody>
+    </table>
+  </div>
+  <div class="note" id="note"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="cloud.js"></script>
+<script src="sites.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const ABBR3 = {NY:"NYK",GS:"GSW",NO:"NOP",SA:"SAS",UTAH:"UTA",WSH:"WAS"};
+const a3 = c => ABBR3[c] || c || "?";
+let ROWS = [];   // finished games from the shared database
+let VIEW = [];   // rows after filters
+
+function resultOf(total, line){
+  if(total == null || line == null) return "";
+  return total > line ? "Over" : (total < line ? "Under" : "Push");
+}
+const cls = r => r === "Over" ? "over" : (r === "Under" ? "under" : "push");
+const f1 = v => v == null ? "–" : Number(v).toFixed(1);
+
+function myHistory(){
+  try{ return JSON.parse(localStorage.getItem("nba_history_v1") || "{}"); }catch(e){ return {}; }
+}
+
+async function load(){
+  await window.cloud.whenApproved();
+  const sb = window.cloud.sb;
+  const league = $("league").value;
+  $("body").innerHTML = '<tr><td colspan="11" style="color:#80868b">Loading…</td></tr>';
+  let all = [], from = 0;
+  while(true){
+    const r = await sb.from("games")
+      .select("game_id,game_date,start_time,away,home,season_type,pre_odds,final_away,final_home")
+      .eq("league", league).eq("state", "post")
+      .order("start_time", { ascending: false }).range(from, from + 999);
+    if(r.error){ $("body").innerHTML = `<tr><td colspan="11">${r.error.message}</td></tr>`; return; }
+    all = all.concat(r.data || []);
+    if(!r.data || r.data.length < 1000) break;
+    from += 1000;
+  }
+  ROWS = all.filter(g => g.final_away != null && g.final_home != null);
+  render();
+}
+
+function render(){
+  const from = $("from").value, to = $("to").value, team = $("team").value.trim().toUpperCase();
+  const pre = $("showPre").checked, po = $("showPo").checked;
+  const mine = $("league").value === "NBA" ? myHistory() : {};
+  VIEW = ROWS.filter(g => {
+    if(g.season_type === 1 && !pre) return false;
+    if(g.season_type === 3 && !po) return false;
+    if(from && g.game_date < from) return false;
+    if(to && g.game_date > to) return false;
+    if(team && !(a3(g.away).includes(team) || a3(g.home).includes(team))) return false;
+    return true;
+  }).map(g => {
+    const m = mine["g" + g.game_id] || {};
+    const total = g.final_away + g.final_home;
+    return { ...g, total, vsPre: resultOf(total, g.pre_odds), my5: m.odds5min, vs5: resultOf(total, m.odds5min),
+             pPpm: m.pick5Ppm, pCons: m.pick5Cons, proj: m.projTotal5 };
+  });
+
+  const withLine = VIEW.filter(r => r.pre_odds != null);
+  const cnt = k => withLine.filter(r => r.vsPre === k).length;
+  const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0) / arr.length : null;
+  const pickHits = key => {
+    const d = VIEW.filter(r => r[key] && r.my5 != null && r.vs5 && r.vs5 !== "Push");
+    if(!d.length) return "–";
+    const hit = d.filter(r => r[key] === r.vs5).length;
+    return `${hit} / ${d.length} <span style="font-size:14px;color:#5f6368">(${Math.round(hit / d.length * 100)}%)</span>`;
+  };
+  $("cards").innerHTML = [
+    ["Games", VIEW.length, ""],
+    ["Overs / Unders", `${cnt("Over")} / ${cnt("Under")}`, `vs pre-game line (${cnt("Push")} push)`],
+    ["Avg total", f1(avg(VIEW.map(r => r.total))), ""],
+    ["Avg pre-game line", f1(avg(withLine.map(r => Number(r.pre_odds)))), `${withLine.length} games with a line`],
+    ["Avg total − line", withLine.length ? (avg(withLine.map(r => r.total - Number(r.pre_odds)))).toFixed(1) : "–", ""],
+    ["My picks right (PPM)", pickHits("pPpm"), "at the 6:00 mark"],
+    ["My picks right (Cons.)", pickHits("pCons"), "at the 6:00 mark"],
+  ].map(c => `<div class="card"><div class="k">${c[0]}</div><div class="v">${c[1]}</div><div class="s">${c[2]}</div></div>`).join("");
+
+  const pickCell = (p, actual) => !p ? "–" : `<span class="${p === "Over" ? "over" : "under"}">${p}</span>${!actual || actual === "Push" ? "" : (p === actual ? " ✓" : " ✗")}`;
+  const resCell = r => r ? `<span class="${cls(r)}">${r}</span>` : "–";
+  $("body").innerHTML = VIEW.map(r => `<tr>
+    <td class="l">${r.game_date || "–"}</td>
+    <td class="l">${a3(r.away)} @ ${a3(r.home)}${r.season_type === 1 ? '<span class="badge">PRE</span>' : (r.season_type === 3 ? '<span class="badge">PLAYOFFS</span>' : "")}</td>
+    <td>${r.final_away}–${r.final_home}</td><td><b>${r.total}</b></td>
+    <td>${f1(r.pre_odds)}</td><td>${resCell(r.vsPre)}</td>
+    <td>${f1(r.my5)}</td><td>${resCell(r.vs5)}</td>
+    <td>${pickCell(r.pPpm, r.vs5)}</td><td>${pickCell(r.pCons, r.vs5)}</td><td>${f1(r.proj)}</td>
+  </tr>`).join("") || '<tr><td colspan="11" style="color:#80868b">No finished games match yet. The server job saves them as games end.</td></tr>';
+  $("note").textContent = $("league").value === "NBA"
+    ? "Game results and pre-game lines are shared. The “My …” columns are your own entries and picks, saved from the live sheet while it was open."
+    : "Game results and pre-game lines are shared. “My …” columns are only recorded for NBA.";
+}
+
+function exportCsv(){
+  const q = v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+  const head = ["Date","Away","Home","AwayScore","HomeScore","Total","Type","PreGameOU","VsPreGame","MyOddsAtQ4_6min","VsMyOdds","MyPickPPM","MyPickConsensus","MyProjTotal"];
+  const lines = [head.join(",")].concat(VIEW.map(r => [
+    r.game_date, a3(r.away), a3(r.home), r.final_away, r.final_home, r.total,
+    r.season_type === 1 ? "PRE" : (r.season_type === 3 ? "PLAYOFFS" : "REG"),
+    r.pre_odds, r.vsPre, r.my5, r.vs5, r.pPpm, r.pCons, r.proj
+  ].map(q).join(",")));
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+  a.download = `${$("league").value.toLowerCase()}-history.csv`;
+  a.click();
+}
+
+["from","to","team","showPre","showPo"].forEach(id => $(id).addEventListener("input", render));
+$("league").addEventListener("change", load);
+$("csv").addEventListener("click", exportCsv);
+window.addEventListener("cloud-keys", () => { if(ROWS.length) render(); });
+const START = new URLSearchParams(location.search).get("league");
+if(START && ["NBA","WNBA","MLB","NFL"].includes(START.toUpperCase())) $("league").value = START.toUpperCase();
+const LIVE = Object.fromEntries(Object.entries(window.SITES).map(([k, v]) => [k, v.base + v.pages[0][1]]));
+function setLive(){ $("liveLink").href = LIVE[$("league").value] || "./"; }
+$("league").addEventListener("change", setLive); setLive();
+load();
+</script>
+</body>
+</html>
