@@ -16,7 +16,7 @@
   // localStorage keys that follow the person across browsers. Team-points and
   // records caches are re-derived from ESPN, so they stay local.
   // Keys that follow the person across browsers (all four sports share one login).
-  var SYNC_RE = /^(?:(?:nba|wnba)_(?!teamPts_|records_)|mlb_site_picks_v1$|nfl_site_picks_v1$)/;
+  var SYNC_RE = /^(?:(?:nba|wnba)_(?!teamPts_|records_|snap_)|mlb_site_picks_v1$|nfl_site_picks_v1$)/;
   var HISTORY_RE = /_history_v1$/;     // object keyed by game id -> merged field by field
   var PICKS_RE = /_site_picks_v1$/;    // array of {id,...} -> merged once per browser, then the cloud copy wins
 
