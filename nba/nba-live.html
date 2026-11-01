@@ -362,6 +362,7 @@
       color-adjust:exact !important;
     }
   }
+  #archBody input:disabled, #archBody select:disabled{opacity:1;color:#202124;-webkit-text-fill-color:#202124;}
 </style>
 </head>
 <body>
@@ -369,7 +370,7 @@
 
   <div class="topbar">
     <h1>NBA Live Scores — Score Sheet</h1>
-    <span style="display:inline-flex;gap:14px;flex-wrap:wrap;"><a href="nba-records.html" style="color:#1a5cff; text-decoration:none; font-size:13px; font-weight:600;">Schedule &amp; Records →</a><a href="nba-parlays.html" style="color:#1a5cff; text-decoration:none; font-size:13px; font-weight:600;">Parlays →</a><a href="../history.html?league=NBA" style="color:#1a5cff; text-decoration:none; font-size:13px; font-weight:600;">History →</a></span>
+    <span style="display:inline-flex;gap:14px;flex-wrap:wrap;"><a href="nba-records.html" style="color:#1a5cff; text-decoration:none; font-size:13px; font-weight:600;">Schedule &amp; Records →</a><a href="nba-live-archive.html" style="color:#1a5cff; text-decoration:none; font-size:13px; font-weight:600;">Day archive →</a><a href="nba-parlays.html" style="color:#1a5cff; text-decoration:none; font-size:13px; font-weight:600;">Parlays →</a><a href="../history.html?league=NBA" style="color:#1a5cff; text-decoration:none; font-size:13px; font-weight:600;">History →</a></span>
     <div class="status" id="statusPill">
       <span class="dot" id="statusDot"></span>
       <span id="statusText">Connecting…</span>
@@ -377,6 +378,11 @@
   </div>
 
   <div class="banner" id="banner"></div>
+  <div class="no-print" id="dayBar" style="display:none;margin:8px 0;font-size:13px;">
+    <label for="dayPick" style="font-weight:600;">Day:</label>
+    <select id="dayPick" style="padding:4px 8px;font-size:13px;"><option value="">Today (live)</option></select>
+    <span id="dayNote" style="margin-left:8px;color:#5f6368;"></span>
+  </div>
 
   <div class="sheet-scroll">
     <table>
@@ -408,6 +414,7 @@
         <td>O/U</td><td>Odds</td><td>Diff.</td><td>Suggested Pick</td>
       </tr>
       <tbody id="gamesBody"></tbody>
+      <tbody id="archBody" style="display:none"></tbody>
     </table>
   </div>
 
@@ -770,7 +777,9 @@ function makeGameRowsHtml(gid){
 function ensureGameBlock(gid){
   if(gameState[gid]) return;
   gameState[gid] = { q4Snapshot: { away: null, home: null }, backfillAttempted: false, lastState: "pre" };
-  $("gamesBody").insertAdjacentHTML("beforeend", makeGameRowsHtml(gid));
+  { const tmp = document.createElement("tbody");
+    tmp.innerHTML = makeGameRowsHtml(gid);
+    Array.from(tmp.children).forEach(tr => { tr.setAttribute("data-gid", gid); $("gamesBody").appendChild(tr); }); }
   ["B2","C2","D2","F2","H2","B3","C3","D3","F3","H3"].forEach(suffix=>{
     eg(gid, suffix).addEventListener("input", ()=>recalcGame(gid));
   });
@@ -1355,7 +1364,7 @@ function applyGameData(gid, away, home, status, overUnder, seasonType, gameDateI
   // freezes automatically once it goes live. (K4 used to mirror the
   // live version of this same value — it's now repurposed as Required
   // PPM, computed in recalcGame instead; see there.)
-  updateHistory(gid, { date: etDate(gameDateIso), away: away.name, home: home.name, seasonType: seasonType || null });
+  updateHistory(gid, { date: etDate(gameDateIso), start: gameDateIso || null, away: away.name, home: home.name, seasonType: seasonType || null });
   if(typeof overUnder === "number" && state === "pre"){
     updateHistory(gid, { preOdds: overUnder });
     const j4El = eg(gid, "J4");
@@ -1827,6 +1836,7 @@ async function fetchScores(){
     }
 
     $("lastUpdated").textContent = new Date().toLocaleTimeString();
+    saveSnapsSoon();
 
     if(allFinal){
       stopAutoRefresh();
@@ -2039,6 +2049,80 @@ window.addEventListener("cloud-keys", e => {
   });
   gids.forEach(g => recalcGame(g));
 });
+
+// ---- Day archive: each finished game's whole sheet is saved to the database ----
+function snapHtml(gid){
+  const rows = Array.from($("gamesBody").querySelectorAll(`tr[data-gid="${gid}"]`));
+  return rows.map(tr => {
+    const c = tr.cloneNode(true);
+    const oi = tr.querySelectorAll("input"), ci = c.querySelectorAll("input");
+    oi.forEach((el, i) => { ci[i].setAttribute("value", el.value); ci[i].disabled = true; });
+    const os = tr.querySelectorAll("select"), cs = c.querySelectorAll("select");
+    os.forEach((el, i) => {
+      Array.from(cs[i].options).forEach(o => { o.removeAttribute("selected"); if(o.value === el.value) o.setAttribute("selected", ""); });
+      cs[i].disabled = true;
+    });
+    c.querySelectorAll("[id]").forEach(e => { e.setAttribute("data-sid", e.id); e.removeAttribute("id"); });
+    return c.outerHTML;
+  }).join("");
+}
+const snapLast = {};
+let snapTimer = null;
+function saveSnapsSoon(){ clearTimeout(snapTimer); snapTimer = setTimeout(saveSnaps, 3000); }
+async function saveSnaps(){
+  const c = window.cloud;
+  if(!c) return;
+  try{ await c.whenApproved(); }catch(e){ return; }
+  if(c.state !== "approved" || !c.sb || !c.user) return;
+  const h = loadHistory(), rows = [], sent = {};
+  Object.keys(gameState).forEach(gid => {
+    const st = gameState[gid], rec = h[gid];
+    if(gid === "manual" || !st || st.lastState !== "post" || !rec || !rec.date) return;
+    const html = snapHtml(gid);
+    if(!html || snapLast[gid] === html) return;
+    sent[gid] = html;
+    rows.push({ user_id: c.user.id, key: `nba_snap_${rec.date}_${gid}`,
+      value: { snap: { gid, date: rec.date, start: rec.start || null, away: rec.away || "", home: rec.home || "", html, saved: new Date().toISOString() } },
+      updated_at: new Date().toISOString() });
+  });
+  if(!rows.length) return;
+  const r = await c.sb.from("user_data").upsert(rows, { onConflict: "user_id,key" });
+  if(r.error){ console.warn("[archive] save failed", r.error); return; }
+  Object.keys(sent).forEach(g => snapLast[g] = sent[g]);
+  loadDays();
+}
+$("gamesBody").addEventListener("input", saveSnapsSoon);
+$("gamesBody").addEventListener("change", saveSnapsSoon);
+
+async function loadDays(){
+  const c = window.cloud;
+  if(!c) return;
+  try{ await c.whenApproved(); }catch(e){ return; }
+  if(c.state !== "approved" || !c.sb) return;
+  const r = await c.sb.from("user_data").select("key").like("key", "nba_snap_%");
+  if(r.error || !r.data) return;
+  const days = Array.from(new Set(r.data.map(x => x.key.slice(9, 19)).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)))).sort().reverse();
+  const sel = $("dayPick"), cur = sel.value;
+  sel.innerHTML = `<option value="">Today (live)</option>` + days.map(d => `<option value="${d}">${d}</option>`).join("");
+  sel.value = days.includes(cur) ? cur : "";
+  $("dayBar").style.display = "";
+}
+async function showDay(){
+  const day = $("dayPick").value, c = window.cloud;
+  if(!day){
+    $("archBody").style.display = "none"; $("gamesBody").style.display = ""; $("dayNote").textContent = ""; return;
+  }
+  $("dayNote").textContent = "Loading…";
+  const r = await c.sb.from("user_data").select("value").like("key", `nba_snap_${day}_%`);
+  if(r.error){ $("dayNote").textContent = "Couldn't load that day."; return; }
+  const snaps = (r.data || []).map(x => x.value && x.value.snap).filter(Boolean)
+    .sort((a, b) => (a.start || "").localeCompare(b.start || "") || String(a.gid).localeCompare(String(b.gid)));
+  $("archBody").innerHTML = snaps.map(x => x.html).join("");
+  $("gamesBody").style.display = "none"; $("archBody").style.display = "";
+  $("dayNote").textContent = `Saved sheet for ${day} — ${snaps.length} game${snaps.length === 1 ? "" : "s"}, frozen as they finished. Pick “Today (live)” to go back.`;
+}
+$("dayPick").addEventListener("change", showDay);
+loadDays();
 
 fetchScores();
 </script>

@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NBA Live Sheet — Day Archive</title>
+<style>
+  :root{
+    --grid-line:#d0d3d8;
+    --header-bg:#eef1f4;
+    --header-fg:#3c4043;
+    --cell-bg:#ffffff;
+    --yellow:#fff3b0;
+    --pink:#f8c9c9;
+    --green:#c8e9d1;
+    --accent:#1a5cff;
+    --live-dot:#e0473a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    padding:12px;
+    background:#f4f5f7;
+    font-family:"Segoe UI", Calibri, Arial, sans-serif;
+    color:#202124;
+  }
+  .wrap{max-width:940px;margin:0 auto;}
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:12px;
+    margin-bottom:14px;
+  }
+  h1{
+    font-size:19px;
+    font-weight:600;
+    margin:0;
+    letter-spacing:.2px;
+  }
+  .status{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:13px;
+    color:#5f6368;
+    background:#fff;
+    border:1px solid var(--grid-line);
+    border-radius:20px;
+    padding:6px 12px;
+  }
+  .dot{
+    width:8px;height:8px;border-radius:50%;
+    background:#9aa0a6;
+  }
+  .dot.live{
+    background:var(--live-dot);
+    animation:pulse 1.4s infinite;
+  }
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(224,71,58,.5);}
+    70%{box-shadow:0 0 0 6px rgba(224,71,58,0);}
+    100%{box-shadow:0 0 0 0 rgba(224,71,58,0);}
+  }
+  .banner{
+    font-size:12.5px;
+    color:#8a5300;
+    background:#fff7e0;
+    border:1px solid #f0dca0;
+    border-radius:6px;
+    padding:8px 12px;
+    margin-bottom:14px;
+    display:none;
+  }
+  .sheet-scroll{
+    overflow-x:auto;
+    border:1px solid var(--grid-line);
+    border-radius:6px;
+    background:#fff;
+  }
+  table{
+    border-collapse:collapse;
+    width:100%;
+    min-width:820px; /* narrow screens scroll sideways instead of squashing the headers */
+    table-layout:fixed;
+    font-size:11px;
+  }
+  .hist-panel table{ min-width:0; }
+  .hdr-row td{
+    background:#f7f8fa;
+    font-weight:700;
+    color:#3c4043;
+    font-size:11px;
+    white-space:nowrap;
+    word-break:normal;
+    overflow-wrap:normal;
+    padding:3px 2px;
+  }
+  th,td{
+    border:1px solid var(--grid-line);
+    padding:1px 2px;
+    line-height:1.15;
+    text-align:center;
+    white-space:normal;
+    word-break:break-word;
+    overflow-wrap:break-word;
+  }
+  .colhead th{
+    background:var(--header-bg);
+    color:#5f6368;
+    font-weight:500;
+    font-size:10px;
+    height:18px;
+    padding:2px;
+  }
+  .corner{background:var(--header-bg);}
+  .rownum{
+    background:var(--header-bg);
+    color:#5f6368;
+    font-weight:500;
+    width:14px;
+    white-space:nowrap;
+    padding-left:2px;
+    padding-right:2px;
+  }
+  .hdr-row th{
+    background:#f7f8fa;
+    font-weight:600;
+    color:#3c4043;
+    font-size:10.5px;
+  }
+  td.team{
+    text-align:center;
+    font-weight:700;
+    background:#fafbfc;
+    font-size:10.5px;
+    line-height:1.2;
+    padding-left:2px;
+    padding-right:2px;
+    white-space:nowrap;
+  }
+  td.label{
+    text-align:center;
+    font-size:10px;
+    color:#5f6368;
+    font-style:italic;
+    background:#fafbfc;
+  }
+  td.fit-line{
+    white-space:nowrap !important;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    font-size:9px;
+    padding-left:1px;
+    padding-right:1px;
+  }
+  td.formula, td.avg{white-space:nowrap;}
+  td.formula{font-weight:600;}
+  td.avg{background:var(--yellow);}
+  td.pred-total{background:var(--pink) !important;font-weight:700;}
+  td.grand-total{background:var(--green) !important;font-weight:700;}
+  td.blank{background:#fbfbfc;}
+  .cell-label{
+    display:block;
+    font-size:8px;
+    font-weight:400;
+    letter-spacing:0.03em;
+    color:#9aa0a6;
+    text-transform:uppercase;
+    line-height:1.1;
+  }
+  td.k4-cell{
+    font-size:9.5px;
+    line-height:1.25;
+  }
+  .light-yellow{color:#d4b700 !important;}
+  select.light-yellow{color:#d4b700;}
+  td.proj-label.proj-right{ border-left:1px solid #d0d7e5; }
+  td.proj-label .proj-title{ display:block; font-size:9px; font-weight:700; color:#5f6368; letter-spacing:.3px; text-transform:uppercase; margin-bottom:1px; }
+  td.proj-label .proj-note{ display:block; margin-left:0; }
+  td.proj-label{ text-align:left; padding:2px 6px; font-size:10.5px; line-height:1.3; color:#3c4043; background:#f6f8fc; border-top:1px dashed #d0d7e5; }
+  td.proj-label b{ font-weight:700; }
+  td.proj-label .proj-note{ color:#80868b; font-size:9px; margin-left:8px; }
+  .hist-panel{ margin-top:14px; border:1px solid #d0d7e5; border-radius:6px; background:#fff; padding:8px 12px; font-size:12px; }
+  .hist-panel summary{ cursor:pointer; font-weight:700; font-size:13px; }
+  .hist-panel table{ border-collapse:collapse; width:auto; min-width:100%; table-layout:auto; margin-top:8px; }
+  .hist-panel th, .hist-panel td{ border:1px solid #e3e7ef; padding:3px 6px; text-align:center; white-space:nowrap; }
+  .hist-panel th{ background:#f1f4fa; white-space:normal; line-height:1.2; vertical-align:bottom; min-width:58px; font-weight:700; }
+  .hist-panel .hist-actions{ margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .hist-panel .hist-note{ color:#80868b; font-size:11px; }
+  .season-badge{display:inline-block; margin-right:8px; padding:0 6px; border-radius:3px; background:#e8eaed; color:#5f6368; font-size:10px; font-weight:700; letter-spacing:.4px; vertical-align:middle;}
+  td.matchup-label{
+    text-align:center;
+    font-weight:600;
+    font-size:11px;
+    background:#f0f3ff;
+    color:#26324a;
+  }
+  tr.spacer-row td{
+    background:#f4f5f7;
+    border-left:none;
+    border-right:none;
+    height:4px;
+    padding:0;
+    line-height:1;
+  }
+  input[type=number]{
+    width:100%;
+    max-width:38px;
+    border:1px solid #c7cad0;
+    border-radius:3px;
+    text-align:center !important;
+    font-size:11px;
+    padding:0 1px;
+    font-family:inherit;
+    -moz-appearance:textfield;
+    -webkit-appearance:none;
+    appearance:none;
+    margin:0 auto;
+    display:block;
+  }
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button{
+    -webkit-appearance:none;
+    margin:0;
+  }
+  input[type=number]:disabled{
+    border:none;
+    background:transparent;
+    color:#202124;
+    font-weight:600;
+    text-align:center !important;
+    opacity:1;
+    -webkit-text-fill-color:#202124;
+  }
+  select{
+    border:1px solid #c7cad0;
+    border-radius:3px;
+    font-size:10.5px;
+    padding:0 2px;
+    font-family:inherit;
+    width:100%;
+    max-width:52px;
+    margin:0 auto;
+    display:block;
+    text-align:center !important;
+    text-align-last:center;
+  }
+  .k5-cell{
+    vertical-align:middle;
+  }
+  .k5-inner{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:3px;
+  }
+  .odds-5min{
+    margin-top:1px;
+    font-size:8px;
+    font-weight:400;
+    letter-spacing:0.03em;
+    color:#9aa0a6;
+    text-transform:uppercase;
+    line-height:1.3;
+    text-align:center;
+  }
+  .odds-5min .odds-5min-value{
+    display:block;
+    font-size:10px;
+    font-weight:700;
+    letter-spacing:0;
+    text-transform:none;
+    color:#3c4043;
+  }
+  .k5-manual{
+    display:inline-block !important;
+    width:44px !important;
+    max-width:44px;
+    flex:0 0 auto;
+    margin:0 !important;
+    border:1px solid #c7cad0;
+    border-radius:3px;
+    text-align:center;
+    font-size:11px;
+    padding:0 1px;
+    font-family:inherit;
+  }
+  .k5-select{
+    display:inline-block !important;
+    width:18px !important;
+    max-width:18px;
+    flex:0 0 auto;
+    margin:0 !important;
+    border:1px solid #c7cad0;
+    border-radius:3px;
+    background:#f4f5f7;
+    font-size:9px;
+    padding:0 0 0 2px;
+    font-family:inherit;
+    text-indent:-9999px; /* pushes the closed box's own selected-value text fully off-screen */
+    overflow:hidden;
+  }
+  .k5-select option{
+    color:#202124; /* the popup list itself still needs to be readable */
+    text-indent:0;
+  }
+  .k5-suffix{
+    flex:0 0 auto;
+    font-size:11px;
+    font-weight:600;
+    color:#3c4043;
+  }
+  .footer{
+    margin-top:12px;
+    font-size:11.5px;
+    color:#9aa0a6;
+    display:flex;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:6px;
+  }
+  button.refresh{
+    border:1px solid var(--grid-line);
+    background:#fff;
+    border-radius:6px;
+    padding:6px 12px;
+    font-size:12.5px;
+    cursor:pointer;
+    color:#3c4043;
+  }
+  button.refresh:hover{background:#f1f3f4;}
+  #reportDate{
+    font-weight:600;
+    color:#3c4043;
+  }
+
+  @media print{
+    /* Buttons, the debug fetch-attempt log, and the "click to refresh"
+       hint don't belong in a static export — everything else (title,
+       status badge, table, footer text incl. the date) stays exactly
+       as shown on screen. */
+    .no-print{ display:none !important; }
+    body{ background:#fff; margin:0; }
+    .sheet-scroll{ border:none; overflow:visible; }
+    table{ min-width:0 !important; }
+    table{ font-size:10px; }
+    tr{ break-inside:avoid; page-break-inside:avoid; }
+    thead, .colhead, .hdr-row{ break-after:avoid; }
+    @page{ size:landscape; margin:12mm; }
+
+    /* Chrome (and most browsers) strip background colors by default when
+       printing/saving to PDF, even though everything else renders as
+       shown — this is what was washing out the yellow Avg Q1-3 cells,
+       pink T=42min cells, green Total cells, and header shading. This
+       forces the browser to keep them, matching the on-screen colors
+       exactly rather than an approximation. */
+    *{
+      -webkit-print-color-adjust:exact !important;
+      print-color-adjust:exact !important;
+      color-adjust:exact !important;
+    }
+  }
+  #archBody input:disabled, #archBody select:disabled{opacity:1;color:#202124;-webkit-text-fill-color:#202124;}
+</style>
+</head><body><div class="wrap">
+  <div class="topbar"><h1>NBA Live Sheet — Day Archive</h1>
+    <span style="display:inline-flex;gap:14px;flex-wrap:wrap;"><a href="nba-live.html" style="color:#1a5cff;text-decoration:none;font-size:13px;font-weight:600;">← Live sheet</a><a href="../history.html?league=NBA" style="color:#1a5cff;text-decoration:none;font-size:13px;font-weight:600;">History →</a></span>
+  </div>
+  <div class="no-print" style="margin:8px 0;font-size:13px;">
+    <label for="dayPick" style="font-weight:600;">Day:</label>
+    <select id="dayPick" style="padding:4px 8px;font-size:13px;"><option value="">Choose a day…</option></select>
+    <span id="dayNote" style="margin-left:8px;color:#5f6368;">Loading saved days…</span>
+  </div>
+  <div class="sheet-scroll"><table>
+<colgroup id="mainColgroup">
+        <col style="width:1.5%"> <!-- rownum -->
+        <col style="width:4.5%"> <!-- Team (3-letter code) -->
+        <col style="width:5%">   <!-- Q1 -->
+        <col style="width:5%">   <!-- Q2 -->
+        <col style="width:5%">   <!-- Q3 -->
+        <col style="width:6.5%">  <!-- Avg Q1-3 -->
+        <col style="width:6.5%"> <!-- Q4=6 min -->
+        <col style="width:6.5%"> <!-- T=42 min -->
+        <col style="width:5%">   <!-- Q4 -->
+        <col style="width:7%">   <!-- Total -->
+        <col style="width:7%">   <!-- O/U -->
+        <col style="width:17%"> <!-- Odds -->
+        <col style="width:10.5%"> <!-- Diff. -->
+        <col style="width:13%">  <!-- Suggested Pick -->
+      </colgroup>
+    <tr class="colhead"><th class="corner"></th><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th><th>G</th><th>H</th><th>I</th><th>J</th><th>K</th><th>L</th><th>M</th></tr>
+    <tr class="hdr-row"><td class="rownum">1</td><td>Team</td><td>Q1</td><td>Q2</td><td>Q3</td><td>Avg Q1-3</td><td>Q4=6 min</td><td>T=42 min</td><td>Q4</td><td>Total</td><td>O/U</td><td>Odds</td><td>Diff.</td><td>Suggested Pick</td></tr>
+    <tbody id="archBody"></tbody>
+  </table></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="../cloud.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+async function loadDays(){
+  try{ await window.cloud.whenApproved(); }catch(e){ return; }
+  const r = await window.cloud.sb.from("user_data").select("key").like("key", "nba_snap_%");
+  if(r.error || !r.data){ $("dayNote").textContent = "Couldn't load saved days."; return; }
+  const days = Array.from(new Set(r.data.map(x => x.key.slice(9, 19)).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)))).sort().reverse();
+  $("dayPick").innerHTML = days.length ? days.map(d => `<option value="${d}">${d}</option>`).join("") : `<option value="">No saved days yet</option>`;
+  $("dayNote").textContent = days.length ? "" : "Days appear here after a game finishes while the live sheet is open (signed in).";
+  if(days.length) showDay();
+}
+async function showDay(){
+  const day = $("dayPick").value;
+  if(!day){ $("archBody").innerHTML = ""; return; }
+  $("dayNote").textContent = "Loading…";
+  const r = await window.cloud.sb.from("user_data").select("value").like("key", `nba_snap_${day}_%`);
+  if(r.error){ $("dayNote").textContent = "Couldn't load that day."; return; }
+  const snaps = (r.data || []).map(x => x.value && x.value.snap).filter(Boolean)
+    .sort((a, b) => (a.start || "").localeCompare(b.start || "") || String(a.gid).localeCompare(String(b.gid)));
+  $("archBody").innerHTML = snaps.map(x => x.html).join("");
+  $("dayNote").textContent = `${snaps.length} game${snaps.length === 1 ? "" : "s"} saved for ${day}, frozen as they finished.`;
+}
+$("dayPick").addEventListener("change", showDay);
+loadDays();
+</script></body></html>
