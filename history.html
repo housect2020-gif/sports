@@ -88,8 +88,14 @@ function resultOf(total, line){
 const cls = r => r === "Over" ? "over" : (r === "Under" ? "under" : "push");
 const f1 = v => v == null ? "–" : Number(v).toFixed(1);
 
+let EDITS = {};
 function myHistory(){
-  try{ return JSON.parse(localStorage.getItem("nba_history_v1") || "{}"); }catch(e){ return {}; }
+  let base = {};
+  try{ base = JSON.parse(localStorage.getItem("nba_history_v1") || "{}"); }catch(e){}
+  const out = {};
+  Object.keys(base).forEach(g => out[g] = base[g]);
+  Object.keys(EDITS).forEach(g => { out[g] = Object.assign({}, out[g] || {}, EDITS[g]); });   // your manual corrections win
+  return out;
 }
 
 async function load(){
@@ -108,6 +114,11 @@ async function load(){
     if(!r.data || r.data.length < 1000) break;
     from += 1000;
   }
+  try{
+    const er = await sb.from("user_data").select("key,value").like("key", "nba_edit_%");
+    EDITS = {};
+    (er.data || []).forEach(x => { try{ EDITS[x.key.slice(9)] = JSON.parse(x.value && x.value.v); }catch(e){} });
+  }catch(e){}
   ROWS = all.filter(g => g.final_away != null && g.final_home != null);
   render();
 }
