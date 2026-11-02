@@ -531,15 +531,29 @@ document.addEventListener("click", async e => {
     redrawNote(gid);
   }
 });
-function predRowHtml(gid, rec){
+function predRowHtml(gid, rec, tot){
   const k = rec.k5Final != null ? rec.k5Final : rec.odds5min;
   const kv = k == null ? "" : Math.floor(k);
   const j = rec.j5Final || "";
   const opt = (v, t) => `<option value="${v}"${j === v ? " selected" : ""}>${t}</option>`;
-  return `<tr data-gid="${gid}"><td class="rownum"></td><td class="team" title="Predicted">Pred.</td>${'<td class="blank"></td>'.repeat(8)}
+  return `<tr data-gid="${gid}"><td class="rownum"></td><td class="team" title="Predicted">Pred.</td>${'<td class="blank"></td>'.repeat(7)}<td class="formula grand-total arch-i5">${tot == null ? "–" : tot}</td>
     <td><select class="arch-j5">${opt("", "–")}${opt("Under", "Under")}${opt("Over", "Over")}</select></td>
     <td class="k5-cell"><div class="k5-inner"><input type="text" inputmode="numeric" class="k5-manual arch-k5" placeholder="Total" value="${kv}"><span class="k5-suffix">.5</span></div></td>
-    <td class="blank"></td><td class="blank"></td></tr>`;
+    <td class="formula pred-total arch-l5">–</td><td class="blank"></td></tr>`;
+}
+// Diff. cell (L5): |K5 - total|, green when your J5 pick is winning, pink otherwise — same rule as the live sheet.
+function updateL5(tr){
+  const gid = tr.dataset.gid, k = tr.querySelector(".arch-k5"), j = tr.querySelector(".arch-j5");
+  const l = tr.querySelector('[data-sid$="-L5"]') || tr.querySelector(".arch-l5");
+  if(!k || !l) return;
+  let tot = ENTRY_CTX[gid] && ENTRY_CTX[gid].tot;
+  if(tot == null){ const i5 = tr.querySelector('[data-sid$="-I5"]'); tot = i5 ? parseFloat(i5.textContent) : NaN; }
+  const kv = k.value.trim() === "" || isNaN(Number(k.value)) ? null : Number(k.value) + 0.5;
+  if(kv === null || tot == null || isNaN(tot)){ l.textContent = "–"; l.classList.remove("grand-total"); l.classList.add("pred-total"); return; }
+  l.textContent = Math.abs(kv - tot).toFixed(1);
+  const jv = j ? j.value : "";
+  const win = (jv === "Over" && kv < tot) || (jv === "Under" && kv > tot);
+  l.classList.remove("grand-total", "pred-total"); l.classList.add(win ? "grand-total" : "pred-total");
 }
 function enableArchiveCells(root){
   root.querySelectorAll('[data-sid$="-K5manual"]').forEach(el => { el.disabled = false; el.classList.add("arch-k5"); });
@@ -550,6 +564,7 @@ function enableArchiveCells(root){
     const k = tr.querySelector(".arch-k5"), j = tr.querySelector(".arch-j5");
     if(k && EDITS[gid] && EDITS[gid].k5Final != null) k.value = Math.floor(EDITS[gid].k5Final);
     if(j && EDITS[gid] && EDITS[gid].j5Final != null) j.value = EDITS[gid].j5Final;
+    if(k) updateL5(tr);
   });
 }
 document.addEventListener("change", async e => {
@@ -566,6 +581,7 @@ document.addEventListener("change", async e => {
     obj.j5Final = el.value || null;
   }
   const val = JSON.stringify(obj);
+  updateL5(tr);
   EDITS[gid] = obj;          // update first, so two quick edits don't overwrite each other
   const r = await c.sb.from("user_data").upsert([{ user_id: c.user.id, key: `nba_edit_${gid}`, value: { v: val }, updated_at: new Date().toISOString() }], { onConflict: "user_id,key" });
   if(r.error){ alert("Save failed: " + (r.error.message || r.error)); return; }
@@ -628,7 +644,7 @@ async function showDayCommon(day, apply, stillCurrent){
       const gid = "g" + g.game_id, tot = g.final_away + g.final_home, fb = minesOf(g);
       const ex = q6[g.game_id] ? "" : "(6-minute score not available)";
       ENTRY_CTX[gid] = { tot, fallback: fb, extra: ex };
-      return { start: g.start_time || "", html: sharedRowsHtml(g, q6[g.game_id] || null) + predRowHtml(gid, recFor(gid, fb)) + noteRowHtml(gid, recFor(gid, fb), tot, ex) + '<tr class="spacer-row"><td colspan="14"></td></tr>' };
+      return { start: g.start_time || "", html: sharedRowsHtml(g, q6[g.game_id] || null) + predRowHtml(gid, recFor(gid, fb), tot) + noteRowHtml(gid, recFor(gid, fb), tot, ex) + '<tr class="spacer-row"><td colspan="14"></td></tr>' };
     }));
     items.sort((a, b) => a.start.localeCompare(b.start));
     apply({ html: items.map(i => i.html).join(""), n: items.length, full: own.length, lookingUp: false });
