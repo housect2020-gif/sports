@@ -428,6 +428,18 @@ async function fetchQ6(gameId){
   }
   return undefined;                        // couldn't reach ESPN — try again next time
 }
+function entriesNoteHtml(rec, tot){
+  const col = r => r === "Over" ? "#0a7d3f" : (r === "Under" ? "#c5221f" : "#202124");
+  const f = v => v == null || v === "" ? "–" : Number(v).toFixed(1);
+  const side = (k5, j5, l4) => {
+    const r = k5 == null ? null : (tot > k5 ? "Over" : (tot < k5 ? "Under" : "Push"));
+    const mark = (p) => p && r && r !== "Push" ? (p === r ? " ✓" : " ✗") : "";
+    const lean = (l4 != null && k5 != null) ? (l4 > k5 ? "Over" : (l4 < k5 ? "Under" : null)) : null;
+    return `K5 <b>${f(k5)}</b> · J5 <b style="color:${col(j5)}">${j5 || "–"}</b>${mark(j5)} · L4 <b>${f(l4)}</b>${lean ? ` (${lean}${mark(lean)})` : ""}`;
+  };
+  const kF = rec.k5Final != null ? rec.k5Final : rec.odds5min;
+  return `<b>At 6:00</b> — ${side(rec.odds5min, rec.j5At6, rec.l4At6)} &nbsp;|&nbsp; <b>Final</b> — ${side(kF, rec.j5Final, rec.l4Final)} &nbsp;|&nbsp; total ${tot}`;
+}
 function sharedRowsHtml(g, q6, mine){
   const aq = (g.away_q || []).map(Number), hq = (g.home_q || []).map(Number);
   const q = (arr, i) => arr[i] === undefined || isNaN(arr[i]) ? null : arr[i];
@@ -452,6 +464,8 @@ function sharedRowsHtml(g, q6, mine){
   const t = [0,1,2,3].map(sumQ);
   const fT = fA !== null && fH !== null ? fA + fH : null, gT = gA !== null && gH !== null ? gA + gH : null;
   let note = "Scores and pre-game line only — the live sheet wasn’t open for this game.";
+  if(mine && mine.rec && (mine.rec.odds5min != null || mine.rec.j5At6 || mine.rec.k5Final != null || mine.rec.j5Final)) note = entriesNoteHtml(mine.rec, tot);
+  else
   if(mine && (mine.k5 != null || mine.j5)){
     const k5 = mine.k5, r = k5 == null ? null : (tot > k5 ? "Over" : (tot < k5 ? "Under" : "Push"));
     const ok = mine.j5 && r && r !== "Push" ? (mine.j5 === r ? " ✓" : " ✗") : "";
@@ -493,7 +507,7 @@ async function showDayCommon(day, apply, stillCurrent){
   const have = new Set(own.map(s => String(s.gid)));
   const games = (shared.data || []).filter(g => !have.has("g" + g.game_id) && g.final_away != null && g.final_home != null);
   // your own saved entries + cached 6-minute scores for those games
-  const keys = [];
+  const keys = ["nba_history_v1"];
   games.forEach(g => { ["K5manual", "K5", "J5", "oddsAt5min"].forEach(f => keys.push(`nba_${f}_g${g.game_id}`)); keys.push(`nba_snap_q6_g${g.game_id}`); });
   const extra = {};
   if(keys.length){
@@ -501,13 +515,14 @@ async function showDayCommon(day, apply, stillCurrent){
     (r.data || []).forEach(x => { extra[x.key] = x.value; });
   }
   const val = k => { const v = extra[k]; return v && v.v !== undefined ? v.v : null; };
+  let hist = {}; try{ hist = JSON.parse(val("nba_history_v1") || "{}"); }catch(e){}
   const q6 = {};
   games.forEach(g => { const v = extra[`nba_snap_q6_g${g.game_id}`]; if(v && v.q6) q6[g.game_id] = v.q6; });
   const minesOf = g => {
     const id = "g" + g.game_id, m = val(`nba_oddsAt5min_${id}`), k = val(`nba_K5_${id}`), km = val(`nba_K5manual_${id}`);
     let k5 = m !== null && m !== "" ? Number(m) : (k !== null && k !== "" ? Number(k) + 0.5 : (km !== null && km !== "" && Number(km) >= 100 ? Number(km) + 0.5 : null));
     const j5 = val(`nba_J5_${id}`);
-    return { k5: isNaN(k5) ? null : k5, j5: j5 || null };
+    return { k5: isNaN(k5) ? null : k5, j5: j5 || null, rec: hist["g" + g.game_id] || null };
   };
   const draw = () => {
     const items = own.map(s => ({ start: s.start || "", html: s.html }))

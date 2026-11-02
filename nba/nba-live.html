@@ -580,10 +580,11 @@ function captureFinalEntries(gid){
   if(!st || st.lastState !== "post") return;
   const k5Raw = eg(gid, "K5").value, j5 = eg(gid, "J5").value;
   const k5 = k5Raw === "" ? null : Number(k5Raw) + 0.5;
+  const l4 = parseFloat(eg(gid, "L4").textContent);
   updateHistory(gid, cur => {
     if(cur.finalCaptured) return null;
     if((k5 === null || k5 < 100) && !j5) return null;      // nothing meaningful entered yet — try again next poll
-    return { finalCaptured: true, k5Final: (k5 !== null && k5 >= 100) ? k5 : null, j5Final: j5 || null };
+    return { finalCaptured: true, k5Final: (k5 !== null && k5 >= 100) ? k5 : null, j5Final: j5 || null, l4Final: isNaN(l4) ? null : l4 };
   });
 }
 function etDate(iso){
@@ -1206,6 +1207,17 @@ function recalcGame(gid){
     if(!st.m5Frozen.changed && K5 !== null){
       updateHistory(gid, cur => cur.pick5Ppm !== undefined ? null : {
         pick5Ppm: live.m5Ppm || null, pick5Cons: live.m5Consensus || null
+      });
+    }
+    // Also record your J5 (Over/Under) and L4 as they stand at the 6:00 mark, for the History page.
+    // J5 keeps updating until you change K5 or the minutes, in case you pick it a moment after the snapshot.
+    if(!st.m5Frozen.changed && K5 !== null){
+      const j5Now = eg(gid, "J5").value;
+      updateHistory(gid, cur => {
+        const patch = {};
+        if(cur.l4At6 == null && !isNaN(L4)) patch.l4At6 = L4;
+        if(j5Now && cur.j5At6 !== j5Now) patch.j5At6 = j5Now;
+        return Object.keys(patch).length ? patch : null;
       });
     }
   }
@@ -2067,6 +2079,8 @@ window.addEventListener("cloud-keys", e => {
 // ---- Day archive: each finished game's whole sheet is saved to the database ----
 function snapHtml(gid){
   const rows = Array.from($("gamesBody").querySelectorAll(`tr[data-gid="${gid}"]`));
+  const rec = loadHistory()[gid];
+  const noteRow = rec ? `<tr><td class="rownum"></td><td colspan="13" class="proj-label" style="color:#202124">${entriesNoteHtml(rec, rec.finalTotal != null ? rec.finalTotal : ((Number(rec.finalAway)||0) + (Number(rec.finalHome)||0)))}</td></tr>` : "";
   return rows.map(tr => {
     const c = tr.cloneNode(true);
     const oi = tr.querySelectorAll("input"), ci = c.querySelectorAll("input");
@@ -2078,7 +2092,7 @@ function snapHtml(gid){
     });
     c.querySelectorAll("[id]").forEach(e => { e.setAttribute("data-sid", e.id); e.removeAttribute("id"); });
     return c.outerHTML;
-  }).join("");
+  }).join("") + noteRow;
 }
 const snapLast = {};
 let snapTimer = null;
@@ -2139,6 +2153,18 @@ async function fetchQ6(gameId){
   }
   return undefined;                        // couldn't reach ESPN — try again next time
 }
+function entriesNoteHtml(rec, tot){
+  const col = r => r === "Over" ? "#0a7d3f" : (r === "Under" ? "#c5221f" : "#202124");
+  const f = v => v == null || v === "" ? "–" : Number(v).toFixed(1);
+  const side = (k5, j5, l4) => {
+    const r = k5 == null ? null : (tot > k5 ? "Over" : (tot < k5 ? "Under" : "Push"));
+    const mark = (p) => p && r && r !== "Push" ? (p === r ? " ✓" : " ✗") : "";
+    const lean = (l4 != null && k5 != null) ? (l4 > k5 ? "Over" : (l4 < k5 ? "Under" : null)) : null;
+    return `K5 <b>${f(k5)}</b> · J5 <b style="color:${col(j5)}">${j5 || "–"}</b>${mark(j5)} · L4 <b>${f(l4)}</b>${lean ? ` (${lean}${mark(lean)})` : ""}`;
+  };
+  const kF = rec.k5Final != null ? rec.k5Final : rec.odds5min;
+  return `<b>At 6:00</b> — ${side(rec.odds5min, rec.j5At6, rec.l4At6)} &nbsp;|&nbsp; <b>Final</b> — ${side(kF, rec.j5Final, rec.l4Final)} &nbsp;|&nbsp; total ${tot}`;
+}
 function sharedRowsHtml(g, q6, mine){
   const aq = (g.away_q || []).map(Number), hq = (g.home_q || []).map(Number);
   const q = (arr, i) => arr[i] === undefined || isNaN(arr[i]) ? null : arr[i];
@@ -2163,6 +2189,8 @@ function sharedRowsHtml(g, q6, mine){
   const t = [0,1,2,3].map(sumQ);
   const fT = fA !== null && fH !== null ? fA + fH : null, gT = gA !== null && gH !== null ? gA + gH : null;
   let note = "Scores and pre-game line only — the live sheet wasn’t open for this game.";
+  if(mine && mine.rec && (mine.rec.odds5min != null || mine.rec.j5At6 || mine.rec.k5Final != null || mine.rec.j5Final)) note = entriesNoteHtml(mine.rec, tot);
+  else
   if(mine && (mine.k5 != null || mine.j5)){
     const k5 = mine.k5, r = k5 == null ? null : (tot > k5 ? "Over" : (tot < k5 ? "Under" : "Push"));
     const ok = mine.j5 && r && r !== "Push" ? (mine.j5 === r ? " ✓" : " ✗") : "";
@@ -2204,7 +2232,7 @@ async function showDayCommon(day, apply, stillCurrent){
   const have = new Set(own.map(s => String(s.gid)));
   const games = (shared.data || []).filter(g => !have.has("g" + g.game_id) && g.final_away != null && g.final_home != null);
   // your own saved entries + cached 6-minute scores for those games
-  const keys = [];
+  const keys = ["nba_history_v1"];
   games.forEach(g => { ["K5manual", "K5", "J5", "oddsAt5min"].forEach(f => keys.push(`nba_${f}_g${g.game_id}`)); keys.push(`nba_snap_q6_g${g.game_id}`); });
   const extra = {};
   if(keys.length){
@@ -2212,13 +2240,14 @@ async function showDayCommon(day, apply, stillCurrent){
     (r.data || []).forEach(x => { extra[x.key] = x.value; });
   }
   const val = k => { const v = extra[k]; return v && v.v !== undefined ? v.v : null; };
+  let hist = {}; try{ hist = JSON.parse(val("nba_history_v1") || "{}"); }catch(e){}
   const q6 = {};
   games.forEach(g => { const v = extra[`nba_snap_q6_g${g.game_id}`]; if(v && v.q6) q6[g.game_id] = v.q6; });
   const minesOf = g => {
     const id = "g" + g.game_id, m = val(`nba_oddsAt5min_${id}`), k = val(`nba_K5_${id}`), km = val(`nba_K5manual_${id}`);
     let k5 = m !== null && m !== "" ? Number(m) : (k !== null && k !== "" ? Number(k) + 0.5 : (km !== null && km !== "" && Number(km) >= 100 ? Number(km) + 0.5 : null));
     const j5 = val(`nba_J5_${id}`);
-    return { k5: isNaN(k5) ? null : k5, j5: j5 || null };
+    return { k5: isNaN(k5) ? null : k5, j5: j5 || null, rec: hist["g" + g.game_id] || null };
   };
   const draw = () => {
     const items = own.map(s => ({ start: s.start || "", html: s.html }))
