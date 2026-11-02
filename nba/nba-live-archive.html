@@ -370,6 +370,11 @@
     <select id="dayPick" style="padding:4px 8px;font-size:13px;"><option value="">Choose a day…</option></select>
     <span id="dayNote" style="margin-left:8px;color:#5f6368;">Loading saved days…</span>
   </div>
+  <div class="no-print" style="margin:6px 0 10px;font-size:13px;">
+    <button id="fillBtn" style="padding:5px 10px;font-size:13px;cursor:pointer;">Fill in missed days</button>
+    <select id="fillDays" style="padding:4px 8px;font-size:13px;"><option value="7">last 7 days</option><option value="14" selected>last 14 days</option><option value="30">last 30 days</option></select>
+    <span id="fillNote" style="margin-left:8px;color:#5f6368;">Adds final scores for days the live sheet wasn’t open (scores and Over/Under result only — no K5 or picks).</span>
+  </div>
   <div class="sheet-scroll"><table>
 <colgroup id="mainColgroup">
         <col style="width:1.5%"> <!-- rownum -->
@@ -417,5 +422,75 @@ async function showDay(){
   $("dayNote").textContent = `${snaps.length} game${snaps.length === 1 ? "" : "s"} saved for ${day}, frozen as they finished.`;
 }
 $("dayPick").addEventListener("change", showDay);
+
+// ---- Catch-up: build score-only entries for days that were never saved ----
+const SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard";
+const PROXIES = [
+  u => u,
+  u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
+  u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+  u => "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(u)
+];
+const ABBR3 = { NY:"NYK", GS:"GSW", NO:"NOP", SA:"SAS", UTAH:"UTA", WSH:"WAS" };
+const abbr3 = a => ABBR3[a] || a;
+const etDay = d => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(d);
+async function espnDay(ymd){
+  const t = `${SCOREBOARD_URL}?dates=${ymd}`;
+  for(const w of PROXIES){
+    try{ const r = await fetch(w(t), { cache: "no-store" }); if(r.ok) return (await r.json()).events || []; }catch(e){}
+  }
+  return null;
+}
+function fillRow(g){
+  const q = i => g.away.q[i] === undefined ? "–" : `${g.away.q[i]}-${g.home.q[i]}`;
+  const ot = g.away.q.length > 4 ? g.away.q.slice(4).map((_, i) => `${g.away.q[4+i]}-${g.home.q[4+i]}`).join(", ") : "";
+  const res = g.pre == null ? "–" : (g.total > g.pre ? "Over" : (g.total < g.pre ? "Under" : "Push"));
+  return `<tr><td style="padding:3px 6px;font-weight:600">${g.away.t} @ ${g.home.t}</td><td style="padding:3px 6px">${q(0)}</td><td style="padding:3px 6px">${q(1)}</td><td style="padding:3px 6px">${q(2)}</td><td style="padding:3px 6px">${q(3)}</td><td style="padding:3px 6px">${ot || "–"}</td><td style="padding:3px 6px;font-weight:600">${g.away.s}-${g.home.s} (${g.total})</td><td style="padding:3px 6px">${g.pre == null ? "–" : g.pre}</td><td style="padding:3px 6px;font-weight:600">${res}</td></tr>`;
+}
+function fillHtml(g){
+  return `<tr class="fill-row"><td colspan="14"><table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#f1f3f4;text-align:left"><th style="padding:3px 6px">Game (away @ home)</th><th style="padding:3px 6px">Q1</th><th style="padding:3px 6px">Q2</th><th style="padding:3px 6px">Q3</th><th style="padding:3px 6px">Q4</th><th style="padding:3px 6px">OT</th><th style="padding:3px 6px">Final</th><th style="padding:3px 6px">Pre-game O/U</th><th style="padding:3px 6px">Result</th></tr></thead><tbody>${fillRow(g)}</tbody></table><div style="font-size:11px;color:#5f6368;padding:2px 6px 8px">Catch-up entry — scores only, no K5/picks saved.</div></td></tr>`;
+}
+async function fillMissed(){
+  const c = window.cloud, n = parseInt($("fillDays").value), btn = $("fillBtn");
+  btn.disabled = true;
+  try{ await c.whenApproved(); }catch(e){ btn.disabled = false; return; }
+  const have = await c.sb.from("user_data").select("key").like("key", "nba_snap_%");
+  const haveKeys = new Set((have.data || []).map(x => x.key));
+  const today = etDay(new Date(Date.now() - 4*3600*1000));
+  const found = [];
+  for(let i = 0; i <= n; i++){
+    const d = new Date(today + "T12:00:00"); d.setDate(d.getDate() - i);
+    const ymd = etDay(d).replaceAll("-", "");
+    $("fillNote").textContent = `Checking ${etDay(d)}…`;
+    const evs = await espnDay(ymd);
+    (evs || []).forEach(ev => {
+      const comp = ev.competitions && ev.competitions[0];
+      if(!comp || !comp.status || comp.status.type.state !== "post") return;
+      if(ev.season && ev.season.type === 1) return;               // skip preseason
+      const a = comp.competitors.find(x => x.homeAway === "away"), h = comp.competitors.find(x => x.homeAway === "home");
+      if(!a || !h) return;
+      const ls = x => (x.linescores || []).map(l => Number(l.value));
+      const side = x => ({ t: abbr3(x.team.abbreviation), s: Number(x.score), q: ls(x) });
+      const g = { gid: "g" + ev.id, id: String(ev.id), date: etDay(new Date(ev.date)), start: ev.date, away: side(a), home: side(h) };
+      g.total = g.away.s + g.home.s;
+      if(!haveKeys.has(`nba_snap_${g.date}_${g.gid}`) && !found.some(f => f.id === g.id)) found.push(g);
+    });
+  }
+  if(!found.length){ $("fillNote").textContent = "Nothing missing in that range."; btn.disabled = false; return; }
+  const odds = await c.sb.from("games").select("game_id,pre_odds").eq("league", "NBA").in("game_id", found.map(g => g.id));
+  const pre = {}; (odds.data || []).forEach(r => { if(r.pre_odds != null) pre[r.game_id] = Number(r.pre_odds); });
+  const now = new Date().toISOString();
+  const rows = found.map(g => { g.pre = pre[g.id] != null ? pre[g.id] : null;
+    return { user_id: c.user.id, key: `nba_snap_${g.date}_${g.gid}`, updated_at: now,
+      value: { snap: { gid: g.gid, date: g.date, start: g.start, away: g.away.t, home: g.home.t, kind: "summary", html: fillHtml(g), saved: now } } }; });
+  for(let i = 0; i < rows.length; i += 50){
+    const r = await c.sb.from("user_data").upsert(rows.slice(i, i + 50), { onConflict: "user_id,key" });
+    if(r.error){ $("fillNote").textContent = "Save failed: " + (r.error.message || r.error); btn.disabled = false; return; }
+  }
+  $("fillNote").textContent = `Added ${rows.length} game${rows.length === 1 ? "" : "s"}.`;
+  btn.disabled = false;
+  await loadDays();
+}
+$("fillBtn").addEventListener("click", fillMissed);
 loadDays();
 </script></body></html>
