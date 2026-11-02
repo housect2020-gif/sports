@@ -401,7 +401,34 @@ const $ = id => document.getElementById(id);
 // ---- shared sheet-style rows for games you have no personal snapshot of (from the shared games table) ----
 const ABBR3X = { NY:"NYK", GS:"GSW", NO:"NOP", SA:"SAS", UTAH:"UTA", WSH:"WAS" };
 const a3x = a => ABBR3X[a] || a;
-function sharedRowsHtml(g){
+const Q6_PROXIES = [
+  u => u,
+  u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
+  u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+  u => "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(u)
+];
+function clockMin(s){ const p = String(s || "").split(":"); if(p.length !== 2) return null; const m = parseFloat(p[0]), x = parseFloat(p[1]); return (isNaN(m) || isNaN(x)) ? null : m + x / 60; }
+// Score right when Q4 hit 6:00 left, from ESPN's play-by-play. Returns {away, home} (running totals) or null.
+async function fetchQ6(gameId){
+  const target = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${gameId}`;
+  for(const w of Q6_PROXIES){
+    try{
+      const r = await fetch(w(target), { cache: "no-store" });
+      if(!r.ok) continue;
+      const plays = (await r.json()).plays || [];
+      let cand = null;
+      for(const p of plays){
+        if(!p.period || p.period.number !== 4) continue;
+        const rem = clockMin(p.clock && p.clock.displayValue);
+        if(rem !== null && rem >= 6 && p.awayScore !== undefined && p.homeScore !== undefined) cand = p;
+      }
+      if(cand && !isNaN(Number(cand.awayScore)) && !isNaN(Number(cand.homeScore))) return { away: Number(cand.awayScore), home: Number(cand.homeScore) };
+      if(plays.length) return null;        // feed answered but has no usable point
+    }catch(e){}
+  }
+  return undefined;                        // couldn't reach ESPN — try again next time
+}
+function sharedRowsHtml(g, q6, mine){
   const aq = (g.away_q || []).map(Number), hq = (g.home_q || []).map(Number);
   const q = (arr, i) => arr[i] === undefined || isNaN(arr[i]) ? null : arr[i];
   const show = v => v === null || v === undefined ? "–" : v;
@@ -410,23 +437,36 @@ function sharedRowsHtml(g){
   const tot = g.final_away + g.final_home;
   const pre = g.pre_odds == null ? null : Number(g.pre_odds);
   const res = pre == null ? "–" : (tot > pre ? "Over" : (tot < pre ? "Under" : "Push"));
-  const resColor = res === "Over" ? "#0a7d3f" : (res === "Under" ? "#c5221f" : "#202124");
-  const teamRow = (name, arr, fin) => `<tr><td class="rownum"></td><td class="team">${name}</td>
+  const col = r => r === "Over" ? "#0a7d3f" : (r === "Under" ? "#c5221f" : "#202124");
+  const sum3 = arr => (q(arr,0) === null || q(arr,1) === null || q(arr,2) === null) ? null : q(arr,0) + q(arr,1) + q(arr,2);
+  const fOf = (arr, raw) => (q6 && raw != null && sum3(arr) !== null) ? raw - sum3(arr) : null;
+  const fA = fOf(aq, q6 && q6.away), fH = fOf(hq, q6 && q6.home);
+  const gOf = (arr, f) => (f === null || sum3(arr) === null) ? null : sum3(arr) + f;
+  const gA = gOf(aq, fA), gH = gOf(hq, fH);
+  const teamRow = (name, arr, f, gg, fin) => `<tr><td class="rownum"></td><td class="team">${name}</td>
     <td>${show(q(arr,0))}</td><td>${show(q(arr,1))}</td><td>${show(q(arr,2))}</td>
-    <td class="formula avg">${show(avg3(arr))}</td><td class="formula">–</td><td class="formula">–</td>
+    <td class="formula avg">${show(avg3(arr))}</td><td class="formula">${show(f)}</td><td class="formula">${show(gg)}</td>
     <td>${show(q(arr,3))}</td><td class="formula">${fin}</td>
     <td class="blank"></td><td class="blank"></td><td class="blank"></td><td class="blank"></td></tr>`;
   const sumQ = i => (q(aq,i) === null || q(hq,i) === null) ? null : q(aq,i) + q(hq,i);
   const t = [0,1,2,3].map(sumQ);
+  const fT = fA !== null && fH !== null ? fA + fH : null, gT = gA !== null && gH !== null ? gA + gH : null;
+  let note = "Scores and pre-game line only — the live sheet wasn’t open for this game.";
+  if(mine && (mine.k5 != null || mine.j5)){
+    const k5 = mine.k5, r = k5 == null ? null : (tot > k5 ? "Over" : (tot < k5 ? "Under" : "Push"));
+    const ok = mine.j5 && r && r !== "Push" ? (mine.j5 === r ? " ✓" : " ✗") : "";
+    note = `Your entries — K5: <b>${k5 == null ? "–" : k5.toFixed(1)}</b> · J5: <b style="color:${col(mine.j5)}">${mine.j5 || "–"}</b>${ok}` + (r ? ` · final total ${tot} was <b style="color:${col(r)}">${r}</b> vs your K5` : "");
+  }
+  if(!q6) note += " 6-minute score not available.";
   return `<tr><td class="rownum"></td><td colspan="13" class="matchup-label">${a3x(g.away)} @ ${a3x(g.home)} — Final${otN ? ` (${otN > 1 ? otN + "OT" : "OT"})` : ""}</td></tr>`
-    + teamRow(a3x(g.away), aq, g.final_away) + teamRow(a3x(g.home), hq, g.final_home)
+    + teamRow(a3x(g.away), aq, fA, gA, g.final_away) + teamRow(a3x(g.home), hq, fH, gH, g.final_home)
     + `<tr><td class="rownum"></td><td class="team">Total</td>
     <td class="formula">${show(t[0])}</td><td class="formula">${show(t[1])}</td><td class="formula">${show(t[2])}</td>
-    <td class="formula avg">${t[0] !== null && t[1] !== null && t[2] !== null ? Math.round((t[0]+t[1]+t[2]) / 3 * 10) / 10 : "–"}</td><td class="formula">–</td><td class="formula">–</td>
+    <td class="formula avg">${t[0] !== null && t[1] !== null && t[2] !== null ? Math.round((t[0]+t[1]+t[2]) / 3 * 10) / 10 : "–"}</td><td class="formula">${show(fT)}</td><td class="formula">${show(gT)}</td>
     <td class="formula">${show(t[3])}</td><td class="formula grand-total">${tot}</td>
     <td class="formula"><span class="cell-label">PRE-ODDS</span>${pre == null ? "–" : pre.toFixed(1)}</td>
-    <td class="formula">–</td><td class="formula">–</td><td class="formula" style="font-weight:700;color:${resColor}">${res}</td></tr>
-    <tr><td class="rownum"></td><td colspan="13" class="proj-label" style="color:#5f6368">Scores and pre-game line only — the live sheet wasn’t open for this game, so no K5 / picks were saved.</td></tr>
+    <td class="formula">–</td><td class="formula">–</td><td class="formula" style="font-weight:700;color:${col(res)}">${res}</td></tr>
+    <tr><td class="rownum"></td><td colspan="13" class="proj-label" style="color:#5f6368">${note}</td></tr>
     <tr class="spacer-row"><td colspan="14"></td></tr>`;
 }
 async function loadDayList(){
@@ -440,24 +480,56 @@ async function loadDayList(){
   (shared.data || []).forEach(x => x.game_date && days.add(x.game_date));
   return Array.from(days).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().reverse();
 }
-async function dayRowsHtml(day){
+// Loads a day and draws it; fills in the 6-minute scores afterwards (cached per game in your account).
+async function showDayCommon(day, apply, stillCurrent){
   const c = window.cloud;
   const [mine, shared] = await Promise.all([
     c.sb.from("user_data").select("value").like("key", `nba_snap_${day}_%`),
     c.sb.from("games").select("game_id,game_date,start_time,away,home,pre_odds,final_away,final_home,away_q,home_q,season_type")
       .eq("league", "NBA").eq("state", "post").eq("game_date", day).neq("season_type", 1)
   ]);
-  if(mine.error || shared.error) return null;
-  const items = [], have = new Set();
-  (mine.data || []).map(x => x.value && x.value.snap).filter(s => s && s.kind !== "summary").forEach(s => {
-    have.add(String(s.gid)); items.push({ start: s.start || "", html: s.html, mine: true });
-  });
-  (shared.data || []).forEach(g => {
-    if(have.has("g" + g.game_id) || g.final_away == null || g.final_home == null) return;
-    items.push({ start: g.start_time || "", html: sharedRowsHtml(g), mine: false });
-  });
-  items.sort((a, b) => a.start.localeCompare(b.start));
-  return { html: items.map(i => i.html).join(""), n: items.length, full: items.filter(i => i.mine).length };
+  if(mine.error || shared.error) return apply(null);
+  const own = (mine.data || []).map(x => x.value && x.value.snap).filter(s => s && s.kind !== "summary");
+  const have = new Set(own.map(s => String(s.gid)));
+  const games = (shared.data || []).filter(g => !have.has("g" + g.game_id) && g.final_away != null && g.final_home != null);
+  // your own saved entries + cached 6-minute scores for those games
+  const keys = [];
+  games.forEach(g => { ["K5manual", "K5", "J5", "oddsAt5min"].forEach(f => keys.push(`nba_${f}_g${g.game_id}`)); keys.push(`nba_snap_q6_g${g.game_id}`); });
+  const extra = {};
+  if(keys.length){
+    const r = await c.sb.from("user_data").select("key,value").in("key", keys);
+    (r.data || []).forEach(x => { extra[x.key] = x.value; });
+  }
+  const val = k => { const v = extra[k]; return v && v.v !== undefined ? v.v : null; };
+  const q6 = {};
+  games.forEach(g => { const v = extra[`nba_snap_q6_g${g.game_id}`]; if(v && v.q6) q6[g.game_id] = v.q6; });
+  const minesOf = g => {
+    const id = "g" + g.game_id, m = val(`nba_oddsAt5min_${id}`), k = val(`nba_K5_${id}`), km = val(`nba_K5manual_${id}`);
+    let k5 = m !== null && m !== "" ? Number(m) : (k !== null && k !== "" ? Number(k) + 0.5 : (km !== null && km !== "" && Number(km) >= 100 ? Number(km) + 0.5 : null));
+    const j5 = val(`nba_J5_${id}`);
+    return { k5: isNaN(k5) ? null : k5, j5: j5 || null };
+  };
+  const draw = () => {
+    const items = own.map(s => ({ start: s.start || "", html: s.html }))
+      .concat(games.map(g => ({ start: g.start_time || "", html: sharedRowsHtml(g, q6[g.game_id] || null, minesOf(g)) })));
+    items.sort((a, b) => a.start.localeCompare(b.start));
+    apply({ html: items.map(i => i.html).join(""), n: items.length, full: own.length, lookingUp: false });
+  };
+  draw();
+  const todo = games.filter(g => !q6[g.game_id]);
+  if(!todo.length) return;
+  apply({ progress: `Looking up 6-minute scores for ${todo.length} game${todo.length === 1 ? "" : "s"}…` });
+  const save = [];
+  for(let i = 0; i < todo.length; i += 3){
+    await Promise.all(todo.slice(i, i + 3).map(async g => {
+      const r = await fetchQ6(g.game_id);
+      if(r){ q6[g.game_id] = r; save.push({ user_id: c.user.id, key: `nba_snap_q6_g${g.game_id}`, value: { q6: r }, updated_at: new Date().toISOString() }); }
+    }));
+    if(!stillCurrent()) break;
+    draw();
+  }
+  if(save.length) c.sb.from("user_data").upsert(save, { onConflict: "user_id,key" });
+  if(stillCurrent()) draw();
 }
 
 async function loadDays(){
@@ -470,10 +542,13 @@ async function showDay(){
   const day = $("dayPick").value;
   if(!day){ $("archBody").innerHTML = ""; return; }
   $("dayNote").textContent = "Loading…";
-  const r = await dayRowsHtml(day);
-  if(!r){ $("dayNote").textContent = "Couldn't load that day."; return; }
-  $("archBody").innerHTML = r.html;
-  $("dayNote").textContent = `${r.n} game${r.n === 1 ? "" : "s"} on ${day} (${r.full} saved with your entries, the rest scores and pre-game line only).`;
+  await showDayCommon(day, r => {
+    if($("dayPick").value !== day) return;
+    if(r === null){ $("dayNote").textContent = "Couldn't load that day."; return; }
+    if(r.progress){ $("dayNote").textContent = r.progress; return; }
+    $("archBody").innerHTML = r.html;
+    $("dayNote").textContent = `${r.n} game${r.n === 1 ? "" : "s"} on ${day} (${r.full} saved with your entries, the rest from the shared scores).`;
+  }, () => $("dayPick").value === day);
 }
 $("dayPick").addEventListener("change", showDay);
 loadDays();
