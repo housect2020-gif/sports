@@ -63,9 +63,9 @@
       <thead><tr>
         <th class="l">Date</th><th class="l">Game</th><th>Final</th><th>Total</th>
         <th>Pre-game O/U</th><th>vs pre-game</th>
-        <th>My odds @ Q4 6:00</th><th>vs my odds</th><th>My pick (PPM)</th><th>My pick (Cons.)</th><th>My proj.</th>
+        <th>My odds @ Q4 6:00</th><th>vs my odds</th><th>My pick (PPM)</th><th>My pick (Cons.)</th><th>My K5 (final)</th><th>My J5 (final)</th><th>My proj.</th>
       </tr></thead>
-      <tbody id="body"><tr><td colspan="11" style="color:#80868b">Loading…</td></tr></tbody>
+      <tbody id="body"><tr><td colspan="13" style="color:#80868b">Loading…</td></tr></tbody>
     </table>
   </div>
   <div class="note" id="note"></div>
@@ -96,14 +96,14 @@ async function load(){
   await window.cloud.whenApproved();
   const sb = window.cloud.sb;
   const league = $("league").value;
-  $("body").innerHTML = '<tr><td colspan="11" style="color:#80868b">Loading…</td></tr>';
+  $("body").innerHTML = '<tr><td colspan="13" style="color:#80868b">Loading…</td></tr>';
   let all = [], from = 0;
   while(true){
     const r = await sb.from("games")
       .select("game_id,game_date,start_time,away,home,season_type,pre_odds,final_away,final_home")
       .eq("league", league).eq("state", "post")
       .order("start_time", { ascending: false }).range(from, from + 999);
-    if(r.error){ $("body").innerHTML = `<tr><td colspan="11">${r.error.message}</td></tr>`; return; }
+    if(r.error){ $("body").innerHTML = `<tr><td colspan="13">${r.error.message}</td></tr>`; return; }
     all = all.concat(r.data || []);
     if(!r.data || r.data.length < 1000) break;
     from += 1000;
@@ -127,7 +127,7 @@ function render(){
     const m = mine["g" + g.game_id] || {};
     const total = g.final_away + g.final_home;
     return { ...g, total, vsPre: resultOf(total, g.pre_odds), my5: m.odds5min, vs5: resultOf(total, m.odds5min),
-             pPpm: m.pick5Ppm, pCons: m.pick5Cons, proj: m.projTotal5 };
+             pPpm: m.pick5Ppm, pCons: m.pick5Cons, proj: m.projTotal5, k5f: m.k5Final, j5: m.j5Final, vsK5f: resultOf(total, m.k5Final) };
   });
 
   const withLine = VIEW.filter(r => r.pre_odds != null);
@@ -147,6 +147,7 @@ function render(){
     ["Avg total − line", withLine.length ? (avg(withLine.map(r => r.total - Number(r.pre_odds)))).toFixed(1) : "–", ""],
     ["My picks right (PPM)", pickHits("pPpm"), "at the 6:00 mark"],
     ["My picks right (Cons.)", pickHits("pCons"), "at the 6:00 mark"],
+    ["My J5 right", (() => { const d = VIEW.filter(r => r.j5 && r.k5f != null && r.vsK5f && r.vsK5f !== "Push"); if(!d.length) return "–"; const h = d.filter(r => r.j5 === r.vsK5f).length; return `${h} / ${d.length} <span style="font-size:14px;color:#5f6368">(${Math.round(h / d.length * 100)}%)</span>`; })(), "your Over/Under vs your K5"],
   ].map(c => `<div class="card"><div class="k">${c[0]}</div><div class="v">${c[1]}</div><div class="s">${c[2]}</div></div>`).join("");
 
   const pickCell = (p, actual) => !p ? "–" : `<span class="${p === "Over" ? "over" : "under"}">${p}</span>${!actual || actual === "Push" ? "" : (p === actual ? " ✓" : " ✗")}`;
@@ -157,8 +158,8 @@ function render(){
     <td>${r.final_away}–${r.final_home}</td><td><b>${r.total}</b></td>
     <td>${f1(r.pre_odds)}</td><td>${resCell(r.vsPre)}</td>
     <td>${f1(r.my5)}</td><td>${resCell(r.vs5)}</td>
-    <td>${pickCell(r.pPpm, r.vs5)}</td><td>${pickCell(r.pCons, r.vs5)}</td><td>${f1(r.proj)}</td>
-  </tr>`).join("") || '<tr><td colspan="11" style="color:#80868b">No finished games match yet. The server job saves them as games end.</td></tr>';
+    <td>${pickCell(r.pPpm, r.vs5)}</td><td>${pickCell(r.pCons, r.vs5)}</td><td>${f1(r.k5f)}</td><td>${pickCell(r.j5, r.vsK5f)}</td><td>${f1(r.proj)}</td>
+  </tr>`).join("") || '<tr><td colspan="13" style="color:#80868b">No finished games match yet. The server job saves them as games end.</td></tr>';
   $("note").textContent = $("league").value === "NBA"
     ? "Game results and pre-game lines are shared. The “My …” columns are your own entries and picks, saved from the live sheet while it was open."
     : "Game results and pre-game lines are shared. “My …” columns are only recorded for NBA.";
@@ -166,11 +167,11 @@ function render(){
 
 function exportCsv(){
   const q = v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
-  const head = ["Date","Away","Home","AwayScore","HomeScore","Total","Type","PreGameOU","VsPreGame","MyOddsAtQ4_6min","VsMyOdds","MyPickPPM","MyPickConsensus","MyProjTotal"];
+  const head = ["Date","Away","Home","AwayScore","HomeScore","Total","Type","PreGameOU","VsPreGame","MyOddsAtQ4_6min","VsMyOdds","MyPickPPM","MyPickConsensus","MyK5Final","MyJ5Final","MyProjTotal"];
   const lines = [head.join(",")].concat(VIEW.map(r => [
     r.game_date, a3(r.away), a3(r.home), r.final_away, r.final_home, r.total,
     r.season_type === 1 ? "PRE" : (r.season_type === 3 ? "PLAYOFFS" : "REG"),
-    r.pre_odds, r.vsPre, r.my5, r.vs5, r.pPpm, r.pCons, r.proj
+    r.pre_odds, r.vsPre, r.my5, r.vs5, r.pPpm, r.pCons, r.k5f, r.j5, r.proj
   ].map(q).join(",")));
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
