@@ -2079,8 +2079,6 @@ window.addEventListener("cloud-keys", e => {
 // ---- Day archive: each finished game's whole sheet is saved to the database ----
 function snapHtml(gid){
   const rows = Array.from($("gamesBody").querySelectorAll(`tr[data-gid="${gid}"]`));
-  const rec = loadHistory()[gid];
-  const noteRow = rec ? `<tr><td class="rownum"></td><td colspan="13" class="proj-label" style="color:#202124">${entriesNoteHtml(rec, rec.finalTotal != null ? rec.finalTotal : ((Number(rec.finalAway)||0) + (Number(rec.finalHome)||0)))}</td></tr>` : "";
   return rows.map(tr => {
     const c = tr.cloneNode(true);
     const oi = tr.querySelectorAll("input"), ci = c.querySelectorAll("input");
@@ -2092,7 +2090,7 @@ function snapHtml(gid){
     });
     c.querySelectorAll("[id]").forEach(e => { e.setAttribute("data-sid", e.id); e.removeAttribute("id"); });
     return c.outerHTML;
-  }).join("") + noteRow;
+  }).join("");
 }
 const snapLast = {};
 let snapTimer = null;
@@ -2165,7 +2163,7 @@ function entriesNoteHtml(rec, tot){
   const kF = rec.k5Final != null ? rec.k5Final : rec.odds5min;
   return `<b>At 6:00</b> — ${side(rec.odds5min, rec.j5At6, rec.l4At6)} &nbsp;|&nbsp; <b>Final</b> — ${side(kF, rec.j5Final, rec.l4Final)} &nbsp;|&nbsp; total ${tot}`;
 }
-function sharedRowsHtml(g, q6, mine){
+function sharedRowsHtml(g, q6){
   const aq = (g.away_q || []).map(Number), hq = (g.home_q || []).map(Number);
   const q = (arr, i) => arr[i] === undefined || isNaN(arr[i]) ? null : arr[i];
   const show = v => v === null || v === undefined ? "–" : v;
@@ -2188,15 +2186,6 @@ function sharedRowsHtml(g, q6, mine){
   const sumQ = i => (q(aq,i) === null || q(hq,i) === null) ? null : q(aq,i) + q(hq,i);
   const t = [0,1,2,3].map(sumQ);
   const fT = fA !== null && fH !== null ? fA + fH : null, gT = gA !== null && gH !== null ? gA + gH : null;
-  let note = "Scores and pre-game line only — the live sheet wasn’t open for this game.";
-  if(mine && mine.rec && (mine.rec.odds5min != null || mine.rec.j5At6 || mine.rec.k5Final != null || mine.rec.j5Final)) note = entriesNoteHtml(mine.rec, tot);
-  else
-  if(mine && (mine.k5 != null || mine.j5)){
-    const k5 = mine.k5, r = k5 == null ? null : (tot > k5 ? "Over" : (tot < k5 ? "Under" : "Push"));
-    const ok = mine.j5 && r && r !== "Push" ? (mine.j5 === r ? " ✓" : " ✗") : "";
-    note = `Your entries — K5: <b>${k5 == null ? "–" : k5.toFixed(1)}</b> · J5: <b style="color:${col(mine.j5)}">${mine.j5 || "–"}</b>${ok}` + (r ? ` · final total ${tot} was <b style="color:${col(r)}">${r}</b> vs your K5` : "");
-  }
-  if(!q6) note += " 6-minute score not available.";
   return `<tr><td class="rownum"></td><td colspan="13" class="matchup-label">${a3x(g.away)} @ ${a3x(g.home)} — Final${otN ? ` (${otN > 1 ? otN + "OT" : "OT"})` : ""}</td></tr>`
     + teamRow(a3x(g.away), aq, fA, gA, g.final_away) + teamRow(a3x(g.home), hq, fH, gH, g.final_home)
     + `<tr><td class="rownum"></td><td class="team">Total</td>
@@ -2205,9 +2194,66 @@ function sharedRowsHtml(g, q6, mine){
     <td class="formula">${show(t[3])}</td><td class="formula grand-total">${tot}</td>
     <td class="formula"><span class="cell-label">PRE-ODDS</span>${pre == null ? "–" : pre.toFixed(1)}</td>
     <td class="formula">–</td><td class="formula">–</td><td class="formula" style="font-weight:700;color:${col(res)}">${res}</td></tr>
-    <tr><td class="rownum"></td><td colspan="13" class="proj-label" style="color:#5f6368">${note}</td></tr>
-    <tr class="spacer-row"><td colspan="14"></td></tr>`;
+`;
 }
+
+// ---- your K5 / J5 / L4 entries under each game, with an Edit button ----
+let HIST = {}, EDITS = {}, ENTRY_CTX = {};
+const EDIT_FIELDS = ["odds5min", "j5At6", "l4At6", "k5Final", "j5Final", "l4Final"];
+function recFor(gid, fallback){
+  const rec = Object.assign({}, HIST[gid] || {}, EDITS[gid] || {});
+  if(fallback){
+    if(rec.k5Final == null && rec.odds5min == null && fallback.k5 != null) rec.k5Final = fallback.k5;
+    if(!rec.j5Final && !rec.j5At6 && fallback.j5) rec.j5Final = fallback.j5;
+  }
+  return rec;
+}
+function noteRowHtml(gid, rec, tot, extra){
+  const has = EDIT_FIELDS.some(f => rec[f] != null && rec[f] !== "");
+  const text = has ? entriesNoteHtml(rec, tot) : "No K5 / J5 / L4 saved for this game.";
+  return `<tr class="entry-row" data-gid="${gid}"><td class="rownum"></td><td colspan="13" class="proj-label" style="color:#202124">${text}${extra ? ` <span style="color:#5f6368">${extra}</span>` : ""} <button type="button" class="edit-entries no-print" data-gid="${gid}" style="margin-left:8px;font-size:11px;padding:1px 8px;cursor:pointer;">Edit</button></td></tr>`;
+}
+function entryFormHtml(gid){
+  const rec = recFor(gid, ENTRY_CTX[gid] && ENTRY_CTX[gid].fallback);
+  const inp = (f, label) => `<label style="margin-right:10px;white-space:nowrap">${label} <input data-f="${f}" type="number" step="0.5" value="${rec[f] == null ? "" : rec[f]}" style="width:70px;font-size:12px;padding:1px 3px;"></label>`;
+  const sel = (f, label) => `<label style="margin-right:10px;white-space:nowrap">${label} <select data-f="${f}" style="width:auto;max-width:none;display:inline-block;font-size:12px;padding:1px 3px;text-align:left;"><option value=""></option><option${rec[f] === "Over" ? " selected" : ""}>Over</option><option${rec[f] === "Under" ? " selected" : ""}>Under</option></select></label>`;
+  return `<b>Edit entries</b><br>At 6:00: ${inp("odds5min", "K5")}${sel("j5At6", "J5")}${inp("l4At6", "L4")}<br>Final: ${inp("k5Final", "K5")}${sel("j5Final", "J5")}${inp("l4Final", "L4")}
+    <button type="button" class="save-entries" data-gid="${gid}" style="margin-left:6px;font-size:12px;padding:2px 10px;cursor:pointer;">Save</button>
+    <button type="button" class="cancel-entries" data-gid="${gid}" style="font-size:12px;padding:2px 10px;cursor:pointer;">Cancel</button> <span class="entry-msg" style="color:#5f6368"></span>`;
+}
+function redrawNote(gid){
+  const row = document.querySelector(`tr.entry-row[data-gid="${gid}"]`), ctx = ENTRY_CTX[gid];
+  if(!row || !ctx) return;
+  const tmp = document.createElement("tbody");
+  tmp.innerHTML = noteRowHtml(gid, recFor(gid, ctx.fallback), ctx.tot, ctx.extra);
+  row.replaceWith(tmp.firstElementChild);
+}
+document.addEventListener("click", async e => {
+  const t = e.target;
+  if(!t.closest) return;
+  const eb = t.closest(".edit-entries"), sb_ = t.closest(".save-entries"), cb = t.closest(".cancel-entries");
+  if(eb){
+    const gid = eb.dataset.gid, td = eb.closest("td");
+    if(td) td.innerHTML = entryFormHtml(gid);
+  } else if(cb){
+    redrawNote(cb.dataset.gid);
+  } else if(sb_){
+    const gid = sb_.dataset.gid, td = sb_.closest("td"), c = window.cloud;
+    const obj = {};
+    td.querySelectorAll("[data-f]").forEach(el => {
+      const v = el.value.trim();
+      obj[el.dataset.f] = v === "" ? null : (el.tagName === "SELECT" ? v : Number(v));
+    });
+    const msg = td.querySelector(".entry-msg");
+    if(msg) msg.textContent = "Saving…";
+    const val = JSON.stringify(obj);
+    const r = await c.sb.from("user_data").upsert([{ user_id: c.user.id, key: `nba_edit_${gid}`, value: { v: val }, updated_at: new Date().toISOString() }], { onConflict: "user_id,key" });
+    if(r.error){ if(msg) msg.textContent = "Save failed: " + (r.error.message || r.error); return; }
+    EDITS[gid] = obj;
+    try{ localStorage.setItem(`nba_edit_${gid}`, val); }catch(err){}
+    redrawNote(gid);
+  }
+});
 async function loadDayList(){
   const c = window.cloud;
   try{ await c.whenApproved(); }catch(e){ return []; }
@@ -2222,17 +2268,23 @@ async function loadDayList(){
 // Loads a day and draws it; fills in the 6-minute scores afterwards (cached per game in your account).
 async function showDayCommon(day, apply, stillCurrent){
   const c = window.cloud;
-  const [mine, shared] = await Promise.all([
+  const [mine, shared, edits, histRow] = await Promise.all([
     c.sb.from("user_data").select("value").like("key", `nba_snap_${day}_%`),
     c.sb.from("games").select("game_id,game_date,start_time,away,home,pre_odds,final_away,final_home,away_q,home_q,season_type")
-      .eq("league", "NBA").eq("state", "post").eq("game_date", day).neq("season_type", 1)
+      .eq("league", "NBA").eq("state", "post").eq("game_date", day).neq("season_type", 1),
+    c.sb.from("user_data").select("key,value").like("key", "nba_edit_%"),
+    c.sb.from("user_data").select("value").eq("key", "nba_history_v1")
   ]);
   if(mine.error || shared.error) return apply(null);
+  try{ HIST = JSON.parse((histRow.data && histRow.data[0] && histRow.data[0].value && histRow.data[0].value.v) || "{}") || {}; }catch(e){ HIST = {}; }
+  EDITS = {};
+  (edits.data || []).forEach(x => { try{ EDITS[x.key.slice(9)] = JSON.parse(x.value && x.value.v); }catch(e){} });
   const own = (mine.data || []).map(x => x.value && x.value.snap).filter(s => s && s.kind !== "summary");
   const have = new Set(own.map(s => String(s.gid)));
+  const totals = {};
+  (shared.data || []).forEach(g => { if(g.final_away != null && g.final_home != null) totals["g" + g.game_id] = g.final_away + g.final_home; });
   const games = (shared.data || []).filter(g => !have.has("g" + g.game_id) && g.final_away != null && g.final_home != null);
-  // your own saved entries + cached 6-minute scores for those games
-  const keys = ["nba_history_v1"];
+  const keys = [];
   games.forEach(g => { ["K5manual", "K5", "J5", "oddsAt5min"].forEach(f => keys.push(`nba_${f}_g${g.game_id}`)); keys.push(`nba_snap_q6_g${g.game_id}`); });
   const extra = {};
   if(keys.length){
@@ -2240,18 +2292,26 @@ async function showDayCommon(day, apply, stillCurrent){
     (r.data || []).forEach(x => { extra[x.key] = x.value; });
   }
   const val = k => { const v = extra[k]; return v && v.v !== undefined ? v.v : null; };
-  let hist = {}; try{ hist = JSON.parse(val("nba_history_v1") || "{}"); }catch(e){}
   const q6 = {};
   games.forEach(g => { const v = extra[`nba_snap_q6_g${g.game_id}`]; if(v && v.q6) q6[g.game_id] = v.q6; });
   const minesOf = g => {
     const id = "g" + g.game_id, m = val(`nba_oddsAt5min_${id}`), k = val(`nba_K5_${id}`), km = val(`nba_K5manual_${id}`);
     let k5 = m !== null && m !== "" ? Number(m) : (k !== null && k !== "" ? Number(k) + 0.5 : (km !== null && km !== "" && Number(km) >= 100 ? Number(km) + 0.5 : null));
     const j5 = val(`nba_J5_${id}`);
-    return { k5: isNaN(k5) ? null : k5, j5: j5 || null, rec: hist["g" + g.game_id] || null };
+    return { k5: isNaN(k5) ? null : k5, j5: j5 || null };
   };
+  const stripNote = html => html.replace(/<tr><td class="rownum"><\/td><td colspan="13" class="proj-label" style="color:#202124">At 6:00.*?<\/tr>$/s, "");
   const draw = () => {
-    const items = own.map(s => ({ start: s.start || "", html: s.html }))
-      .concat(games.map(g => ({ start: g.start_time || "", html: sharedRowsHtml(g, q6[g.game_id] || null, minesOf(g)) })));
+    const items = own.map(s => {
+      const gid = String(s.gid), tot = totals[gid] != null ? totals[gid] : null;
+      ENTRY_CTX[gid] = { tot, fallback: null, extra: "" };
+      return { start: s.start || "", html: stripNote(s.html) + noteRowHtml(gid, recFor(gid), tot, "") };
+    }).concat(games.map(g => {
+      const gid = "g" + g.game_id, tot = g.final_away + g.final_home, fb = minesOf(g);
+      const ex = q6[g.game_id] ? "" : "(6-minute score not available)";
+      ENTRY_CTX[gid] = { tot, fallback: fb, extra: ex };
+      return { start: g.start_time || "", html: sharedRowsHtml(g, q6[g.game_id] || null) + noteRowHtml(gid, recFor(gid, fb), tot, ex) + '<tr class="spacer-row"><td colspan="14"></td></tr>' };
+    }));
     items.sort((a, b) => a.start.localeCompare(b.start));
     apply({ html: items.map(i => i.html).join(""), n: items.length, full: own.length, lookingUp: false });
   };
