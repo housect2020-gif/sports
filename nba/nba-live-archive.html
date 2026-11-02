@@ -531,6 +531,47 @@ document.addEventListener("click", async e => {
     redrawNote(gid);
   }
 });
+function predRowHtml(gid, rec){
+  const k = rec.k5Final != null ? rec.k5Final : rec.odds5min;
+  const kv = k == null ? "" : Math.floor(k);
+  const j = rec.j5Final || "";
+  const opt = (v, t) => `<option value="${v}"${j === v ? " selected" : ""}>${t}</option>`;
+  return `<tr data-gid="${gid}"><td class="rownum"></td><td class="team" title="Predicted">Pred.</td>${'<td class="blank"></td>'.repeat(8)}
+    <td><select class="arch-j5">${opt("", "–")}${opt("Under", "Under")}${opt("Over", "Over")}</select></td>
+    <td class="k5-cell"><div class="k5-inner"><input type="text" inputmode="numeric" class="k5-manual arch-k5" placeholder="Total" value="${kv}"><span class="k5-suffix">.5</span></div></td>
+    <td class="blank"></td><td class="blank"></td></tr>`;
+}
+function enableArchiveCells(root){
+  root.querySelectorAll('[data-sid$="-K5manual"]').forEach(el => { el.disabled = false; el.classList.add("arch-k5"); });
+  root.querySelectorAll('[data-sid$="-J5"]').forEach(el => { el.disabled = false; el.classList.add("arch-j5"); });
+  // show your corrected values in the sheet cells
+  root.querySelectorAll("tr[data-gid]").forEach(tr => {
+    const gid = tr.dataset.gid, rec = recFor(gid);
+    const k = tr.querySelector(".arch-k5"), j = tr.querySelector(".arch-j5");
+    if(k && EDITS[gid] && EDITS[gid].k5Final != null) k.value = Math.floor(EDITS[gid].k5Final);
+    if(j && EDITS[gid] && EDITS[gid].j5Final != null) j.value = EDITS[gid].j5Final;
+  });
+}
+document.addEventListener("change", async e => {
+  const el = e.target;
+  if(!el.classList || !(el.classList.contains("arch-k5") || el.classList.contains("arch-j5"))) return;
+  const tr = el.closest("tr[data-gid]"), c = window.cloud;
+  if(!tr || !c) return;
+  const gid = tr.dataset.gid;
+  const obj = Object.assign({}, EDITS[gid] || {});
+  if(el.classList.contains("arch-k5")){
+    const v = el.value.trim();
+    obj.k5Final = v === "" || isNaN(Number(v)) ? null : Number(v) + 0.5;
+  } else {
+    obj.j5Final = el.value || null;
+  }
+  const val = JSON.stringify(obj);
+  EDITS[gid] = obj;          // update first, so two quick edits don't overwrite each other
+  const r = await c.sb.from("user_data").upsert([{ user_id: c.user.id, key: `nba_edit_${gid}`, value: { v: val }, updated_at: new Date().toISOString() }], { onConflict: "user_id,key" });
+  if(r.error){ alert("Save failed: " + (r.error.message || r.error)); return; }
+  try{ localStorage.setItem(`nba_edit_${gid}`, val); }catch(err){}
+  redrawNote(gid);
+});
 async function loadDayList(){
   const c = window.cloud;
   try{ await c.whenApproved(); }catch(e){ return []; }
@@ -587,10 +628,11 @@ async function showDayCommon(day, apply, stillCurrent){
       const gid = "g" + g.game_id, tot = g.final_away + g.final_home, fb = minesOf(g);
       const ex = q6[g.game_id] ? "" : "(6-minute score not available)";
       ENTRY_CTX[gid] = { tot, fallback: fb, extra: ex };
-      return { start: g.start_time || "", html: sharedRowsHtml(g, q6[g.game_id] || null) + noteRowHtml(gid, recFor(gid, fb), tot, ex) + '<tr class="spacer-row"><td colspan="14"></td></tr>' };
+      return { start: g.start_time || "", html: sharedRowsHtml(g, q6[g.game_id] || null) + predRowHtml(gid, recFor(gid, fb)) + noteRowHtml(gid, recFor(gid, fb), tot, ex) + '<tr class="spacer-row"><td colspan="14"></td></tr>' };
     }));
     items.sort((a, b) => a.start.localeCompare(b.start));
     apply({ html: items.map(i => i.html).join(""), n: items.length, full: own.length, lookingUp: false });
+    const ab = document.getElementById("archBody"); if(ab) enableArchiveCells(ab);
   };
   draw();
   const todo = games.filter(g => !q6[g.game_id]);
