@@ -574,6 +574,18 @@ function updateHistory(gid, patch){
   saveHistory(h);
   renderHistory();
 }
+// When a game is final, remember what K5 and J5 (Over/Under) were on the sheet, for the History page.
+function captureFinalEntries(gid){
+  const st = gameState[gid];
+  if(!st || st.lastState !== "post") return;
+  const k5Raw = eg(gid, "K5").value, j5 = eg(gid, "J5").value;
+  const k5 = k5Raw === "" ? null : Number(k5Raw) + 0.5;
+  updateHistory(gid, cur => {
+    if(cur.finalCaptured) return null;
+    if((k5 === null || k5 < 100) && !j5) return null;      // nothing meaningful entered yet — try again next poll
+    return { finalCaptured: true, k5Final: (k5 !== null && k5 >= 100) ? k5 : null, j5Final: j5 || null };
+  });
+}
 function etDate(iso){
   const d = iso ? new Date(iso) : new Date();
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(d);
@@ -1834,6 +1846,7 @@ async function fetchScores(){
       const gid = "g" + g.id;
       ensureGameBlock(gid); // safe no-op if the block already exists
       applyGameData(gid, g.away, g.home, g.status, g.overUnder, g.seasonType, g.date, cloudOdds[g.id]);
+      captureFinalEntries(gid);
     }
 
     $("lastUpdated").textContent = new Date().toLocaleTimeString();
@@ -2095,32 +2108,88 @@ async function saveSnaps(){
 $("gamesBody").addEventListener("input", saveSnapsSoon);
 $("gamesBody").addEventListener("change", saveSnapsSoon);
 
-async function loadDays(){
+
+// ---- shared sheet-style rows for games you have no personal snapshot of (from the shared games table) ----
+const ABBR3X = { NY:"NYK", GS:"GSW", NO:"NOP", SA:"SAS", UTAH:"UTA", WSH:"WAS" };
+const a3x = a => ABBR3X[a] || a;
+function sharedRowsHtml(g){
+  const aq = (g.away_q || []).map(Number), hq = (g.home_q || []).map(Number);
+  const q = (arr, i) => arr[i] === undefined || isNaN(arr[i]) ? null : arr[i];
+  const show = v => v === null || v === undefined ? "–" : v;
+  const avg3 = arr => arr.length >= 3 ? Math.round((arr[0] + arr[1] + arr[2]) / 3 * 10) / 10 : null;
+  const otN = Math.max(0, Math.max(aq.length, hq.length) - 4);
+  const tot = g.final_away + g.final_home;
+  const pre = g.pre_odds == null ? null : Number(g.pre_odds);
+  const res = pre == null ? "–" : (tot > pre ? "Over" : (tot < pre ? "Under" : "Push"));
+  const resColor = res === "Over" ? "#0a7d3f" : (res === "Under" ? "#c5221f" : "#202124");
+  const teamRow = (name, arr, fin) => `<tr><td class="rownum"></td><td class="team">${name}</td>
+    <td>${show(q(arr,0))}</td><td>${show(q(arr,1))}</td><td>${show(q(arr,2))}</td>
+    <td class="formula avg">${show(avg3(arr))}</td><td class="formula">–</td><td class="formula">–</td>
+    <td>${show(q(arr,3))}</td><td class="formula">${fin}</td>
+    <td class="blank"></td><td class="blank"></td><td class="blank"></td><td class="blank"></td></tr>`;
+  const sumQ = i => (q(aq,i) === null || q(hq,i) === null) ? null : q(aq,i) + q(hq,i);
+  const t = [0,1,2,3].map(sumQ);
+  return `<tr><td class="rownum"></td><td colspan="13" class="matchup-label">${a3x(g.away)} @ ${a3x(g.home)} — Final${otN ? ` (${otN > 1 ? otN + "OT" : "OT"})` : ""}</td></tr>`
+    + teamRow(a3x(g.away), aq, g.final_away) + teamRow(a3x(g.home), hq, g.final_home)
+    + `<tr><td class="rownum"></td><td class="team">Total</td>
+    <td class="formula">${show(t[0])}</td><td class="formula">${show(t[1])}</td><td class="formula">${show(t[2])}</td>
+    <td class="formula avg">${t[0] !== null && t[1] !== null && t[2] !== null ? Math.round((t[0]+t[1]+t[2]) / 3 * 10) / 10 : "–"}</td><td class="formula">–</td><td class="formula">–</td>
+    <td class="formula">${show(t[3])}</td><td class="formula grand-total">${tot}</td>
+    <td class="formula"><span class="cell-label">PRE-ODDS</span>${pre == null ? "–" : pre.toFixed(1)}</td>
+    <td class="formula">–</td><td class="formula">–</td><td class="formula" style="font-weight:700;color:${resColor}">${res}</td></tr>
+    <tr><td class="rownum"></td><td colspan="13" class="proj-label" style="color:#5f6368">Scores and pre-game line only — the live sheet wasn’t open for this game, so no K5 / picks were saved.</td></tr>
+    <tr class="spacer-row"><td colspan="14"></td></tr>`;
+}
+async function loadDayList(){
   const c = window.cloud;
-  if(!c) return;
-  try{ await c.whenApproved(); }catch(e){ return; }
-  if(c.state !== "approved" || !c.sb) return;
-  const r = await c.sb.from("user_data").select("key").like("key", "nba_snap_%");
-  if(r.error || !r.data) return;
-  const days = Array.from(new Set(r.data.map(x => x.key.slice(9, 19)).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)))).sort().reverse();
+  try{ await c.whenApproved(); }catch(e){ return []; }
+  if(c.state !== "approved" || !c.sb) return [];
+  const mine = await c.sb.from("user_data").select("key").like("key", "nba_snap_%");
+  const days = new Set((mine.data || []).map(x => x.key.slice(9, 19)));
+  const shared = await c.sb.from("games").select("game_date").eq("league", "NBA").eq("state", "post").neq("season_type", 1)
+    .order("game_date", { ascending: false }).limit(600);
+  (shared.data || []).forEach(x => x.game_date && days.add(x.game_date));
+  return Array.from(days).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().reverse();
+}
+async function dayRowsHtml(day){
+  const c = window.cloud;
+  const [mine, shared] = await Promise.all([
+    c.sb.from("user_data").select("value").like("key", `nba_snap_${day}_%`),
+    c.sb.from("games").select("game_id,game_date,start_time,away,home,pre_odds,final_away,final_home,away_q,home_q,season_type")
+      .eq("league", "NBA").eq("state", "post").eq("game_date", day).neq("season_type", 1)
+  ]);
+  if(mine.error || shared.error) return null;
+  const items = [], have = new Set();
+  (mine.data || []).map(x => x.value && x.value.snap).filter(s => s && s.kind !== "summary").forEach(s => {
+    have.add(String(s.gid)); items.push({ start: s.start || "", html: s.html, mine: true });
+  });
+  (shared.data || []).forEach(g => {
+    if(have.has("g" + g.game_id) || g.final_away == null || g.final_home == null) return;
+    items.push({ start: g.start_time || "", html: sharedRowsHtml(g), mine: false });
+  });
+  items.sort((a, b) => a.start.localeCompare(b.start));
+  return { html: items.map(i => i.html).join(""), n: items.length, full: items.filter(i => i.mine).length };
+}
+
+async function loadDays(){
+  const days = await loadDayList();
+  if(!days.length) return;
   const sel = $("dayPick"), cur = sel.value;
   sel.innerHTML = `<option value="">Today (live)</option>` + days.map(d => `<option value="${d}">${d}</option>`).join("");
   sel.value = days.includes(cur) ? cur : "";
   $("dayBar").style.display = "";
 }
 async function showDay(){
-  const day = $("dayPick").value, c = window.cloud;
+  const day = $("dayPick").value;
   if(!day){
     $("archBody").style.display = "none"; $("gamesBody").style.display = ""; $("dayNote").textContent = ""; return;
   }
   $("dayNote").textContent = "Loading…";
-  const r = await c.sb.from("user_data").select("value").like("key", `nba_snap_${day}_%`);
-  if(r.error){ $("dayNote").textContent = "Couldn't load that day."; return; }
-  const snaps = (r.data || []).map(x => x.value && x.value.snap).filter(Boolean)
-    .sort((a, b) => (a.start || "").localeCompare(b.start || "") || String(a.gid).localeCompare(String(b.gid)));
-  $("archBody").innerHTML = snaps.map(x => x.html).join("");
+  const r = await dayRowsHtml(day);
+  if(!r){ $("dayNote").textContent = "Couldn't load that day."; return; }
+  $("archBody").innerHTML = r.html;
   $("gamesBody").style.display = "none"; $("archBody").style.display = "";
-  $("dayNote").textContent = `Saved sheet for ${day} — ${snaps.length} game${snaps.length === 1 ? "" : "s"}, frozen as they finished. Pick “Today (live)” to go back.`;
+  $("dayNote").textContent = `${day} — ${r.n} game${r.n === 1 ? "" : "s"} (${r.full} saved with your entries). Pick “Today (live)” to go back.`;
 }
 $("dayPick").addEventListener("change", showDay);
 loadDays();
