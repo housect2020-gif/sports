@@ -54,11 +54,13 @@
   .status-badge.live{background:var(--live-soft);color:var(--live);}
   .status-badge.pre{background:var(--accent-soft);color:var(--accent);}
   .pool-info{font-size:11.5px;color:var(--sub);flex:1;min-width:220px;line-height:1.4;}
-  .pool-pick{color:var(--win);font-weight:700;font-size:12.5px;min-width:44px;}
+  .pool-pick{color:var(--win);font-weight:700;font-size:12.5px;min-width:70px;}
+  .pool-conf{font-weight:700;color:var(--text) !important;font-size:13px !important;}
   .pool-conf{font-family:var(--font-mono);font-size:12px;color:var(--sub);min-width:44px;text-align:right;}
   .conf-bar{height:5px;border-radius:3px;background:var(--grid);width:80px;overflow:hidden;}
   .conf-bar-fill{height:100%;background:var(--win);}
   .fav{color:var(--accent);font-weight:700;}
+  .ml{color:var(--text);}
   .parlay-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;}
   .parlay-sections{display:flex;flex-direction:column;gap:24px;}
   .parlay-size-heading{font-size:13px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.4px;margin:0 0 12px;}
@@ -74,6 +76,15 @@
   .parlay-combined .value{font-family:var(--font-mono);font-weight:700;font-size:16px;color:var(--accent);}
   .parlay-card.best .parlay-combined .value{color:var(--win);}
   .empty-state{color:var(--sub);font-size:13px;padding:20px;text-align:center;}
+  .hist-stats{display:flex;flex-wrap:wrap;gap:10px;}
+  .stat-box{border:1px solid var(--grid-strong);border-radius:var(--radius-sm);padding:8px 12px;background:var(--colhead-bg);min-width:150px;}
+  .stat-box .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;color:var(--sub);font-weight:700;}
+  .stat-box .v{font-family:var(--font-mono);font-size:16px;font-weight:700;color:var(--accent);margin-top:2px;}
+  .hist-table{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:14px;}
+  .hist-table th{background:var(--colhead-bg);text-align:left;padding:6px 8px;border-bottom:1px solid var(--grid-strong);font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--sub);}
+  .hist-table td{padding:6px 8px;border-bottom:1px solid var(--grid);}
+  .r-win{color:var(--win);font-weight:700;} .r-loss{color:var(--live);font-weight:700;} .r-pend{color:var(--sub);}
+  .hist-parlay{border:1px solid var(--grid);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:8px;font-size:12.5px;}
   .footer-note{font-size:11px;color:#9aa3b5;text-align:right;margin-top:10px;}
 </style>
 </head>
@@ -105,6 +116,15 @@
           <option value="blend" selected>Blend: records + sportsbook favorite</option>
           <option value="records">Records &amp; head-to-head only</option>
           <option value="book">Sportsbook favorite first</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Sort games by</label>
+        <select id="sortBy">
+          <option value="high" selected>Win % — highest first</option>
+          <option value="low">Win % — lowest first</option>
+          <option value="time">Game time</option>
+          <option value="name">Matchup (A–Z)</option>
         </select>
       </div>
       <div class="control-group">
@@ -144,7 +164,7 @@
   </div>
 
   <div class="card">
-    <h2>Today's games — picks &amp; confidence</h2>
+    <h2>Today's games — predicted winner &amp; win %</h2>
     <div class="pool-list" id="poolList"><div class="empty-state">Loading…</div></div>
   </div>
 
@@ -154,6 +174,18 @@
       <button class="btn-secondary" id="downloadPdfBtn" disabled>Download PDF</button>
     </div>
     <div class="parlay-sections" id="parlayResults"><div class="empty-state">Press “Generate parlays” to build combinations.</div></div>
+  </div>
+  <div class="card">
+    <h2>History — my saved predictions &amp; parlays</h2>
+    <div class="status-line" id="histStatus">Loading your saved days…</div>
+    <div id="histStats" class="hist-stats"></div>
+    <div class="controls" style="margin:12px 0;">
+      <div class="control-group">
+        <label>Day</label>
+        <select id="histDay"><option value="">—</option></select>
+      </div>
+    </div>
+    <div id="histBody"></div>
   </div>
   <div class="footer-note" id="versionLine"></div>
 </div>
@@ -320,7 +352,8 @@ function parseOdds(odds, away, home){
   if(homeProb == null && !favorite) return null;
   if(!favorite && homeProb != null) favorite = homeProb >= 0.5 ? home : away;
   const text = spread != null && spread > 0 ? `${favorite} -${spread}` : (favorite ? `${favorite} favored` : 'Pick’em');
-  return { favorite, spread, homeProb, text };
+  const nm = v => (v == null || isNaN(Number(v)) || Number(v) === 0) ? null : Number(v);
+  return { favorite, spread, homeProb, text, homeMl: nm(hMl), awayMl: nm(aMl) };
 }
 
 async function fetchTodayGames(){
@@ -344,7 +377,7 @@ async function fetchTodayGames(){
         const a = abbr3(away.team.abbreviation), h = abbr3(home.team.abbreviation);
         let as = Number(away.score), hs = Number(home.score);
         if(state === 'pre'){ as = null; hs = null; } else { if(isNaN(as)) as = 0; if(isNaN(hs)) hs = 0; }
-        games.push({ away: a, home: h, state, statusText: (comp.status && comp.status.type && comp.status.type.shortDetail) || '',
+        games.push({ away: a, home: h, state, start: ev.date, statusText: (comp.status && comp.status.type && comp.status.type.shortDetail) || '',
           awayScore: as, homeScore: hs, odds: parseOdds(comp.odds && comp.odds[0], a, h), playoff: st === 3 });
       });
       return games;
@@ -382,33 +415,48 @@ function buildGame(g, basis){
   let h2hText = 'No meetings yet';
   if(h2h.total > 0) h2hText = h2h.wa === h2h.wb ? `Tied ${h2h.wa}-${h2h.wb}` : (h2h.wa > h2h.wb ? `${g.away} leads ${h2h.wa}-${h2h.wb}` : `${g.home} leads ${h2h.wb}-${h2h.wa}`);
   const la = LAST10[g.away] || { w:0, l:0 }, lh = LAST10[g.home] || { w:0, l:0 };
-  return { ...g, pick, confidence, source, h2hText, recA: `${ra.w}-${ra.l}`, recB: `${rh.w}-${rh.l}`,
+  const sideProb = hp => hp == null ? null : (pick === g.home ? hp : 1 - hp);
+  return { ...g, pick, confidence, source, bookProb: sideProb(bookProb), recProb: sideProb(recProb), h2hText, recA: `${ra.w}-${ra.l}`, recB: `${rh.w}-${rh.l}`,
     l10Text: `${g.away} (${la.w}-${la.l}) / ${g.home} (${lh.w}-${lh.l})` };
 }
 function rebuildPool(){
   const basis = document.getElementById('basis').value;
   POOL = TODAY_GAMES.filter(g => g.state !== 'post').map(g => buildGame(g, basis));
   renderPool(); renderGameChecks(); updateGenerateEnabled();
+  recordGames();
   const withLine = TODAY_GAMES.filter(g => g.odds).length;
   document.getElementById('poolStatus').textContent = TODAY_GAMES.length === 0
     ? 'No NBA games on today’s slate.'
     : `${POOL.length} live or upcoming game${POOL.length === 1 ? '' : 's'} (${TODAY_GAMES.length} on the slate) · sportsbook line shown for ${withLine}. ESPN only posts lines before tip-off.`;
 }
 
+function sortedPool(){
+  const mode = document.getElementById('sortBy').value;
+  const list = POOL.map((g, i) => ({ g, i }));
+  if(mode === 'high') list.sort((a, b) => b.g.confidence - a.g.confidence);
+  else if(mode === 'low') list.sort((a, b) => a.g.confidence - b.g.confidence);
+  else if(mode === 'time') list.sort((a, b) => (a.g.start || '').localeCompare(b.g.start || ''));
+  else list.sort((a, b) => (a.g.away + a.g.home).localeCompare(b.g.away + b.g.home));
+  return list;
+}
 function renderPool(){
   const list = document.getElementById('poolList');
   if(POOL.length === 0){ list.innerHTML = '<div class="empty-state">No live or upcoming games right now — everything on today’s slate is already final.</div>'; return; }
-  list.innerHTML = POOL.map(g => {
+  const pc = v => v == null ? '–' : Math.round(v * 100) + '%';
+  list.innerHTML = sortedPool().map(({ g }) => {
     const pct = Math.round(g.confidence * 100);
     const badge = g.state === 'in' ? `<span class="status-badge live">${g.statusText || 'Live'}</span>` : `<span class="status-badge pre">${g.statusText || 'Scheduled'}</span>`;
     const score = g.state === 'in' ? `<span class="score-note">(${g.away} ${g.awayScore}-${g.homeScore} ${g.home})</span>` : '';
-    const fav = g.odds ? `<span class="fav">Fav: ${g.odds.text}</span> · ` : '';
+    const fmtMl = v => v == null ? '–' : (v > 0 ? '+' + v : String(v));
+    const ml = g.odds && (g.odds.homeMl != null || g.odds.awayMl != null)
+      ? `<span class="ml">Moneyline: <b>${g.away} ${fmtMl(g.odds.awayMl)}</b> / <b>${g.home} ${fmtMl(g.odds.homeMl)}</b></span> · ` : '';
+    const fav = g.odds ? `<span class="fav">Sportsbook: ${g.odds.text}</span> · ` : '<span style="color:var(--sub)">No sportsbook line yet</span> · ';
     return `<div class="pool-row">
       <div class="pool-teams">${g.away} @ ${g.home}${score} ${badge}</div>
-      <div class="pool-info">${fav}${g.h2hText} · ${g.away} (${g.recA}) / ${g.home} (${g.recB}) · L10: ${g.l10Text}</div>
-      <div class="pool-pick">${g.pick}</div>
+      <div class="pool-info">${ml}${fav}Book win% ${g.pick}: <b>${pc(g.bookProb)}</b> · Records win% ${g.pick}: <b>${pc(g.recProb)}</b><br>${g.h2hText} · ${g.away} (${g.recA}) / ${g.home} (${g.recB}) · L10: ${g.l10Text}</div>
+      <div class="pool-pick" title="Predicted winner">${g.pick} wins</div>
       <div class="conf-bar"><div class="conf-bar-fill" style="width:${pct}%"></div></div>
-      <div class="pool-conf">${pct}%</div>
+      <div class="pool-conf" title="Win chance used for parlays">${pct}%</div>
     </div>`;
   }).join('');
 }
@@ -462,6 +510,7 @@ function generateParlays(){
   LAST_PARLAYS = Object.keys(bySize).sort((a, b) => a - b).flatMap(s => bySize[s]);
   renderParlays(bySize);
   document.getElementById('downloadPdfBtn').disabled = LAST_PARLAYS.length === 0;
+  recordParlays();
 }
 function renderParlays(bySize){
   const wrap = document.getElementById('parlayResults');
@@ -491,6 +540,141 @@ function downloadPdf(){
   html2pdf().set({ margin: 10, filename: `nba-parlays-${sportsDay()}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' } }).from(area).save();
 }
 
+
+// ---------- saved predictions & parlays (stored in your Supabase account, so every browser sees them) ----------
+let SNAP = { date: null, games: {}, parlays: [] };
+let SNAP_DAY = null, snapTimer = null;
+async function cloudReady(){
+  const c = window.cloud;
+  if(!c) return null;
+  try{ await c.whenApproved(); }catch(e){ return null; }
+  return (c.state === 'approved' && c.sb && c.user) ? c : null;
+}
+async function loadSnap(day){
+  SNAP_DAY = day; SNAP = { date: day, games: {}, parlays: [] };
+  const c = await cloudReady();
+  if(!c) return;
+  try{
+    const r = await c.sb.from('user_data').select('value').eq('key', `nba_snap_parlay_${day}`);
+    const v = r.data && r.data[0] && r.data[0].value && r.data[0].value.parlay;
+    if(v) SNAP = { date: day, games: v.games || {}, parlays: v.parlays || [] };
+  }catch(e){}
+}
+function scheduleSnapSave(){ clearTimeout(snapTimer); snapTimer = setTimeout(saveSnap, 2500); }
+async function saveSnap(){
+  const c = await cloudReady();
+  if(!c || !SNAP_DAY) return;
+  if(!Object.keys(SNAP.games).length && !SNAP.parlays.length) return;
+  const r = await c.sb.from('user_data').upsert([{ user_id: c.user.id, key: `nba_snap_parlay_${SNAP_DAY}`,
+    value: { parlay: SNAP }, updated_at: new Date().toISOString() }], { onConflict: 'user_id,key' });
+  if(r.error) console.warn('[parlay history] save failed', r.error);
+  else histInit();
+}
+// Keep the PRE-GAME numbers: a game is only (re)written while it hasn't started.
+function recordGames(){
+  let changed = false;
+  POOL.forEach(g => {
+    const key = g.away + '@' + g.home;
+    if(g.state !== 'pre' && SNAP.games[key]) return;
+    if(g.state !== 'pre') return;               // never saw it before tip-off: nothing trustworthy to save
+    const e = { away: g.away, home: g.home, start: g.start || null, pick: g.pick, winPct: Math.round(g.confidence * 1000) / 10,
+      bookPct: g.bookProb == null ? null : Math.round(g.bookProb * 1000) / 10,
+      recPct: g.recProb == null ? null : Math.round(g.recProb * 1000) / 10,
+      spread: g.odds ? g.odds.text : null, awayMl: g.odds ? g.odds.awayMl : null, homeMl: g.odds ? g.odds.homeMl : null,
+      basis: g.source };
+    if(JSON.stringify(SNAP.games[key]) !== JSON.stringify(e)){ SNAP.games[key] = e; changed = true; }
+  });
+  if(changed) scheduleSnapSave();
+}
+function recordParlays(){
+  const sig = p => p.legs.map(l => l.away + '@' + l.home + ':' + l.pick).sort().join('|');
+  const have = new Set(SNAP.parlays.map(x => x.legs.map(l => l.away + '@' + l.home + ':' + l.pick).sort().join('|')));
+  let added = false;
+  LAST_PARLAYS.forEach(p => {
+    if(have.has(sig(p))) return;
+    SNAP.parlays.push({ size: p.legs.length, combined: Math.round(p.combined * 1000) / 10, at: new Date().toISOString(),
+      legs: p.legs.map(l => ({ away: l.away, home: l.home, pick: l.pick, winPct: Math.round(l.confidence * 1000) / 10 })) });
+    added = true;
+  });
+  if(added) scheduleSnapSave();
+}
+
+// ---------- history view ----------
+let HIST_ALL = null;   // { days: {date: snap}, results: {date: {"AWAY@HOME": winner}} }
+function fmtMl(v){ return v == null ? '–' : (v > 0 ? '+' + v : String(v)); }
+async function histLoad(){
+  const c = await cloudReady();
+  if(!c) return null;
+  const r = await c.sb.from('user_data').select('key,value').like('key', 'nba_snap_parlay_%');
+  const days = {};
+  (r.data || []).forEach(x => { const d = x.key.slice('nba_snap_parlay_'.length); if(/^\d{4}-\d{2}-\d{2}$/.test(d) && x.value && x.value.parlay) days[d] = x.value.parlay; });
+  const results = {};
+  const dates = Object.keys(days);
+  if(dates.length){
+    const g = await c.sb.from('games').select('game_date,away,home,final_away,final_home').eq('league', 'NBA').eq('state', 'post').in('game_date', dates);
+    (g.data || []).forEach(x => {
+      if(x.final_away == null || x.final_home == null || x.final_away === x.final_home) return;
+      (results[x.game_date] = results[x.game_date] || {})[abbr3(x.away) + '@' + abbr3(x.home)] = x.final_away > x.final_home ? abbr3(x.away) : abbr3(x.home);
+    });
+  }
+  return { days, results };
+}
+const gameResult = (date, e) => { const w = HIST_ALL.results[date] && HIST_ALL.results[date][e.away + '@' + e.home]; return w ? (w === e.pick ? 'win' : 'loss') : 'pend'; };
+function parlayResult(date, p){
+  const rs = p.legs.map(l => gameResult(date, l));
+  return rs.includes('loss') ? 'loss' : (rs.every(x => x === 'win') ? 'win' : 'pend');
+}
+const rLabel = r => r === 'win' ? '<span class="r-win">✓ Won</span>' : (r === 'loss' ? '<span class="r-loss">✗ Lost</span>' : '<span class="r-pend">pending</span>');
+async function histInit(){
+  const sel = document.getElementById('histDay');
+  HIST_ALL = await histLoad();
+  if(!HIST_ALL){ document.getElementById('histStatus').textContent = 'Sign in (top bar) to save and see your history across browsers.'; return; }
+  const dates = Object.keys(HIST_ALL.days).sort().reverse();
+  const cur = sel.value;
+  sel.innerHTML = dates.length ? dates.map(d => `<option value="${d}">${d}</option>`).join('') : '<option value="">No saved days yet</option>';
+  if(dates.includes(cur)) sel.value = cur;
+  document.getElementById('histStatus').textContent = dates.length
+    ? `${dates.length} saved day${dates.length === 1 ? '' : 's'}. Predictions are saved with the pre-game numbers, then checked against final scores.`
+    : 'Nothing saved yet — today’s games are saved automatically once they show on this page before tip-off.';
+  renderHistStats(dates); renderHistDay();
+}
+function renderHistStats(dates){
+  let right = 0, total = 0, pw = 0, pl = 0, pp = 0;
+  const bk = { '70%+': [0, 0], '60–69%': [0, 0], '50–59%': [0, 0] };
+  dates.forEach(d => {
+    const snap = HIST_ALL.days[d];
+    Object.values(snap.games || {}).forEach(e => {
+      const r = gameResult(d, e); if(r === 'pend') return;
+      total++; if(r === 'win') right++;
+      const k = e.winPct >= 70 ? '70%+' : (e.winPct >= 60 ? '60–69%' : '50–59%');
+      bk[k][1]++; if(r === 'win') bk[k][0]++;
+    });
+    (snap.parlays || []).forEach(p => { const r = parlayResult(d, p); if(r === 'win') pw++; else if(r === 'loss') pl++; else pp++; });
+  });
+  const pct = (a, b) => b ? `${a} / ${b} (${Math.round(a / b * 100)}%)` : '–';
+  document.getElementById('histStats').innerHTML = [
+    ['Picks right (all days)', pct(right, total)],
+    ...Object.entries(bk).map(([k, v]) => [`Picks right at ${k}`, pct(v[0], v[1])]),
+    ['Parlays won', pct(pw, pw + pl) + (pp ? ` · ${pp} pending` : '')]
+  ].map(([k, v]) => `<div class="stat-box"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+}
+function renderHistDay(){
+  const d = document.getElementById('histDay').value, body = document.getElementById('histBody');
+  const snap = HIST_ALL && HIST_ALL.days[d];
+  if(!snap){ body.innerHTML = ''; return; }
+  const games = Object.values(snap.games || {}).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+  let html = `<table class="hist-table"><thead><tr><th>Game</th><th>Predicted winner</th><th>Win %</th><th>Moneyline (away / home)</th><th>Sportsbook</th><th>Result</th></tr></thead><tbody>`
+    + games.map(e => `<tr><td>${e.away} @ ${e.home}</td><td><b>${e.pick}</b></td><td>${e.winPct}%</td><td>${e.away} ${fmtMl(e.awayMl)} / ${e.home} ${fmtMl(e.homeMl)}</td><td>${e.spread || '–'}</td><td>${rLabel(gameResult(d, e))}</td></tr>`).join('')
+    + `</tbody></table>`;
+  const ps = (snap.parlays || []).slice().sort((a, b) => a.size - b.size || b.combined - a.combined);
+  html += ps.length ? `<div style="font-weight:700;font-size:12px;text-transform:uppercase;color:var(--accent);margin:6px 0;">Parlays I generated</div>`
+    + ps.map(p => `<div class="hist-parlay"><b>${p.size}-leg · ${p.combined}%</b> — ${rLabel(parlayResult(d, p))}<br>`
+      + p.legs.map(l => { const r = gameResult(d, l); return `${l.away} @ ${l.home}: <b>${l.pick}</b> ${r === 'win' ? '<span class="r-win">✓</span>' : (r === 'loss' ? '<span class="r-loss">✗</span>' : '<span class="r-pend">…</span>')}`; }).join(' &nbsp;·&nbsp; ')
+      + `</div>`).join('') : '<div class="empty-state">No parlays were generated that day.</div>';
+  body.innerHTML = html;
+}
+document.getElementById('histDay').addEventListener('change', renderHistDay);
+
 async function init(){
   SEASON_DATA = await fetchFullSeason();
   STANDINGS = computeStandings();
@@ -500,12 +684,15 @@ async function init(){
   const games = await fetchTodayGames();
   if(games === null){ document.getElementById('poolList').innerHTML = '<div class="empty-state">Couldn’t reach ESPN for today’s games. Try again in a moment.</div>'; document.getElementById('poolStatus').textContent = 'Live fetch failed.'; return; }
   TODAY_GAMES = games;
+  await loadSnap(sportsDay());
   rebuildPool();
+  histInit();
   // refresh scores/lines every 60 seconds while the page is open (parlays you generated stay as they are)
   setInterval(async () => { const g = await fetchTodayGames(); if(g){ TODAY_GAMES = g; rebuildPool(); } }, 60000);
 }
 
 document.getElementById('basis').addEventListener('change', rebuildPool);
+document.getElementById('sortBy').addEventListener('change', renderPool);
 document.getElementById('minLegs').addEventListener('change', updateGenerateEnabled);
 document.getElementById('poolMode').addEventListener('change', () => {
   document.getElementById('gamePicker').classList.toggle('open', document.getElementById('poolMode').value === 'custom');
