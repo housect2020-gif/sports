@@ -60,6 +60,7 @@
   .conf-bar{height:5px;border-radius:3px;background:var(--grid);width:80px;overflow:hidden;}
   .conf-bar-fill{height:100%;background:var(--win);}
   .fav{color:var(--accent);font-weight:700;}
+  .leg-ml{color:var(--sub);font-weight:600;font-family:var(--font-mono);font-size:12px;}
   .ml{color:var(--text);}
   .parlay-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;}
   .parlay-sections{display:flex;flex-direction:column;gap:24px;}
@@ -521,7 +522,7 @@ function renderParlays(bySize){
     <div class="parlay-grid">${bySize[size].map((p, i) => `
       <div class="parlay-card ${i === 0 ? 'best' : ''}">
         <div class="parlay-rank">${i === 0 ? 'Highest confidence' : `Parlay ${i + 1}`} · ${size} legs</div>
-        <ul class="parlay-legs">${p.legs.map(g => `<li><span class="leg-teams">${g.away} @ ${g.home}</span><span class="leg-pick">${g.pick}</span></li>`).join('')}</ul>
+        <ul class="parlay-legs">${p.legs.map(g => `<li><span class="leg-teams">${g.away} @ ${g.home}</span><span class="leg-pick">${g.pick}${mlTag(pickMl(g))}</span></li>`).join('')}</ul>
         <div class="parlay-combined"><span>Combined confidence</span><span class="value">${(p.combined * 100).toFixed(1)}%</span></div>
       </div>`).join('')}</div></div>`).join('');
 }
@@ -531,7 +532,7 @@ function downloadPdf(){
   const rows = LAST_PARLAYS.map((p, i) => `
     <div style="margin-bottom:14px;padding:12px 14px;border:1px solid #d8dde6;border-radius:8px;">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64708a;margin-bottom:6px;">Parlay ${i + 1} · ${p.legs.length} legs</div>
-      ${p.legs.map(g => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;"><span style="color:#64708a;">${g.away} @ ${g.home}</span><b>${g.pick}</b></div>`).join('')}
+      ${p.legs.map(g => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;"><span style="color:#64708a;">${g.away} @ ${g.home}</span><b>${g.pick}${pickMl(g) == null ? '' : ' (' + (pickMl(g) > 0 ? '+' : '') + pickMl(g) + ')'}</b></div>`).join('')}
       <div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:1px dashed #d8dde6;font-size:13px;"><span>Combined confidence</span><b>${(p.combined * 100).toFixed(1)}%</b></div>
     </div>`).join('');
   const area = document.getElementById('printArea');
@@ -593,7 +594,7 @@ function recordParlays(){
   LAST_PARLAYS.forEach(p => {
     if(have.has(sig(p))) return;
     SNAP.parlays.push({ size: p.legs.length, combined: Math.round(p.combined * 1000) / 10, at: new Date().toISOString(),
-      legs: p.legs.map(l => ({ away: l.away, home: l.home, pick: l.pick, winPct: Math.round(l.confidence * 1000) / 10 })) });
+      legs: p.legs.map(l => ({ away: l.away, home: l.home, pick: l.pick, winPct: Math.round(l.confidence * 1000) / 10, ml: pickMl(l) == null ? null : pickMl(l) })) });
     added = true;
   });
   if(added) scheduleSnapSave();
@@ -601,6 +602,8 @@ function recordParlays(){
 
 // ---------- history view ----------
 let HIST_ALL = null;   // { days: {date: snap}, results: {date: {"AWAY@HOME": winner}} }
+const pickMl = g => g.odds ? (g.pick === g.home ? g.odds.homeMl : g.odds.awayMl) : null;
+const mlTag = v => v == null ? '' : ` <span class="leg-ml">(${v > 0 ? '+' + v : v})</span>`;
 function fmtMl(v){ return v == null ? '–' : (v > 0 ? '+' + v : String(v)); }
 async function histLoad(){
   const c = await cloudReady();
@@ -669,7 +672,7 @@ function renderHistDay(){
   const ps = (snap.parlays || []).slice().sort((a, b) => a.size - b.size || b.combined - a.combined);
   html += ps.length ? `<div style="font-weight:700;font-size:12px;text-transform:uppercase;color:var(--accent);margin:6px 0;">Parlays I generated</div>`
     + ps.map(p => `<div class="hist-parlay"><b>${p.size}-leg · ${p.combined}%</b> — ${rLabel(parlayResult(d, p))}<br>`
-      + p.legs.map(l => { const r = gameResult(d, l); return `${l.away} @ ${l.home}: <b>${l.pick}</b> ${r === 'win' ? '<span class="r-win">✓</span>' : (r === 'loss' ? '<span class="r-loss">✗</span>' : '<span class="r-pend">…</span>')}`; }).join(' &nbsp;·&nbsp; ')
+      + p.legs.map(l => { const r = gameResult(d, l); return `${l.away} @ ${l.home}: <b>${l.pick}</b>${mlTag(l.ml)} ${r === 'win' ? '<span class="r-win">✓</span>' : (r === 'loss' ? '<span class="r-loss">✗</span>' : '<span class="r-pend">…</span>')}`; }).join(' &nbsp;·&nbsp; ')
       + `</div>`).join('') : '<div class="empty-state">No parlays were generated that day.</div>';
   body.innerHTML = html;
 }
