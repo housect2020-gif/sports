@@ -74,6 +74,7 @@
   .parlay-legs .leg-teams{color:var(--sub);}
   .parlay-legs .leg-pick{font-weight:700;}
   .parlay-combined{display:flex;justify-content:space-between;align-items:center;padding-top:10px;border-top:1px dashed var(--grid-strong);font-size:13px;}
+  .parlay-combined.payout{border-top:none;padding-top:0;margin-bottom:6px;}
   .parlay-combined .value{font-family:var(--font-mono);font-weight:700;font-size:16px;color:var(--accent);}
   .parlay-card.best .parlay-combined .value{color:var(--win);}
   .empty-state{color:var(--sub);font-size:13px;padding:20px;text-align:center;}
@@ -151,6 +152,12 @@
         <label>Parlays per leg count</label>
         <select id="parlayCount">
           <option value="1">1</option><option value="3" selected>3</option><option value="5">5</option><option value="8">8</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Bet amount</label>
+        <select id="stake">
+          <option value="1" selected>$1</option><option value="5">$5</option><option value="10">$10</option><option value="25">$25</option><option value="100">$100</option>
         </select>
       </div>
       <div class="control-group">
@@ -509,6 +516,7 @@ function generateParlays(){
     bySize[size] = list.slice(0, count);
   }
   LAST_PARLAYS = Object.keys(bySize).sort((a, b) => a - b).flatMap(s => bySize[s]);
+  LAST_BYSIZE = bySize;
   renderParlays(bySize);
   document.getElementById('downloadPdfBtn').disabled = LAST_PARLAYS.length === 0;
   recordParlays();
@@ -523,6 +531,7 @@ function renderParlays(bySize){
       <div class="parlay-card ${i === 0 ? 'best' : ''}">
         <div class="parlay-rank">${i === 0 ? 'Highest confidence' : `Parlay ${i + 1}`} · ${size} legs</div>
         <ul class="parlay-legs">${p.legs.map(g => `<li><span class="leg-teams">${g.away} @ ${g.home}</span><span class="leg-pick">${g.pick}${mlTag(pickMl(g))}</span></li>`).join('')}</ul>
+        <div class="parlay-combined payout">${payoutLine(p.legs)}</div>
         <div class="parlay-combined"><span>Combined confidence</span><span class="value">${(p.combined * 100).toFixed(1)}%</span></div>
       </div>`).join('')}</div></div>`).join('');
 }
@@ -533,6 +542,7 @@ function downloadPdf(){
     <div style="margin-bottom:14px;padding:12px 14px;border:1px solid #d8dde6;border-radius:8px;">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64708a;margin-bottom:6px;">Parlay ${i + 1} · ${p.legs.length} legs</div>
       ${p.legs.map(g => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;"><span style="color:#64708a;">${g.away} @ ${g.home}</span><b>${g.pick}${pickMl(g) == null ? '' : ' (' + (pickMl(g) > 0 ? '+' : '') + pickMl(g) + ')'}</b></div>`).join('')}
+      ${(() => { const r = parlayPayout(p.legs); return r.ok ? `<div style="display:flex;justify-content:space-between;margin-top:8px;font-size:13px;"><span>Bet ${money(STAKE)} → win</span><b>${money(r.profit)} (${r.american})</b></div>` : ''; })()}
       <div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:1px dashed #d8dde6;font-size:13px;"><span>Combined confidence</span><b>${(p.combined * 100).toFixed(1)}%</b></div>
     </div>`).join('');
   const area = document.getElementById('printArea');
@@ -602,6 +612,24 @@ function recordParlays(){
 
 // ---------- history view ----------
 let HIST_ALL = null;   // { days: {date: snap}, results: {date: {"AWAY@HOME": winner}} }
+let STAKE = 1, LAST_BYSIZE = null;
+const legMl = l => l.ml !== undefined ? l.ml : pickMl(l);
+function parlayPayout(legs){
+  const mls = legs.map(legMl);
+  const missing = mls.filter(v => v == null).length;
+  if(missing) return { ok: false, missing };
+  const dec = mls.reduce((p, v) => p * (v > 0 ? 1 + v / 100 : 1 + 100 / -v), 1);
+  const american = dec >= 2 ? '+' + Math.round((dec - 1) * 100) : String(-Math.round(100 / (dec - 1)));
+  const profit = STAKE * (dec - 1);
+  return { ok: true, american, profit, total: STAKE * dec };
+}
+const money = v => '$' + (v >= 1000 ? Math.round(v).toLocaleString() : v.toFixed(2));
+function payoutLine(legs){
+  const r = parlayPayout(legs);
+  return r.ok
+    ? `<span>Bet ${money(STAKE)} → win</span><span class="value">${money(r.profit)} <span class="leg-ml">(${r.american})</span></span>`
+    : `<span>Bet ${money(STAKE)} → win</span><span class="leg-ml">needs a moneyline on ${r.missing} more leg${r.missing === 1 ? '' : 's'}</span>`;
+}
 const pickMl = g => g.odds ? (g.pick === g.home ? g.odds.homeMl : g.odds.awayMl) : null;
 const mlTag = v => v == null ? '' : ` <span class="leg-ml">(${v > 0 ? '+' + v : v})</span>`;
 function fmtMl(v){ return v == null ? '–' : (v > 0 ? '+' + v : String(v)); }
@@ -671,7 +699,7 @@ function renderHistDay(){
     + `</tbody></table>`;
   const ps = (snap.parlays || []).slice().sort((a, b) => a.size - b.size || b.combined - a.combined);
   html += ps.length ? `<div style="font-weight:700;font-size:12px;text-transform:uppercase;color:var(--accent);margin:6px 0;">Parlays I generated</div>`
-    + ps.map(p => `<div class="hist-parlay"><b>${p.size}-leg · ${p.combined}%</b> — ${rLabel(parlayResult(d, p))}<br>`
+    + ps.map(p => `<div class="hist-parlay"><b>${p.size}-leg · ${p.combined}%</b>${(() => { const r = parlayPayout(p.legs); return r.ok ? ` · ${money(STAKE)} wins <b>${money(r.profit)}</b> <span class="leg-ml">(${r.american})</span>` : ''; })()} — ${rLabel(parlayResult(d, p))}<br>`
       + p.legs.map(l => { const r = gameResult(d, l); return `${l.away} @ ${l.home}: <b>${l.pick}</b>${mlTag(l.ml)} ${r === 'win' ? '<span class="r-win">✓</span>' : (r === 'loss' ? '<span class="r-loss">✗</span>' : '<span class="r-pend">…</span>')}`; }).join(' &nbsp;·&nbsp; ')
       + `</div>`).join('') : '<div class="empty-state">No parlays were generated that day.</div>';
   body.innerHTML = html;
@@ -696,6 +724,11 @@ async function init(){
 
 document.getElementById('basis').addEventListener('change', rebuildPool);
 document.getElementById('sortBy').addEventListener('change', renderPool);
+document.getElementById('stake').addEventListener('change', () => {
+  STAKE = Number(document.getElementById('stake').value) || 1;
+  if(LAST_BYSIZE) renderParlays(LAST_BYSIZE);
+  if(HIST_ALL) renderHistDay();
+});
 document.getElementById('minLegs').addEventListener('change', updateGenerateEnabled);
 document.getElementById('poolMode').addEventListener('change', () => {
   document.getElementById('gamePicker').classList.toggle('open', document.getElementById('poolMode').value === 'custom');
