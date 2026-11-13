@@ -553,61 +553,101 @@ function downloadPdf(){
 
 
 // ---------- saved predictions & parlays (stored in your Supabase account, so every browser sees them) ----------
-let SNAP = { date: null, games: {}, parlays: [] };
-let SNAP_DAY = null, snapTimer = null;
+// A game belongs to the day it TIPS OFF, using the same 4 AM Eastern cutoff as the rest of the site.
+const dayOfStart = iso => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(new Date(iso).getTime() - 4 * 3600 * 1000));
+const SNAPS = {}, SNAP_LOADS = {}, DIRTY = new Set();
+let snapTimer = null;
 async function cloudReady(){
   const c = window.cloud;
   if(!c) return null;
   try{ await c.whenApproved(); }catch(e){ return null; }
   return (c.state === 'approved' && c.sb && c.user) ? c : null;
 }
-async function loadSnap(day){
-  SNAP_DAY = day; SNAP = { date: day, games: {}, parlays: [] };
-  const c = await cloudReady();
-  if(!c) return;
-  try{
-    const r = await c.sb.from('user_data').select('value').eq('key', `nba_snap_parlay_${day}`);
-    const v = r.data && r.data[0] && r.data[0].value && r.data[0].value.parlay;
-    if(v) SNAP = { date: day, games: v.games || {}, parlays: v.parlays || [] };
-  }catch(e){}
+function ensureSnap(day){
+  if(!SNAP_LOADS[day]) SNAP_LOADS[day] = (async () => {
+    SNAPS[day] = { date: day, games: {}, parlays: [] };
+    const c = await cloudReady();
+    if(!c) return;
+    try{
+      const r = await c.sb.from('user_data').select('value').eq('key', `nba_snap_parlay_${day}`);
+      const v = r.data && r.data[0] && r.data[0].value && r.data[0].value.parlay;
+      if(v) SNAPS[day] = { date: day, games: v.games || {}, parlays: v.parlays || [] };
+    }catch(e){}
+  })();
+  return SNAP_LOADS[day];
 }
 function scheduleSnapSave(){ clearTimeout(snapTimer); snapTimer = setTimeout(saveSnap, 2500); }
 async function saveSnap(){
   const c = await cloudReady();
-  if(!c || !SNAP_DAY) return;
-  if(!Object.keys(SNAP.games).length && !SNAP.parlays.length) return;
-  const r = await c.sb.from('user_data').upsert([{ user_id: c.user.id, key: `nba_snap_parlay_${SNAP_DAY}`,
-    value: { parlay: SNAP }, updated_at: new Date().toISOString() }], { onConflict: 'user_id,key' });
+  if(!c) return;
+  const days = Array.from(DIRTY); DIRTY.clear();
+  const rows = days.filter(d => SNAPS[d] && (Object.keys(SNAPS[d].games).length || SNAPS[d].parlays.length))
+    .map(d => ({ user_id: c.user.id, key: `nba_snap_parlay_${d}`, value: { parlay: SNAPS[d] }, updated_at: new Date().toISOString() }));
+  if(!rows.length) return;
+  const r = await c.sb.from('user_data').upsert(rows, { onConflict: 'user_id,key' });
   if(r.error) console.warn('[parlay history] save failed', r.error);
   else histInit();
 }
 // Keep the PRE-GAME numbers: a game is only (re)written while it hasn't started.
-function recordGames(){
-  let changed = false;
-  POOL.forEach(g => {
+async function recordGames(){
+  for(const g of POOL.slice()){
+    if(g.state !== 'pre' || !g.start) continue;
+    const day = dayOfStart(g.start);
+    await ensureSnap(day);
     const key = g.away + '@' + g.home;
-    if(g.state !== 'pre' && SNAP.games[key]) return;
-    if(g.state !== 'pre') return;               // never saw it before tip-off: nothing trustworthy to save
-    const e = { away: g.away, home: g.home, start: g.start || null, pick: g.pick, winPct: Math.round(g.confidence * 1000) / 10,
+    const e = { away: g.away, home: g.home, start: g.start, pick: g.pick, winPct: Math.round(g.confidence * 1000) / 10,
       bookPct: g.bookProb == null ? null : Math.round(g.bookProb * 1000) / 10,
       recPct: g.recProb == null ? null : Math.round(g.recProb * 1000) / 10,
       spread: g.odds ? g.odds.text : null, awayMl: g.odds ? g.odds.awayMl : null, homeMl: g.odds ? g.odds.homeMl : null,
       basis: g.source };
-    if(JSON.stringify(SNAP.games[key]) !== JSON.stringify(e)){ SNAP.games[key] = e; changed = true; }
-  });
-  if(changed) scheduleSnapSave();
+    if(JSON.stringify(SNAPS[day].games[key]) !== JSON.stringify(e)){ SNAPS[day].games[key] = e; DIRTY.add(day); }
+  }
+  if(DIRTY.size) scheduleSnapSave();
 }
-function recordParlays(){
-  const sig = p => p.legs.map(l => l.away + '@' + l.home + ':' + l.pick).sort().join('|');
-  const have = new Set(SNAP.parlays.map(x => x.legs.map(l => l.away + '@' + l.home + ':' + l.pick).sort().join('|')));
-  let added = false;
-  LAST_PARLAYS.forEach(p => {
-    if(have.has(sig(p))) return;
-    SNAP.parlays.push({ size: p.legs.length, combined: Math.round(p.combined * 1000) / 10, at: new Date().toISOString(),
-      legs: p.legs.map(l => ({ away: l.away, home: l.home, pick: l.pick, winPct: Math.round(l.confidence * 1000) / 10, ml: pickMl(l) == null ? null : pickMl(l) })) });
-    added = true;
+const parlaySig = legs => legs.map(l => l.away + '@' + l.home + ':' + l.pick).sort().join('|');
+async function recordParlays(){
+  for(const p of LAST_PARLAYS.slice()){
+    const start = p.legs[0] && p.legs[0].start;
+    if(!start) continue;
+    const day = dayOfStart(start);
+    await ensureSnap(day);
+    if(SNAPS[day].parlays.some(x => parlaySig(x.legs) === parlaySig(p.legs))) continue;
+    SNAPS[day].parlays.push({ size: p.legs.length, combined: Math.round(p.combined * 1000) / 10, at: new Date().toISOString(),
+      legs: p.legs.map(l => ({ away: l.away, home: l.home, pick: l.pick, start: l.start || null, winPct: Math.round(l.confidence * 1000) / 10, ml: pickMl(l) == null ? null : pickMl(l) })) });
+    DIRTY.add(day);
+  }
+  if(DIRTY.size) scheduleSnapSave();
+}
+// One-time tidy-up: earlier versions could file a game under the wrong day. Move every game (and parlay) to the day it tips off.
+async function migrateHistory(){
+  const c = await cloudReady();
+  if(!c) return;
+  const r = await c.sb.from('user_data').select('key,value').like('key', 'nba_snap_parlay_%');
+  const raw = {};
+  (r.data || []).forEach(x => { const d = x.key.slice('nba_snap_parlay_'.length); if(/^\d{4}-\d{2}-\d{2}$/.test(d) && x.value && x.value.parlay) raw[d] = x.value.parlay; });
+  const out = {}; let fix = false; const touched = new Set();
+  const bucket = d => (out[d] = out[d] || { date: d, games: {}, parlays: [] });
+  // pass 1: games already on the right day; pass 2: misplaced ones (never overwrite a correct entry)
+  [true, false].forEach(correctPass => {
+    Object.keys(raw).forEach(d => Object.entries(raw[d].games || {}).forEach(([key, e]) => {
+      const day = e.start ? dayOfStart(e.start) : d;
+      if((day === d) !== correctPass) return;
+      if(day !== d){ fix = true; touched.add(d); touched.add(day); }
+      if(!bucket(day).games[key]) bucket(day).games[key] = e;
+    }));
   });
-  if(added) scheduleSnapSave();
+  Object.keys(raw).forEach(d => (raw[d].parlays || []).forEach(p => {
+    const first = p.legs && p.legs[0];
+    const ge = first && (raw[d].games || {})[first.away + '@' + first.home];
+    const day = (first && first.start) ? dayOfStart(first.start) : (ge && ge.start ? dayOfStart(ge.start) : d);
+    if(day !== d){ fix = true; touched.add(d); touched.add(day); }
+    const b = bucket(day);
+    if(!b.parlays.some(x => parlaySig(x.legs) === parlaySig(p.legs))) b.parlays.push(p);
+  }));
+  if(!fix) return;
+  const rows = Array.from(touched).map(d => ({ user_id: c.user.id, key: `nba_snap_parlay_${d}`,
+    value: { parlay: out[d] || { date: d, games: {}, parlays: [] } }, updated_at: new Date().toISOString() }));
+  await c.sb.from('user_data').upsert(rows, { onConflict: 'user_id,key' });
 }
 
 // ---------- history view ----------
@@ -638,11 +678,12 @@ async function histLoad(){
   if(!c) return null;
   const r = await c.sb.from('user_data').select('key,value').like('key', 'nba_snap_parlay_%');
   const days = {};
-  (r.data || []).forEach(x => { const d = x.key.slice('nba_snap_parlay_'.length); if(/^\d{4}-\d{2}-\d{2}$/.test(d) && x.value && x.value.parlay) days[d] = x.value.parlay; });
+  (r.data || []).forEach(x => { const d = x.key.slice('nba_snap_parlay_'.length); if(/^\d{4}-\d{2}-\d{2}$/.test(d) && x.value && x.value.parlay && (Object.keys(x.value.parlay.games || {}).length || (x.value.parlay.parlays || []).length)) days[d] = x.value.parlay; });
   const results = {};
   const dates = Object.keys(days);
   if(dates.length){
-    const g = await c.sb.from('games').select('game_date,away,home,final_away,final_home').eq('league', 'NBA').eq('state', 'post').in('game_date', dates);
+    const nextDay = d => { const t = new Date(d + 'T12:00:00Z'); t.setUTCDate(t.getUTCDate() + 1); return t.toISOString().slice(0, 10); };
+    const g = await c.sb.from('games').select('game_date,away,home,final_away,final_home').eq('league', 'NBA').eq('state', 'post').in('game_date', dates.concat(dates.map(nextDay)));
     (g.data || []).forEach(x => {
       if(x.final_away == null || x.final_home == null || x.final_away === x.final_home) return;
       (results[x.game_date] = results[x.game_date] || {})[abbr3(x.away) + '@' + abbr3(x.home)] = x.final_away > x.final_home ? abbr3(x.away) : abbr3(x.home);
@@ -650,7 +691,12 @@ async function histLoad(){
   }
   return { days, results };
 }
-const gameResult = (date, e) => { const w = HIST_ALL.results[date] && HIST_ALL.results[date][e.away + '@' + e.home]; return w ? (w === e.pick ? 'win' : 'loss') : 'pend'; };
+const gameResult = (date, e) => {
+  const t = new Date(date + 'T12:00:00Z'); t.setUTCDate(t.getUTCDate() + 1);
+  const nd = t.toISOString().slice(0, 10), k = e.away + '@' + e.home;
+  const w = (HIST_ALL.results[date] && HIST_ALL.results[date][k]) || (HIST_ALL.results[nd] && HIST_ALL.results[nd][k]);
+  return w ? (w === e.pick ? 'win' : 'loss') : 'pend';
+};
 function parlayResult(date, p){
   const rs = p.legs.map(l => gameResult(date, l));
   return rs.includes('loss') ? 'loss' : (rs.every(x => x === 'win') ? 'win' : 'pend');
@@ -693,7 +739,7 @@ function renderHistDay(){
   const d = document.getElementById('histDay').value, body = document.getElementById('histBody');
   const snap = HIST_ALL && HIST_ALL.days[d];
   if(!snap){ body.innerHTML = ''; return; }
-  const games = Object.values(snap.games || {}).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+  const games = Object.values(snap.games || {}).filter(e => !e.start || dayOfStart(e.start) === d).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
   let html = `<table class="hist-table"><thead><tr><th>Game</th><th>Predicted winner</th><th>Win %</th><th>Moneyline (away / home)</th><th>Sportsbook</th><th>Result</th></tr></thead><tbody>`
     + games.map(e => `<tr><td>${e.away} @ ${e.home}</td><td><b>${e.pick}</b></td><td>${e.winPct}%</td><td>${e.away} ${fmtMl(e.awayMl)} / ${e.home} ${fmtMl(e.homeMl)}</td><td>${e.spread || '–'}</td><td>${rLabel(gameResult(d, e))}</td></tr>`).join('')
     + `</tbody></table>`;
@@ -715,7 +761,7 @@ async function init(){
   const games = await fetchTodayGames();
   if(games === null){ document.getElementById('poolList').innerHTML = '<div class="empty-state">Couldn’t reach ESPN for today’s games. Try again in a moment.</div>'; document.getElementById('poolStatus').textContent = 'Live fetch failed.'; return; }
   TODAY_GAMES = games;
-  await loadSnap(sportsDay());
+  await migrateHistory();
   rebuildPool();
   histInit();
   // refresh scores/lines every 60 seconds while the page is open (parlays you generated stay as they are)
