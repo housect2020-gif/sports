@@ -1378,6 +1378,29 @@ function applyGameData(gid, away, home, status, overUnder, seasonType, gameDateI
   if(rule && status.state === "pre"){
     updateHistory(gid, { ruleFav: rule.fav, ruleSpread: rule.spread, ruleSide: rule.side, rulePick: rule.pick });
   }
+  // J5 auto-fill: before tip-off, put the rule pick into J5 once (never over your own pick, never again after you clear it).
+  // Waits for the cloud sync to finish first, so a pick you made on another device is not overwritten.
+  if(rule && status.state === "pre"){
+    const doFill = () => {
+      if(loadField(gid, "J5auto") !== null) return;           // already auto-filled once for this game
+      const sel = eg(gid, "J5");
+      if(sel.value) return;                                   // you already picked J5
+      const st0 = gameState[gid];
+      if(st0 && st0.lastState && st0.lastState !== "pre") return;
+      sel.value = rule.pick;
+      saveField(gid, "J5", rule.pick);
+      saveField(gid, "J5auto", "1");
+      recalcGame(gid);
+      updateHistory(gid, { j5Pre: rule.pick, j5PreAuto: true });
+    };
+    const arm = () => setTimeout(doFill, 6000);
+    try { (window.cloud && window.cloud.whenApproved ? window.cloud.whenApproved() : Promise.resolve()).then(arm); } catch(e){ arm(); }
+  }
+  // History: whatever J5 is while the game has not started (your pick, or the auto-filled rule pick).
+  if(status.state === "pre"){
+    const j5Now = eg(gid, "J5").value;
+    if(j5Now) updateHistory(gid, cur => cur.j5Pre === j5Now ? null : { j5Pre: j5Now, j5PreAuto: loadField(gid, "J5auto") !== null && j5Now === (rule && rule.pick) });
+  }
   const savedRule = (loadHistory()[gid] || {});
   const shownRule = rule || (savedRule.rulePick ? { fav: savedRule.ruleFav, spread: savedRule.ruleSpread, side: savedRule.ruleSide, pick: savedRule.rulePick } : null);
   if(shownRule){
