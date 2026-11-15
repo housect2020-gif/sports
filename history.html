@@ -153,13 +153,21 @@ function render(){
     const hit = d.filter(r => r[key] === r.vs5).length;
     return `${hit} / ${d.length} <span style="font-size:14px;color:#5f6368">(${Math.round(hit / d.length * 100)}%)</span>`;
   };
+  // PPM has tended to pick Over far more often than Under; say so, with the live numbers, so it isn't over-trusted.
+  const ppmPicks = VIEW.filter(r => r.pPpm);
+  const ppmOver = ppmPicks.filter(r => r.pPpm === "Over").length;
+  const ppmLean = ppmPicks.length >= 10 && ppmOver / ppmPicks.length >= 0.6;
+  const ppmNote = {
+    short: ppmLean ? `⚠ leans Over: ${ppmOver} of ${ppmPicks.length} picks` : "at the 6:00 mark",
+    long: ppmLean ? ` Note: the PPM pick leans Over (${ppmOver} of ${ppmPicks.length} picks were Over), so treat it with caution until there are more games.` : ""
+  };
   $("cards").innerHTML = [
     ["Games", VIEW.length, ""],
     ["Overs / Unders", `${cnt("Over")} / ${cnt("Under")}`, `vs pre-game line (${cnt("Push")} push)`],
     ["Avg total", f1(avg(VIEW.map(r => r.total))), ""],
     ["Avg pre-game line", f1(avg(withLine.map(r => Number(r.pre_odds)))), `${withLine.length} games with a line`],
     ["Avg total − line", withLine.length ? (avg(withLine.map(r => r.total - Number(r.pre_odds)))).toFixed(1) : "–", ""],
-    ["My picks right (PPM)", pickHits("pPpm"), "at the 6:00 mark"],
+    ["My picks right (PPM)", pickHits("pPpm"), ppmNote.short],
     ["My picks right (Cons.)", pickHits("pCons"), "at the 6:00 mark"],
     ["My J5 right (6:00)", pickHits("j5"), "at the 6:00 mark"],
     ["My J5 right (final)", (() => { const d = VIEW.filter(r => r.j5f && r.vsK5f && r.vsK5f !== "Push"); if(!d.length) return "–"; const hh = d.filter(r => r.j5f === r.vsK5f).length; return `${hh} / ${d.length} <span style="font-size:14px;color:#5f6368">(${Math.round(hh / d.length * 100)}%)</span>`; })(), "J5 when the game ended"],
@@ -177,7 +185,7 @@ function render(){
     <td>${pickCell(r.pPpm, r.vs5)}</td><td>${pickCell(r.pCons, r.vs5)}</td><td>${f1(r.k5f)}</td><td>${pickCell(r.j5, r.vs5)} | ${pickCell(r.j5f, r.vsK5f)}</td><td>${f1(r.l4)}${r.l4pick ? " " + pickCell(r.l4pick, r.vs5) : ""} | ${f1(r.l4f)}${r.l4fpick ? " " + pickCell(r.l4fpick, r.vsK5f) : ""}</td><td>${f1(r.proj)}</td>
   </tr>`).join("") || '<tr><td colspan="14" style="color:#80868b">No finished games match yet. The server job saves them as games end.</td></tr>';
   $("note").textContent = $("league").value === "NBA"
-    ? "Game results and pre-game lines are shared. The “My …” columns are your own entries and picks, saved from the live sheet while it was open."
+    ? "Game results and pre-game lines are shared. The “My …” columns are your own entries and picks, saved from the live sheet while it was open." + ppmNote.long
     : "Game results and pre-game lines are shared. “My …” columns are only recorded for NBA.";
 }
 
