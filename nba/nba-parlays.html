@@ -130,6 +130,16 @@
         </select>
       </div>
       <div class="control-group">
+        <label>Skip coin-flip games</label>
+        <select id="minWin">
+          <option value="0">Off — use every game</option>
+          <option value="52">below 52%</option>
+          <option value="55" selected>below 55%</option>
+          <option value="58">below 58%</option>
+          <option value="60">below 60%</option>
+        </select>
+      </div>
+      <div class="control-group">
         <label>Game pool</label>
         <select id="poolMode">
           <option value="all">All of today's games</option>
@@ -435,7 +445,7 @@ function rebuildPool(){
   const withLine = TODAY_GAMES.filter(g => g.odds).length;
   document.getElementById('poolStatus').textContent = TODAY_GAMES.length === 0
     ? 'No NBA games on today’s slate.'
-    : `${POOL.length} live or upcoming game${POOL.length === 1 ? '' : 's'} (${TODAY_GAMES.length} on the slate) · sportsbook line shown for ${withLine}. ESPN only posts lines before tip-off.`;
+    : `${POOL.length} live or upcoming game${POOL.length === 1 ? '' : 's'} (${TODAY_GAMES.length} on the slate) · ${POOL.filter(g => !eligible(g)).length} skipped as coin flips · sportsbook line shown for ${withLine}. ESPN only posts lines before tip-off.`;
 }
 
 function sortedPool(){
@@ -459,10 +469,11 @@ function renderPool(){
     const ml = g.odds && (g.odds.homeMl != null || g.odds.awayMl != null)
       ? `<span class="ml">Moneyline: <b>${g.away} ${fmtMl(g.odds.awayMl)}</b> / <b>${g.home} ${fmtMl(g.odds.homeMl)}</b></span> · ` : '';
     const fav = g.odds ? `<span class="fav">Sportsbook: ${g.odds.text}</span> · ` : '<span style="color:var(--sub)">No sportsbook line yet</span> · ';
-    return `<div class="pool-row">
+    const skipped = !eligible(g);
+    return `<div class="pool-row"${skipped ? ' style="opacity:.55"' : ''}>
       <div class="pool-teams">${g.away} @ ${g.home}${score} ${badge}</div>
       <div class="pool-info">${ml}${fav}Book win% ${g.pick}: <b>${pc(g.bookProb)}</b> · Records win% ${g.pick}: <b>${pc(g.recProb)}</b><br>${g.h2hText} · ${g.away} (${g.recA}) / ${g.home} (${g.recB}) · L10: ${g.l10Text}</div>
-      <div class="pool-pick" title="Predicted winner">${g.pick} wins</div>
+      <div class="pool-pick" title="Predicted winner">${g.pick} wins${skipped ? '<div class="score-note" style="margin:0">coin flip — not used in parlays</div>' : ''}</div>
       <div class="conf-bar"><div class="conf-bar-fill" style="width:${pct}%"></div></div>
       <div class="pool-conf" title="Win chance used for parlays">${pct}%</div>
     </div>`;
@@ -470,18 +481,20 @@ function renderPool(){
 }
 function renderGameChecks(){
   const wrap = document.getElementById('gameChecks');
-  wrap.innerHTML = POOL.map((g, i) => `<label class="game-check"><input type="checkbox" value="${i}"><span>${g.away} @ ${g.home} <span style="color:var(--sub);font-size:11px;">(pick: ${g.pick})</span></span></label>`).join('');
+  wrap.innerHTML = POOL.map((g, i) => !eligible(g) ? '' : `<label class="game-check"><input type="checkbox" value="${i}"><span>${g.away} @ ${g.home} <span style="color:var(--sub);font-size:11px;">(pick: ${g.pick})</span></span></label>`).join('');
   wrap.querySelectorAll('.game-check').forEach(el => el.addEventListener('click', e => {
     if(e.target.tagName !== 'INPUT'){ const cb = el.querySelector('input'); cb.checked = !cb.checked; }
     el.classList.toggle('picked', el.querySelector('input').checked);
     updateGenerateEnabled();
   }));
 }
+const minWin = () => (Number(document.getElementById('minWin').value) || 0) / 100;
+const eligible = g => g.confidence >= minWin();
 const selectedIdx = () => Array.from(document.querySelectorAll('#gameChecks input:checked')).map(e => parseInt(e.value));
 const minLegs = () => parseInt(document.getElementById('minLegs').value);
 function updateGenerateEnabled(){
   const mode = document.getElementById('poolMode').value;
-  document.getElementById('generateBtn').disabled = (mode === 'all' ? POOL.length : selectedIdx().length) < minLegs();
+  document.getElementById('generateBtn').disabled = (mode === 'all' ? POOL.filter(eligible).length : selectedIdx().length) < minLegs();
 }
 
 // ---------- parlays ----------
@@ -501,8 +514,8 @@ function generateParlays(){
   const mode = document.getElementById('poolMode').value;
   const count = parseInt(document.getElementById('parlayCount').value);
   const lo = minLegs(), hi = parseInt(document.getElementById('maxLegs').value);
-  const base = mode === 'all' ? POOL.map((_, i) => i) : selectedIdx();
-  if(base.length < lo){ document.getElementById('parlayResults').innerHTML = `<div class="empty-state">Need at least ${lo} games in the pool.</div>`; document.getElementById('downloadPdfBtn').disabled = true; return; }
+  const base = mode === 'all' ? POOL.map((g, i) => i).filter(i => eligible(POOL[i])) : selectedIdx().filter(i => eligible(POOL[i]));
+  if(base.length < lo){ document.getElementById('parlayResults').innerHTML = `<div class="empty-state">Need at least ${lo} games above the minimum win % (${base.length} qualify). Lower “Skip coin-flip games” to include more.</div>`; document.getElementById('downloadPdfBtn').disabled = true; return; }
   const maxLegs = Math.min(base.length, Math.max(lo, hi));
   const bySize = {};
   for(let size = lo; size <= maxLegs; size++){
@@ -770,6 +783,7 @@ async function init(){
 
 document.getElementById('basis').addEventListener('change', rebuildPool);
 document.getElementById('sortBy').addEventListener('change', renderPool);
+document.getElementById('minWin').addEventListener('change', rebuildPool);
 document.getElementById('stake').addEventListener('change', () => {
   STAKE = Number(document.getElementById('stake').value) || 1;
   if(LAST_BYSIZE) renderParlays(LAST_BYSIZE);
