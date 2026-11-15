@@ -1271,7 +1271,7 @@ function recalcGame(gid){
   }
 }
 
-function applyGameData(gid, away, home, status, overUnder, seasonType, gameDateIso, cloudPreOdds){
+function applyGameData(gid, away, home, status, overUnder, seasonType, gameDateIso, cloudPreOdds, rule){
   ensureGameBlock(gid);
   const st = gameState[gid];
   // Stash the market total (if ESPN has one for this game) so recalcGame
@@ -1374,6 +1374,20 @@ function applyGameData(gid, away, home, status, overUnder, seasonType, gameDateI
   // nothing for the regular season.
   const matchupEl = eg(gid,"matchup");
   matchupEl.textContent = `${away.name} @ ${home.name} — ${statusText}`;
+  // Rule pick: saved while the game is still pre-game (ESPN drops the spread once it starts), then shown from the saved copy.
+  if(rule && status.state === "pre"){
+    updateHistory(gid, { ruleFav: rule.fav, ruleSpread: rule.spread, ruleSide: rule.side, rulePick: rule.pick });
+  }
+  const savedRule = (loadHistory()[gid] || {});
+  const shownRule = rule || (savedRule.rulePick ? { fav: savedRule.ruleFav, spread: savedRule.ruleSpread, side: savedRule.ruleSide, pick: savedRule.rulePick } : null);
+  if(shownRule){
+    const tag = document.createElement("span");
+    tag.className = "rule-tag";
+    tag.textContent = ` · Rule: ${shownRule.pick.toUpperCase()} (${shownRule.fav}${shownRule.spread != null ? " −" + shownRule.spread : ""} ${shownRule.side === "home" ? "at home" : "on the road"})`;
+    tag.title = "Favorite at home → Under; favorite on the road → Over";
+    tag.style.cssText = "font-weight:700;color:" + (shownRule.pick === "Over" ? "#0a7d3f" : "#c5221f");
+    matchupEl.appendChild(tag);
+  }
   const badgeText = seasonType === 1 ? "PRE" : (seasonType === 3 ? "PLAYOFFS" : "");
   if(badgeText){
     const badge = document.createElement("span");
@@ -1790,6 +1804,20 @@ function parseEvent(ev){
   const oddsBlock = (comp.odds && comp.odds[0]) || null;
   const overUnder = oddsBlock && typeof oddsBlock.overUnder === "number" ? oddsBlock.overUnder : null;
 
+  // Rule pick: favorite (from the spread, e.g. "BOS -6.5") at HOME -> Under, on the ROAD -> Over.
+  let rule = null;
+  if(oddsBlock){
+    const m = String(oddsBlock.details || "").match(/^([A-Za-z]{2,4})\s+([+-]?\d+(?:\.\d+)?)/);
+    const awayAb = abbr3(awayC.team && awayC.team.abbreviation), homeAb = abbr3(homeC.team && homeC.team.abbreviation);
+    let fav = m ? abbr3(m[1].toUpperCase()) : null, spread = m ? Math.abs(parseFloat(m[2])) : null;
+    if(fav !== awayAb && fav !== homeAb) fav = null;
+    if(!fav){
+      if(oddsBlock.homeTeamOdds && oddsBlock.homeTeamOdds.favorite) fav = homeAb;
+      else if(oddsBlock.awayTeamOdds && oddsBlock.awayTeamOdds.favorite) fav = awayAb;
+    }
+    if(fav && spread !== 0) rule = { fav, spread, side: fav === homeAb ? "home" : "road", pick: fav === homeAb ? "Under" : "Over" };
+  }
+
   return {
     id: ev.id,
     date: ev.date,
@@ -1797,6 +1825,7 @@ function parseEvent(ev){
     home: toTeam(homeC),
     status: { period, clock, state, detail },
     overUnder,
+    rule,
     // ESPN season type: 1 = preseason, 2 = regular season, 3 = playoffs
     seasonType: (ev.season && ev.season.type) || null
   };
@@ -1857,7 +1886,7 @@ async function fetchScores(){
     for(const g of parsedList){
       const gid = "g" + g.id;
       ensureGameBlock(gid); // safe no-op if the block already exists
-      applyGameData(gid, g.away, g.home, g.status, g.overUnder, g.seasonType, g.date, cloudOdds[g.id]);
+      applyGameData(gid, g.away, g.home, g.status, g.overUnder, g.seasonType, g.date, cloudOdds[g.id], g.rule);
       captureFinalEntries(gid);
     }
 
@@ -2211,7 +2240,7 @@ function recFor(gid, fallback){
 function noteRowHtml(gid, rec, tot, extra){
   const has = EDIT_FIELDS.some(f => rec[f] != null && rec[f] !== "");
   const text = has ? entriesNoteHtml(rec, tot) : "No K5 / J5 / L4 saved for this game.";
-  return `<tr class="entry-row" data-gid="${gid}"><td class="rownum"></td><td colspan="13" class="proj-label" style="color:#202124">${text}${extra ? ` <span style="color:#5f6368">${extra}</span>` : ""} <button type="button" class="edit-entries no-print" data-gid="${gid}" style="margin-left:8px;font-size:11px;padding:1px 8px;cursor:pointer;">Edit</button></td></tr>`;
+  return `<tr class="entry-row" data-gid="${gid}"><td class="rownum"></td><td colspan="13" class="proj-label" style="color:#202124">${text}${extra ? ` <span style="color:#5f6368">${extra}</span>` : ""} <button type="button" class="save-cells no-print" data-gid="${gid}" style="display:none;margin-left:8px;font-size:12px;padding:2px 10px;cursor:pointer;font-weight:700;">Save changes</button><span class="cells-msg no-print" style="margin-left:6px;color:#c5221f"></span></td></tr>`;
 }
 function entryFormHtml(gid){
   const rec = recFor(gid, ENTRY_CTX[gid] && ENTRY_CTX[gid].fallback);
@@ -2290,26 +2319,39 @@ function enableArchiveCells(root){
     if(k) updateL5(tr);
   });
 }
-document.addEventListener("change", async e => {
+document.addEventListener("change", e => {
   const el = e.target;
   if(!el.classList || !(el.classList.contains("arch-k5") || el.classList.contains("arch-j5"))) return;
-  const tr = el.closest("tr[data-gid]"), c = window.cloud;
+  const tr = el.closest("tr[data-gid]");
+  if(!tr) return;
+  updateL5(tr);                                   // preview the Diff. colour right away; nothing is saved yet
+  const note = document.querySelector(`tr.entry-row[data-gid="${tr.dataset.gid}"]`);
+  if(!note) return;
+  const btn = note.querySelector(".save-cells"), msg = note.querySelector(".cells-msg");
+  if(btn) btn.style.display = "";
+  if(msg) msg.textContent = "Not saved yet";
+});
+document.addEventListener("click", async e => {
+  const btn = e.target.closest && e.target.closest(".save-cells");
+  if(!btn) return;
+  const gid = btn.dataset.gid, c = window.cloud;
+  const tr = Array.from(document.querySelectorAll(`tr[data-gid="${gid}"]`)).find(r => r.querySelector(".arch-k5"));
+  const msg = btn.parentElement.querySelector(".cells-msg");
   if(!tr || !c) return;
-  const gid = tr.dataset.gid;
+  const kEl = tr.querySelector(".arch-k5"), jEl = tr.querySelector(".arch-j5");
+  const kv = kEl.value.trim();
   const obj = Object.assign({}, EDITS[gid] || {});
-  if(el.classList.contains("arch-k5")){
-    const v = el.value.trim();
-    obj.k5Final = v === "" || isNaN(Number(v)) ? null : Number(v) + 0.5;
-  } else {
-    obj.j5Final = el.value || null;
-  }
+  obj.k5Final = obj.odds5min = (kv === "" || isNaN(Number(kv))) ? null : Number(kv) + 0.5;
+  obj.j5Final = obj.j5At6 = (jEl && jEl.value) || null;
+  if(msg){ msg.style.color = "#5f6368"; msg.textContent = "Saving…"; }
   const val = JSON.stringify(obj);
-  updateL5(tr);
-  EDITS[gid] = obj;          // update first, so two quick edits don't overwrite each other
   const r = await c.sb.from("user_data").upsert([{ user_id: c.user.id, key: `nba_edit_${gid}`, value: { v: val }, updated_at: new Date().toISOString() }], { onConflict: "user_id,key" });
-  if(r.error){ alert("Save failed: " + (r.error.message || r.error)); return; }
+  if(r.error){ if(msg){ msg.style.color = "#c5221f"; msg.textContent = "Save failed: " + (r.error.message || r.error); } return; }
+  EDITS[gid] = obj;
   try{ localStorage.setItem(`nba_edit_${gid}`, val); }catch(err){}
   redrawNote(gid);
+  const m2 = document.querySelector(`tr.entry-row[data-gid="${gid}"] .cells-msg`);
+  if(m2){ m2.style.color = "#0a7d3f"; m2.textContent = "Saved ✓"; }
 });
 async function loadDayList(){
   const c = window.cloud;
