@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NBA Site Check</title>
+<style>
+  :root{ --page-bg:#f4f5f7; --surface:#fff; --grid:#e3e7ee; --grid-strong:#d0d3d8; --header-bg:#1a5cff; --text:#202124; --sub:#5f6368;
+         --ok:#1e7e34; --okbg:#e6f4ea; --warn:#8a5a00; --warnbg:#fff4d6; --bad:#b3261e; --badbg:#fde7e7; --info:#3c4043; --infobg:#eef1f4;
+         --font-ui:"Segoe UI", Calibri, Arial, sans-serif; }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--page-bg);font-family:var(--font-ui);color:var(--text);}
+  .titlebar{background:var(--header-bg);color:#fff;padding:14px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+  .titlebar h1{font-size:16px;margin:0;font-weight:700;}
+  .titlebar a{color:#dbe6ff;text-decoration:none;font-size:13px;font-weight:600;margin-left:14px;}
+  .page{max-width:980px;margin:16px auto;padding:0 14px 40px;}
+  .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;}
+  button{font-size:13px;padding:8px 14px;border:1px solid #1a5cff;background:#fff;color:#1a5cff;border-radius:6px;cursor:pointer;font-weight:600;}
+  button.primary{background:#1a5cff;color:#fff;}
+  button:disabled{opacity:.5;cursor:default;}
+  #summary{font-size:15px;font-weight:700;}
+  .group{background:var(--surface);border:1px solid var(--grid-strong);border-radius:10px;margin-bottom:12px;overflow:hidden;}
+  .group h2{margin:0;padding:9px 14px;font-size:13px;text-transform:uppercase;letter-spacing:.4px;background:#eef1f4;color:#3c4043;}
+  .row{display:flex;gap:10px;padding:8px 14px;border-top:1px solid var(--grid);align-items:flex-start;}
+  .badge{flex:0 0 auto;min-width:48px;text-align:center;font-size:11px;font-weight:700;padding:2px 6px;border-radius:5px;margin-top:2px;}
+  .PASS{background:var(--okbg);color:var(--ok);} .WARN{background:var(--warnbg);color:var(--warn);}
+  .FAIL{background:var(--badbg);color:var(--bad);} .INFO{background:var(--infobg);color:var(--info);}
+  .t{font-size:14px;font-weight:600;} .d{font-size:12.5px;color:var(--sub);margin-top:2px;line-height:1.4;}
+  table.mini{border-collapse:collapse;font-size:12px;margin:6px 0 2px;}
+  table.mini th,table.mini td{border:1px solid var(--grid);padding:3px 7px;text-align:center;white-space:nowrap;}
+  table.mini th{background:#f4f6f8;}
+  .note{font-size:12px;color:var(--sub);margin:8px 2px;line-height:1.45;}
+  pre{background:#fff;border:1px solid var(--grid-strong);border-radius:8px;padding:10px;font-size:12px;white-space:pre-wrap;max-height:260px;overflow:auto;}
+</style>
+</head>
+<body>
+<div class="titlebar">
+  <h1>NBA Site Check</h1>
+  <div><a href="./">⌂ All sports</a><a href="./history.html?league=NBA">History →</a></div>
+</div>
+<div class="page">
+  <div class="bar">
+    <button class="primary" id="run">Run checks</button>
+    <button id="test">Run save &amp; security test</button>
+    <button id="copy" disabled>Copy report</button>
+    <span id="summary"></span>
+  </div>
+  <div class="note">Everything here only <b>reads</b> your data, except the "save &amp; security test" button, which writes one small test entry to your own account and deletes it right away.
+    It also tries to write to the shared games table, which should be refused. Nothing here shows or uses any secret key.</div>
+  <div id="out"></div>
+  <pre id="report" style="display:none"></pre>
+</div>
+<script src="cloud.js"></script>
+<script src="sites.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const ESPN = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard";
+const ABBR3 = { NY:"NYK", GS:"GSW", NO:"NOP", SA:"SAS", UTAH:"UTA", WSH:"WAS" };
+const a3 = a => (a && ABBR3[a]) || a;
+let REPORT = [];
+const esc = s => String(s).replace(/[&<>]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" }[c]));
+const ago = iso => { const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000); return m < 90 ? `${m} min ago` : `${(m / 60).toFixed(1)} h ago`; };
+
+let GROUP = null;
+function group(title){
+  GROUP = document.createElement("div"); GROUP.className = "group";
+  GROUP.innerHTML = `<h2>${esc(title)}</h2>`; $("out").appendChild(GROUP);
+  REPORT.push("", "== " + title + " ==");
+}
+function add(status, title, detail, html){
+  const r = document.createElement("div"); r.className = "row";
+  r.innerHTML = `<span class="badge ${status}">${status}</span><div><div class="t">${esc(title)}</div>${detail ? `<div class="d">${esc(detail)}</div>` : ""}${html || ""}</div>`;
+  GROUP.appendChild(r);
+  REPORT.push(`[${status}] ${title}${detail ? " — " + detail : ""}`);
+  COUNT[status] = (COUNT[status] || 0) + 1;
+}
+let COUNT = {};
+
+// same rule as the live sheet and the server job
+function ruleFrom(odds, awayAb, homeAb){
+  if(!odds) return null;
+  const m = String(odds.details || "").match(/^([A-Za-z]{2,4})\s+([+-]?\d+(?:\.\d+)?)/);
+  if(!m) return { err: "spread text not understood: " + odds.details };
+  const fav = a3(m[1].toUpperCase()), spread = Math.abs(parseFloat(m[2]));
+  if(!spread) return { fav, spread, pick: null };
+  if(fav !== homeAb && fav !== awayAb) return { err: "favorite " + fav + " is not one of the two teams" };
+  return { fav, spread, side: fav === homeAb ? "home" : "road", pick: fav === homeAb ? "Under" : "Over" };
+}
+
+async function run(){
+  $("out").innerHTML = ""; REPORT = []; COUNT = {}; $("summary").textContent = "Running…"; $("copy").disabled = true;
+  const sb = window.cloud && window.cloud.sb;
+
+  // 1. sign-in
+  group("1. Sign-in");
+  if(!window.cloud){ add("FAIL", "cloud.js did not load", "Check that cloud.js is in the top of the sports repo."); return finish(); }
+  await window.cloud.whenApproved();
+  add("PASS", "Signed in and approved", "Your login works and the approval check passed.");
+
+  // 2. deployed files
+  group("2. Files on your site");
+  const files = [
+    ["nba/nba-live.html", ["rulePick", "j5Pre"], "live sheet with rule + J5 auto-fill"],
+    ["history.html", ["j5Pre", "Rule pick"], "History with rule columns and pre-game J5"],
+    ["nba/nba-live-archive.html", ["save-cells"], "Day archive with the Save changes button"],
+    ["nba/nba-parlays.html", ["minWin"], "Parlay page with the coin-flip filter"],
+    ["cloud.js", ["snap_"], "login/sync file"]
+  ];
+  for(const [path, marks, what] of files){
+    try{
+      const r = await fetch(path + "?x=" + Date.now(), { cache: "no-store" });
+      if(!r.ok){ add("FAIL", path + " is missing", "HTTP " + r.status + " — upload it to your repo."); continue; }
+      const t = await r.text();
+      const miss = marks.filter(m => !t.includes(m));
+      miss.length ? add("FAIL", path + " is an old version", `Missing ${miss.join(", ")}. Upload the newest ${what}.`)
+                  : add("PASS", path + " is up to date", what);
+    }catch(e){ add("WARN", path + " could not be checked", String(e.message || e)); }
+  }
+
+  // 3. ESPN
+  group("3. ESPN data (today's slate, read in your browser)");
+  let events = [], espnRows = [];
+  try{
+    const r = await fetch(ESPN, { cache: "no-store" });
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json(); events = j.events || [];
+    add("PASS", "ESPN scoreboard reachable", `${events.length} game(s) on ESPN's current slate.`);
+  }catch(e){ add("FAIL", "ESPN scoreboard not reachable", String(e.message || e)); }
+  let pre = 0, withOdds = 0, withRule = 0, bad = [];
+  events.forEach(ev => {
+    const c = ev.competitions && ev.competitions[0]; if(!c) return;
+    const awayC = c.competitors.find(x => x.homeAway === "away"), homeC = c.competitors.find(x => x.homeAway === "home");
+    const aw = a3(awayC.team.abbreviation), hm = a3(homeC.team.abbreviation);
+    const state = (c.status && c.status.type && c.status.type.state) || "pre";
+    const o = c.odds && c.odds[0];
+    const ru = ruleFrom(o, aw, hm);
+    const ml = o && o.moneyline;
+    const hML = ml && ml.home && ml.home.close && ml.home.close.odds, aML = ml && ml.away && ml.away.close && ml.away.close.odds;
+    if(state === "pre"){ pre++; if(o && typeof o.overUnder === "number") withOdds++; if(ru && ru.pick) withRule++; if(ru && ru.err) bad.push(aw + "@" + hm + ": " + ru.err); }
+    espnRows.push({ id: String(ev.id), aw, hm, state, ou: o && o.overUnder, det: o && o.details, ru, hML, aML });
+  });
+  if(events.length){
+    if(pre === 0) add("INFO", "No games waiting to start", "All of today's games have started or finished, so ESPN has dropped their odds. This is normal.");
+    else{
+      withOdds === pre ? add("PASS", "Over/under found for every upcoming game", `${withOdds} of ${pre}.`)
+                       : add("WARN", "Some upcoming games have no over/under yet", `${withOdds} of ${pre}. ESPN often posts lines later in the day.`);
+      withRule === pre ? add("PASS", "Rule pick works for every upcoming game", `${withRule} of ${pre}: favorite at home → Under, on the road → Over.`)
+                       : add(bad.length ? "FAIL" : "WARN", "Rule pick missing for some upcoming games", bad.length ? bad.join("; ") : `${withRule} of ${pre} (a pick'em game with spread 0, or no line yet).`);
+    }
+    const rows = espnRows.map(r => `<tr><td>${r.aw} @ ${r.hm}</td><td>${r.state}</td><td>${r.ou ?? "–"}</td><td>${esc(r.det || "–")}</td><td>${r.ru && r.ru.pick ? r.ru.pick + " (" + r.ru.fav + " " + r.ru.side + ")" : "–"}</td><td>${r.hML ?? "–"} / ${r.aML ?? "–"}</td></tr>`).join("");
+    add("INFO", "What ESPN shows right now", "", `<table class="mini"><tr><th>Game</th><th>State</th><th>O/U</th><th>Spread text</th><th>Rule</th><th>ML home / away</th></tr>${rows}</table>`);
+  }
+
+  // 4. database
+  group("4. Shared games table (filled by the server job)");
+  let g1 = await sb.from("games").select("game_id,pre_favorite,pre_spread,rule_pick,pre_home_ml,pre_away_ml").eq("league", "NBA").limit(1);
+  if(g1.error) add("FAIL", "New columns are missing from the games table", g1.error.message + " — run the SQL file (1-run-this-in-supabase.sql) in Supabase.");
+  else add("PASS", "Games table has the spread / rule / moneyline columns");
+
+  const last = await sb.from("games").select("updated_at").eq("league", "NBA").order("updated_at", { ascending: false }).limit(1);
+  if(last.error || !last.data || !last.data.length) add("FAIL", "No NBA rows in the games table", "The server job may not be running.");
+  else{
+    const mins = (Date.now() - new Date(last.data[0].updated_at).getTime()) / 60000;
+    const live = espnRows.some(r => r.state !== "post");
+    const status = mins < 90 ? "PASS" : (mins < 360 || !live ? "WARN" : "FAIL");
+    add(status, "Server job last saved NBA data " + ago(last.data[0].updated_at),
+      status === "PASS" ? "The job is keeping up." : "GitHub's free scheduler can run late. If this stays old on a game day, open the NBA repo → Actions and look for a red ✗.");
+  }
+
+  if(espnRows.length){
+    const ids = espnRows.map(r => r.id);
+    const g2 = await sb.from("games").select("game_id,state,pre_odds,pre_favorite,pre_spread,rule_pick,pre_home_ml,pre_away_ml,final_away,final_home").eq("league", "NBA").in("game_id", ids);
+    if(!g2.error){
+      const byId = {}; (g2.data || []).forEach(x => byId[x.game_id] = x);
+      const missing = espnRows.filter(r => !byId[r.id]);
+      missing.length ? add("WARN", `${missing.length} of today's ESPN games are not in the database yet`, missing.map(r => r.aw + "@" + r.hm).join(", ") + ". The next job run should add them.")
+                     : add("PASS", "Every game on ESPN's slate is in the database", `${espnRows.length} of ${espnRows.length}.`);
+      const mism = [];
+      let cmp = 0;
+      espnRows.forEach(r => {
+        const d = byId[r.id]; if(!d || r.state !== "pre" || !(r.ru && r.ru.pick)) return;
+        cmp++;
+        if(d.rule_pick !== r.ru.pick) mism.push(`${r.aw}@${r.hm}: ESPN→${r.ru.pick}, saved→${d.rule_pick || "none"}`);
+      });
+      if(cmp) mism.length ? add("WARN", "Saved rule pick differs from ESPN's current line for " + mism.length + " game(s)", mism.join("; ") + ". Usually the line moved since the last job run; it should catch up on the next run.")
+                          : add("PASS", "Saved rule picks match ESPN's current lines", `${cmp} game(s) compared.`);
+      const noMl = (g2.data || []).filter(d => d.state === "pre" && d.pre_odds != null && (d.pre_home_ml == null || d.pre_away_ml == null));
+      if((g2.data || []).some(d => d.state === "pre" && d.pre_odds != null))
+        noMl.length ? add("WARN", "Moneylines missing for " + noMl.length + " saved game(s)", "") : add("PASS", "Moneylines saved for upcoming games");
+    }
+  }
+
+  // finished games and rule scorecard
+  const fin = await sb.from("games").select("game_id,game_date,away,home,state,pre_odds,final_away,final_home,pre_favorite,rule_pick").eq("league", "NBA").eq("state", "post").order("start_time", { ascending: false }).limit(1000);
+  if(!fin.error){
+    const rows = fin.data || [];
+    const noFinal = rows.filter(r => r.final_away == null || r.final_home == null);
+    add(noFinal.length ? "WARN" : "PASS", `${rows.length} finished NBA game(s) saved`, noFinal.length ? `${noFinal.length} of them have no final score yet.` : "All have final scores.");
+    const withRule = rows.filter(r => r.rule_pick && r.pre_odds != null && r.final_away != null);
+    if(!withRule.length) add("INFO", "No finished game has a saved rule pick yet", "That is expected until a game that was saved before tip-off finishes.");
+    else{
+      let hit = 0, n = 0, push = 0;
+      withRule.forEach(r => { const t = r.final_away + r.final_home; if(t === Number(r.pre_odds)){ push++; return; } n++; if((t > r.pre_odds ? "Over" : "Under") === r.rule_pick) hit++; });
+      add("INFO", `Rule scorecard: ${hit} right out of ${n}` + (n ? ` (${Math.round(hit / n * 100)}%)` : ""), `Against the pre-game over/under. Break-even at normal odds is about 52.4%. ${push ? push + " push(es) not counted. " : ""}Too few games to draw conclusions yet.`);
+    }
+  }
+
+  // 5. your saved entries
+  group("5. Your saved entries (private to your account)");
+  const ud = await sb.from("user_data").select("key,updated_at").like("key", "nba_%").limit(5000);
+  if(ud.error) add("FAIL", "Could not read your saved entries", ud.error.message);
+  else{
+    const keys = ud.data || [];
+    const c = p => keys.filter(k => k.key.startsWith(p)).length;
+    add("PASS", `${keys.length} NBA entries saved in the cloud`, `K5 picks: ${c("nba_K5_")}, J5 picks: ${c("nba_J5_")}, corrections: ${c("nba_edit_")}, saved 6:00 scores: ${c("nba_snap_q6_")}, day snapshots: ${c("nba_snap_20")}.`);
+    const recent = keys.slice().sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0];
+    if(recent) add("INFO", "Most recent save from any browser: " + ago(recent.updated_at), recent.key);
+  }
+  const hist = await sb.from("user_data").select("value").eq("key", "nba_history_v1").limit(1);
+  if(hist.error) add("FAIL", "Could not read your history record", hist.error.message);
+  else if(!hist.data || !hist.data.length) add("WARN", "No history record in the cloud yet", "It is created when the live sheet has been open on a game.");
+  else{
+    let h = {}; try{ h = JSON.parse(hist.data[0].value.v); }catch(e){}
+    const recs = Object.values(h);
+    const fin2 = recs.filter(r => r.finalCaptured).length, rl = recs.filter(r => r.rulePick).length, jp = recs.filter(r => r.j5Pre).length, jpAuto = recs.filter(r => r.j5PreAuto).length;
+    add("PASS", `History record has ${recs.length} game(s)`, `${fin2} with final entries captured, ${rl} with a rule pick, ${jp} with a pre-game J5 (${jpAuto} filled by the rule).`);
+    if(rl === 0) add("INFO", "No rule picks in your history yet", "They are saved when the live sheet is open (or the job runs) before a game starts.");
+  }
+
+  finish();
+}
+
+function finish(){
+  const p = COUNT.PASS || 0, w = COUNT.WARN || 0, f = COUNT.FAIL || 0;
+  $("summary").innerHTML = `<span style="color:var(--ok)">${p} passed</span> · <span style="color:var(--warn)">${w} to watch</span> · <span style="color:var(--bad)">${f} failed</span>`;
+  $("copy").disabled = false;
+  REPORT.unshift("NBA site check — " + new Date().toLocaleString(), `${p} passed, ${w} to watch, ${f} failed`);
+}
+
+async function secTest(){
+  const sb = window.cloud.sb; await window.cloud.whenApproved();
+  const uid = window.cloud.user && window.cloud.user.id;
+  group("Save & security test");
+  const key = "check_test_" + Date.now();
+  try{
+    const u = await sb.from("user_data").upsert({ user_id: uid, key, value: { v: "ok" }, updated_at: new Date().toISOString() }, { onConflict: "user_id,key" });
+    if(u.error) throw u.error;
+    const g = await sb.from("user_data").select("value").eq("key", key).limit(1);
+    if(g.error || !g.data || !g.data.length || !g.data[0].value || g.data[0].value.v !== "ok") throw (g.error || new Error("read-back failed"));
+    await sb.from("user_data").delete().eq("user_id", uid).eq("key", key);
+    add("PASS", "Your account can save and read back an entry", "This is the path that syncs K5/J5 between browsers.");
+  }catch(e){ add("FAIL", "Saving to your account failed", String(e.message || e)); }
+  try{
+    const tid = "zz-check-" + Date.now();
+    const r = await sb.from("games").insert({ league: "ZZ", game_id: tid, game_date: "2000-01-01", away: "ZZZ", home: "ZZY", state: "pre" });
+    if(r.error) add("PASS", "The shared games table refuses writes from the browser", "Only the server job can write it. " + (r.error.message || ""));
+    else{
+      await sb.from("games").delete().eq("league", "ZZ").eq("game_id", tid);
+      add("FAIL", "SECURITY: the browser was able to write to the shared games table", "Anyone signed in could change shared scores. Tell Claude right away so the Supabase rules can be fixed.");
+    }
+  }catch(e){ add("PASS", "The shared games table refuses writes from the browser", String(e.message || e)); }
+  finish();
+}
+
+$("run").onclick = async () => { $("run").disabled = true; try{ await run(); }catch(e){ add("FAIL", "The check itself crashed", String(e && e.message || e)); finish(); } $("run").disabled = false; };
+$("test").onclick = async () => { $("test").disabled = true; try{ await secTest(); }catch(e){ add("FAIL", "The test crashed", String(e && e.message || e)); finish(); } $("test").disabled = false; };
+$("copy").onclick = () => {
+  const txt = REPORT.join("\n"); $("report").style.display = "block"; $("report").textContent = txt;
+  try{ navigator.clipboard.writeText(txt); $("copy").textContent = "Copied ✓"; setTimeout(() => $("copy").textContent = "Copy report", 1500); }catch(e){}
+};
+window.cloud && window.cloud.whenApproved().then(() => $("run").click());
+</script>
+</body>
+</html>
