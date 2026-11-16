@@ -488,7 +488,7 @@ function recFor(gid, fallback){
 function noteRowHtml(gid, rec, tot, extra){
   const has = EDIT_FIELDS.some(f => rec[f] != null && rec[f] !== "");
   const text = has ? entriesNoteHtml(rec, tot) : "No K5 / J5 / L4 saved for this game.";
-  return `<tr class="entry-row" data-gid="${gid}"><td class="rownum"></td><td colspan="13" class="proj-label" style="color:#202124">${text}${extra ? ` <span style="color:#5f6368">${extra}</span>` : ""} <button type="button" class="edit-entries no-print" data-gid="${gid}" style="margin-left:8px;font-size:11px;padding:1px 8px;cursor:pointer;">Edit</button></td></tr>`;
+  return `<tr class="entry-row" data-gid="${gid}"><td class="rownum"></td><td colspan="13" class="proj-label" style="color:#202124">${text}${extra ? ` <span style="color:#5f6368">${extra}</span>` : ""} <button type="button" class="save-cells no-print" data-gid="${gid}" style="display:none;margin-left:8px;font-size:12px;padding:2px 10px;cursor:pointer;font-weight:700;">Save changes</button><span class="cells-msg no-print" style="margin-left:6px;color:#c5221f"></span></td></tr>`;
 }
 function entryFormHtml(gid){
   const rec = recFor(gid, ENTRY_CTX[gid] && ENTRY_CTX[gid].fallback);
@@ -567,26 +567,39 @@ function enableArchiveCells(root){
     if(k) updateL5(tr);
   });
 }
-document.addEventListener("change", async e => {
+document.addEventListener("change", e => {
   const el = e.target;
   if(!el.classList || !(el.classList.contains("arch-k5") || el.classList.contains("arch-j5"))) return;
-  const tr = el.closest("tr[data-gid]"), c = window.cloud;
+  const tr = el.closest("tr[data-gid]");
+  if(!tr) return;
+  updateL5(tr);                                   // preview the Diff. colour right away; nothing is saved yet
+  const note = document.querySelector(`tr.entry-row[data-gid="${tr.dataset.gid}"]`);
+  if(!note) return;
+  const btn = note.querySelector(".save-cells"), msg = note.querySelector(".cells-msg");
+  if(btn) btn.style.display = "";
+  if(msg) msg.textContent = "Not saved yet";
+});
+document.addEventListener("click", async e => {
+  const btn = e.target.closest && e.target.closest(".save-cells");
+  if(!btn) return;
+  const gid = btn.dataset.gid, c = window.cloud;
+  const tr = Array.from(document.querySelectorAll(`tr[data-gid="${gid}"]`)).find(r => r.querySelector(".arch-k5"));
+  const msg = btn.parentElement.querySelector(".cells-msg");
   if(!tr || !c) return;
-  const gid = tr.dataset.gid;
+  const kEl = tr.querySelector(".arch-k5"), jEl = tr.querySelector(".arch-j5");
+  const kv = kEl.value.trim();
   const obj = Object.assign({}, EDITS[gid] || {});
-  if(el.classList.contains("arch-k5")){
-    const v = el.value.trim();
-    obj.k5Final = v === "" || isNaN(Number(v)) ? null : Number(v) + 0.5;
-  } else {
-    obj.j5Final = el.value || null;
-  }
+  obj.k5Final = obj.odds5min = (kv === "" || isNaN(Number(kv))) ? null : Number(kv) + 0.5;
+  obj.j5Final = obj.j5At6 = (jEl && jEl.value) || null;
+  if(msg){ msg.style.color = "#5f6368"; msg.textContent = "Saving…"; }
   const val = JSON.stringify(obj);
-  updateL5(tr);
-  EDITS[gid] = obj;          // update first, so two quick edits don't overwrite each other
   const r = await c.sb.from("user_data").upsert([{ user_id: c.user.id, key: `nba_edit_${gid}`, value: { v: val }, updated_at: new Date().toISOString() }], { onConflict: "user_id,key" });
-  if(r.error){ alert("Save failed: " + (r.error.message || r.error)); return; }
+  if(r.error){ if(msg){ msg.style.color = "#c5221f"; msg.textContent = "Save failed: " + (r.error.message || r.error); } return; }
+  EDITS[gid] = obj;
   try{ localStorage.setItem(`nba_edit_${gid}`, val); }catch(err){}
   redrawNote(gid);
+  const m2 = document.querySelector(`tr.entry-row[data-gid="${gid}"] .cells-msg`);
+  if(m2){ m2.style.color = "#0a7d3f"; m2.textContent = "Saved ✓"; }
 });
 async function loadDayList(){
   const c = window.cloud;
