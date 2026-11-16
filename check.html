@@ -208,14 +208,14 @@ async function run(){
 
   // 5. your saved entries
   group("5. Your saved entries (private to your account)");
-  const ud = await sb.from("user_data").select("key,updated_at").like("key", "nba_%").limit(5000);
-  if(ud.error) add("FAIL", "Could not read your saved entries", ud.error.message);
+  const cnt = async p => { const r = await sb.from("user_data").select("key", { count: "exact", head: true }).like("key", p + "%"); return r.error ? null : (r.count ?? 0); };
+  const tot = await cnt("nba_");
+  if(tot === null) add("FAIL", "Could not read your saved entries", "The database refused the request.");
   else{
-    const keys = ud.data || [];
-    const c = p => keys.filter(k => k.key.startsWith(p)).length;
-    add("PASS", `${keys.length} NBA entries saved in the cloud`, `K5 picks: ${c("nba_K5_")}, J5 picks: ${c("nba_J5_")}, corrections: ${c("nba_edit_")}, saved 6:00 scores: ${c("nba_snap_q6_")}, day snapshots: ${c("nba_snap_20")}.`);
-    const recent = keys.slice().sort((a, b) => b.updated_at.localeCompare(a.updated_at))[0];
-    if(recent) add("INFO", "Most recent save from any browser: " + ago(recent.updated_at), recent.key);
+    const [k5, j5, ed, q6, snap] = await Promise.all([cnt("nba_K5_"), cnt("nba_J5_"), cnt("nba_edit_"), cnt("nba_snap_q6_"), cnt("nba_snap_20")]);
+    add("PASS", `${tot} NBA entries saved in the cloud`, `K5 picks: ${k5}, J5 picks: ${j5}, corrections: ${ed}, saved 6:00 scores: ${q6}, day snapshots: ${snap}.`);
+    const rc = await sb.from("user_data").select("key,updated_at").like("key", "nba_%").order("updated_at", { ascending: false }).limit(1);
+    if(rc.data && rc.data[0]) add("INFO", "Most recent save from any browser: " + ago(rc.data[0].updated_at), rc.data[0].key);
   }
   const hist = await sb.from("user_data").select("value").eq("key", "nba_history_v1").limit(1);
   if(hist.error) add("FAIL", "Could not read your history record", hist.error.message);
@@ -235,6 +235,7 @@ function finish(){
   const p = COUNT.PASS || 0, w = COUNT.WARN || 0, f = COUNT.FAIL || 0;
   $("summary").innerHTML = `<span style="color:var(--ok)">${p} passed</span> · <span style="color:var(--warn)">${w} to watch</span> · <span style="color:var(--bad)">${f} failed</span>`;
   $("copy").disabled = false;
+  REPORT = REPORT.filter(l => !/^NBA site check — /.test(l) && !/^\d+ passed, \d+ to watch, \d+ failed$/.test(l));
   REPORT.unshift("NBA site check — " + new Date().toLocaleString(), `${p} passed, ${w} to watch, ${f} failed`);
 }
 
