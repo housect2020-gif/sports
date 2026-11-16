@@ -251,7 +251,8 @@
     gate.style.display = 'flex';
     var h = '<div class="card">';
     if (state === 'loading') {
-      h += '<h2>Loading…</h2>';
+      h += '<h2>Loading…</h2><p id="cgSlow" style="display:none">This is taking longer than usual. <a href="#" onclick="location.reload();return false">Reload</a> — if it keeps happening, close other tabs of this site and try again.</p>';
+      setTimeout(function () { var e = document.getElementById('cgSlow'); if (e && state === 'loading') e.style.display = 'block'; }, 8000);
     } else if (state === 'error') {
       h += '<h2>Couldn\'t reach the login service</h2><p>Check your connection and reload the page.</p>';
     } else if (state === 'out') {
@@ -369,8 +370,10 @@
   } else {
     sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     sb.auth.onAuthStateChange(function (evt, session) {
-      if (evt === 'INITIAL_SESSION' || evt === 'SIGNED_IN') handle(session);
-      else if (evt === 'SIGNED_OUT') handle(null);
+      // Run later (not inside the callback): database calls made while the login library is still
+      // finishing its own work can freeze, which leaves the page stuck on "Loading…".
+      if (evt === 'INITIAL_SESSION' || evt === 'SIGNED_IN') setTimeout(function () { handle(session); }, 0);
+      else if (evt === 'SIGNED_OUT') setTimeout(function () { handle(null); }, 0);
     });
   }
 
