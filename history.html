@@ -63,7 +63,7 @@
       <thead><tr>
         <th class="l">Date</th><th class="l">Game</th><th>Final</th><th>Total</th>
         <th>Pre-game O/U</th><th>vs pre-game</th>
-        <th>Favorite (spread)</th><th>Rule pick</th><th>My odds @ Q4 6:00</th><th>vs my odds</th><th>My pick (PPM)</th><th>My pick (Cons.)</th><th>My K5 (final)</th><th>My J5 (pre-game | 6:00 | final)</th><th>L4 (6:00 | final)</th><th>My proj.</th>
+        <th>Favorite (spread)</th><th>Rule pick</th><th>Rule @ lock</th><th>My odds @ Q4 6:00</th><th>vs my odds</th><th>My pick (PPM)</th><th>My pick (Cons.)</th><th>My K5 (final)</th><th>My J5 (pre-game | 6:00 | final)</th><th>L4 (6:00 | final)</th><th>My proj.</th>
       </tr></thead>
       <tbody id="body"><tr><td colspan="16" style="color:#80868b">Loading…</td></tr></tbody>
     </table>
@@ -93,7 +93,17 @@ function myHistory(){
   let base = {};
   try{ base = JSON.parse(localStorage.getItem("nba_history_v1") || "{}"); }catch(e){}
   const out = {};
-  Object.keys(base).forEach(g => out[g] = base[g]);
+  const ok = (v, lo, hi) => typeof v === "number" && isFinite(v) && v >= lo && v <= hi;
+  Object.keys(base).forEach(g => {
+    const r = Object.assign({}, base[g]);
+    // A projection or L4 like 723 or 484 comes from a wrong minutes-left setting at the 6:00 mark: hide it and the picks taken then.
+    if((r.l4At6 != null && !ok(r.l4At6, 100, 400)) || (r.projTotal5 != null && !ok(r.projTotal5, 100, 400)) ||
+       (r.projAway5 != null && !ok(r.projAway5, 40, 220)) || (r.projHome5 != null && !ok(r.projHome5, 40, 220))){
+      ["l4At6","projAway5","projHome5","projTotal5","pick5Ppm","pick5Cons"].forEach(k => { r[k] = null; });
+    }
+    if(r.l4Final != null && !ok(r.l4Final, 100, 400)) r.l4Final = null;
+    out[g] = r;
+  });
   Object.keys(EDITS).forEach(g => { out[g] = Object.assign({}, out[g] || {}, EDITS[g]); });   // your manual corrections win
   return out;
 }
@@ -107,7 +117,8 @@ async function load(){
   while(true){
     const q = cols => sb.from("games").select(cols).eq("league", league).eq("state", "post")
       .order("start_time", { ascending: false }).range(from, from + 999);
-    let r = await q("game_id,game_date,start_time,away,home,season_type,pre_odds,final_away,final_home,pre_favorite,pre_spread,rule_pick,pre_home_ml,pre_away_ml");
+    let r = await q("game_id,game_date,start_time,away,home,season_type,pre_odds,final_away,final_home,pre_favorite,pre_spread,rule_pick,pre_home_ml,pre_away_ml,lock_pick,lock_total,lock_spread,lock_favorite,lock_at,lock_late");
+    if(r.error) r = await q("game_id,game_date,start_time,away,home,season_type,pre_odds,final_away,final_home,pre_favorite,pre_spread,rule_pick,pre_home_ml,pre_away_ml");   // lock columns not added yet
     if(r.error) r = await q("game_id,game_date,start_time,away,home,season_type,pre_odds,final_away,final_home");   // spread columns not added yet
     if(r.error){ $("body").innerHTML = `<tr><td colspan="16">${r.error.message}</td></tr>`; return; }
     all = all.concat(r.data || []);
@@ -137,7 +148,11 @@ function render(){
   }).map(g => {
     const m = mine["g" + g.game_id] || {};
     const total = g.final_away + g.final_home;
-    return { ...g, total, ruleHit: (g.rule_pick && resultOf(total, g.pre_odds) && resultOf(total, g.pre_odds) !== 'Push') ? (g.rule_pick === resultOf(total, g.pre_odds) ? 'Y' : 'N') : null,
+    const lockTotal = g.lock_total == null ? null : Number(g.lock_total);
+    const vsLock = lockTotal != null ? resultOf(total, lockTotal) : "";
+    const lockMins = (g.lock_at && g.start_time) ? Math.round((new Date(g.start_time).getTime() - new Date(g.lock_at).getTime()) / 60000) : null;
+    return { ...g, lockTotal, vsLock, lockMins, lockLate: !!g.lock_late,
+             lockHit: (g.lock_pick && vsLock && vsLock !== "Push") ? (g.lock_pick === vsLock ? "Y" : "N") : null, total, ruleHit: (g.rule_pick && resultOf(total, g.pre_odds) && resultOf(total, g.pre_odds) !== 'Push') ? (g.rule_pick === resultOf(total, g.pre_odds) ? 'Y' : 'N') : null,
              favSide: g.pre_favorite ? (g.pre_favorite === g.home || a3(g.pre_favorite) === a3(g.home) ? 'home' : 'road') : null, vsPre: resultOf(total, g.pre_odds), my5: m.odds5min, vs5: resultOf(total, m.odds5min),
              pPpm: m.pick5Ppm, pCons: m.pick5Cons, proj: m.projTotal5, j5p: m.j5Pre, j5pAuto: m.j5PreAuto, j5: m.j5At6, l4: m.l4At6, k5f: m.k5Final, j5f: m.j5Final, l4f: m.l4Final,
              vsK5f: resultOf(total, m.k5Final != null ? m.k5Final : m.odds5min),
@@ -153,6 +168,17 @@ function render(){
     if(!d.length) return "–";
     const hit = d.filter(r => r.ruleHit === "Y").length;
     return `${hit} / ${d.length} <span style="font-size:14px;color:#5f6368">(${Math.round(hit / d.length * 100)}%)</span>`;
+  };
+  // Scored against the locked total (saved about an hour before tip-off). Late locks are left out.
+  const lockHits = rows => {
+    const d = rows.filter(r => r.lockHit && !r.lockLate);
+    if(!d.length) return "–";
+    const hit = d.filter(r => r.lockHit === "Y").length;
+    return `${hit} / ${d.length} <span style="font-size:14px;color:#5f6368">(${Math.round(hit / d.length * 100)}%)</span>`;
+  };
+  const lockSub = rows => {
+    const late = rows.filter(r => r.lockHit && r.lockLate).length;
+    return "vs the locked total" + (late ? ` · ${late} late lock${late > 1 ? "s" : ""} left out` : "");
   };
   const pickHits = key => {
     const d = VIEW.filter(r => r[key] && r.my5 != null && r.vs5 && r.vs5 !== "Push");
@@ -177,6 +203,9 @@ function render(){
     ["Rule right (fav home→Under, road→Over)", ruleHits(VIEW), "vs the pre-game line"],
     ["Rule: home favorite → Under", ruleHits(VIEW.filter(r => r.favSide === "home")), "home favorite games"],
     ["Rule: road favorite → Over", ruleHits(VIEW.filter(r => r.favSide === "road")), "road favorite games"],
+    ["Rule @ lock right (all)", lockHits(VIEW), lockSub(VIEW)],
+    ["Rule @ lock: home favorite → Under", lockHits(VIEW.filter(r => r.favSide === "home")), "home favorite games"],
+    ["Rule @ lock: road favorite → Over", lockHits(VIEW.filter(r => r.favSide === "road")), "road favorite games"],
     ["My picks right (PPM)", pickHits("pPpm"), ppmNote.short],
     ["My picks right (Cons.)", pickHits("pCons"), "at the 6:00 mark"],
     ["My J5 right (pre-game)", pickHits("j5p"), "J5 before tip-off"],
@@ -193,6 +222,7 @@ function render(){
     <td>${r.final_away}–${r.final_home}</td><td><b>${r.total}</b></td>
     <td>${f1(r.pre_odds)}</td><td>${resCell(r.vsPre)}</td>
     <td>${r.pre_favorite ? a3(r.pre_favorite) + (r.pre_spread != null ? ' −' + r.pre_spread : '') + ' <span style="color:#80868b">(' + (r.favSide || '') + ')</span>' : '–'}</td><td>${pickCell(r.rule_pick, r.vsPre)}</td>
+    <td>${r.lock_at ? pickCell(r.lock_pick, r.vsLock) + ' <span style="color:#80868b">@ ' + f1(r.lockTotal) + '</span>' + (r.lockLate ? ' <span class="badge" title="No saved line in the last hour before tip-off, so this is the last line before the game. Left out of the scorecard.">LATE</span>' : (r.lockMins != null ? ' <span style="color:#80868b">(' + Math.max(r.lockMins, 0) + ' min)</span>' : '')) : '–'}</td>
     <td>${f1(r.my5)}</td><td>${resCell(r.vs5)}</td>
     <td>${pickCell(r.pPpm, r.vs5)}</td><td>${pickCell(r.pCons, r.vs5)}</td><td>${f1(r.k5f)}</td><td>${pickCell(r.j5p, r.vs5)}${r.j5pAuto ? ' <span title="filled in by the rule" style="color:#80868b">(rule)</span>' : ''} | ${pickCell(r.j5, r.vs5)} | ${pickCell(r.j5f, r.vsK5f)}</td><td>${f1(r.l4)}${r.l4pick ? " " + pickCell(r.l4pick, r.vs5) : ""} | ${f1(r.l4f)}${r.l4fpick ? " " + pickCell(r.l4fpick, r.vsK5f) : ""}</td><td>${f1(r.proj)}</td>
   </tr>`).join("") || '<tr><td colspan="16" style="color:#80868b">No finished games match yet. The server job saves them as games end.</td></tr>';
@@ -203,11 +233,11 @@ function render(){
 
 function exportCsv(){
   const q = v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
-  const head = ["Date","Away","Home","AwayScore","HomeScore","Total","Type","PreGameOU","VsPreGame","Favorite","Spread","FavoriteSide","RulePick","MyOddsAtQ4_6min","VsMyOdds","MyPickPPM","MyPickConsensus","MyK5Final","MyJ5Pre","MyJ5At6","MyJ5Final","L4At6","L4Final","MyProjTotal"];
+  const head = ["Date","Away","Home","AwayScore","HomeScore","Total","Type","PreGameOU","VsPreGame","Favorite","Spread","FavoriteSide","RulePick","LockPick","LockTotal","LockSpread","LockMinsBefore","LockLate","VsLock","MyOddsAtQ4_6min","VsMyOdds","MyPickPPM","MyPickConsensus","MyK5Final","MyJ5Pre","MyJ5At6","MyJ5Final","L4At6","L4Final","MyProjTotal"];
   const lines = [head.join(",")].concat(VIEW.map(r => [
     r.game_date, a3(r.away), a3(r.home), r.final_away, r.final_home, r.total,
     r.season_type === 1 ? "PRE" : (r.season_type === 3 ? "PLAYOFFS" : "REG"),
-    r.pre_odds, r.vsPre, r.pre_favorite ? a3(r.pre_favorite) : '', r.pre_spread, r.favSide, r.rule_pick, r.my5, r.vs5, r.pPpm, r.pCons, r.k5f, r.j5p, r.j5, r.j5f, r.l4, r.l4f, r.proj
+    r.pre_odds, r.vsPre, r.pre_favorite ? a3(r.pre_favorite) : '', r.pre_spread, r.favSide, r.rule_pick, r.lock_pick, r.lockTotal, r.lock_spread, r.lockMins, r.lock_at ? (r.lockLate ? 'late' : 'on time') : '', r.vsLock, r.my5, r.vs5, r.pPpm, r.pCons, r.k5f, r.j5p, r.j5, r.j5f, r.l4, r.l4f, r.proj
   ].map(q).join(",")));
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));

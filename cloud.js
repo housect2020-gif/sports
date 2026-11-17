@@ -207,6 +207,21 @@
     return out;
   }
 
+  // ---- the "lock" saved by the server job about an hour before tip-off (NBA) ----
+  async function fetchLocks(league, ids) {
+    if (state !== 'approved' || !ids || !ids.length) return {};
+    var res = await sb.from('games').select('game_id,lock_pick,lock_total,lock_spread,lock_favorite,lock_at,lock_late,start_time')
+      .eq('league', league).in('game_id', ids.map(String)).not('lock_at', 'is', null);
+    var out = {};
+    if (res.error || !res.data) return out;
+    res.data.forEach(function (r) {
+      out[r.game_id] = { pick: r.lock_pick, total: r.lock_total == null ? null : Number(r.lock_total),
+        spread: r.lock_spread == null ? null : Number(r.lock_spread), favorite: r.lock_favorite,
+        at: r.lock_at, late: !!r.lock_late, start: r.start_time };
+    });
+    return out;
+  }
+
   // ---- UI: sign-in / waiting screen and the small account bar ----
   var css = '' +
     '#cloudGate{position:fixed;inset:0;z-index:99999;background:#f4f6f8;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:16px}' +
@@ -379,6 +394,7 @@
 
   window.cloud = {
     fetchPreOdds: fetchPreOdds,
+    fetchLocks: fetchLocks,
     whenApproved: function () { return state === 'approved' ? Promise.resolve() : new Promise(function (res) { approvedWaiters.push(res); }); },
     get sb() { return sb; },
     get state() { return state; },
