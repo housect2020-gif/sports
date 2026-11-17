@@ -94,7 +94,16 @@
     try { l = JSON.parse(localStr || '{}') || {}; } catch (e) {}
     var out = {};
     Object.keys(c).concat(Object.keys(l)).forEach(function (id) {
-      out[id] = Object.assign({}, c[id] || {}, l[id] || {});
+      var cc = c[id] || {}, ll = l[id] || {}, m = Object.assign({}, cc, ll);
+      // The lock (pick/total saved about an hour before tip-off) is never overwritten by a later one:
+      // an on-time lock beats a late one, and between two on-time locks the earlier one wins.
+      if (cc.lockAt && ll.lockAt) {
+        var cLate = !!cc.lockLate, lLate = !!ll.lockLate;
+        if ((!cLate && lLate) || (cLate === lLate && cc.lockAt < ll.lockAt)) {
+          ['lockPick', 'lockTotal', 'lockSpread', 'lockFav', 'lockAt', 'lockLate', 'lockSource'].forEach(function (k) { m[k] = cc[k]; });
+        }
+      }
+      out[id] = m;
     });
     return JSON.stringify(out);
   }
