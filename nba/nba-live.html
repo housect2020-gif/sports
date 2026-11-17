@@ -1425,14 +1425,24 @@ function applyGameData(gid, away, home, status, overUnder, seasonType, gameDateI
     tag.style.cssText = "font-weight:700;color:" + (shownRule.pick === "Over" ? "#0a7d3f" : "#c5221f");
     matchupEl.appendChild(tag);
   }
-  // Lock: the pick/total/spread saved by the server job in the last hour before tip-off (never changes once saved).
-  if(lock && lock.at){
-    updateHistory(gid, cur => cur.lockAt === lock.at ? null : { lockPick: lock.pick || null, lockTotal: lock.total, lockSpread: lock.spread,
-      lockFav: lock.favorite || null, lockAt: lock.at, lockLate: !!lock.late });
+  // Lock: the pick and total saved about an hour before tip-off. Two sources, and the first one saved wins:
+  //  - the server job (shared games table), and
+  //  - this sheet: the first time it sees the game inside the last 60 minutes before tip-off (saved in your own history).
+  const sl0 = (loadHistory()[gid] || {});
+  if(status.state === "pre" && !(lock && lock.at) && !sl0.lockAt && typeof overUnder === "number" && gameDateIso){
+    const minsToTip = (new Date(gameDateIso).getTime() - Date.now()) / 60000;
+    if(minsToTip <= 60 && minsToTip >= -30){
+      updateHistory(gid, cur => cur.lockAt ? null : {
+        lockPick: (rule && rule.pick) || null, lockTotal: overUnder, lockSpread: (rule && rule.spread != null) ? rule.spread : null,
+        lockFav: (rule && rule.fav) || null, lockAt: new Date().toISOString(), lockLate: false, lockSource: "sheet" });
+    }
   }
   const sl = (loadHistory()[gid] || {});
-  const shownLock = lock && lock.at ? { pick: lock.pick, total: lock.total, at: lock.at, late: lock.late }
-    : (sl.lockAt ? { pick: sl.lockPick, total: sl.lockTotal, at: sl.lockAt, late: sl.lockLate } : null);
+  const lockCands = [];
+  if(lock && lock.at) lockCands.push({ pick: lock.pick, total: lock.total, at: lock.at, late: !!lock.late, src: "job" });
+  if(sl.lockAt) lockCands.push({ pick: sl.lockPick, total: sl.lockTotal, at: sl.lockAt, late: !!sl.lockLate, src: sl.lockSource || "job" });
+  lockCands.sort((a, b) => ((a.late ? 1 : 0) - (b.late ? 1 : 0)) || (a.at < b.at ? -1 : 1));
+  const shownLock = lockCands[0] || null;
   if(shownLock && shownLock.total != null){
     const start = gameDateIso ? new Date(gameDateIso).getTime() : null;
     const mins = start ? Math.round((start - new Date(shownLock.at).getTime()) / 60000) : null;
@@ -1443,7 +1453,8 @@ function applyGameData(gid, away, home, status, overUnder, seasonType, gameDateI
       ? ` · Late lock (last line before tip${mins != null && mins > 0 ? ", " + mins + " min before" : ""}): ${what}`
       : ` · Locked ${mins != null ? Math.max(mins, 0) + " min before" : "before tip"}: ${what}`;
     lt.title = shownLock.late ? "No saved line landed in the last hour, so this is the last line before the game. Leave it out of the scorecard."
-      : "Pick and total saved by the server job in the last hour before tip-off. It does not change after that.";
+      : (shownLock.src === "sheet" ? "Saved by this sheet the first time it saw the game inside the last hour before tip-off. It does not change after that."
+         : "Pick and total saved by the server job in the last hour before tip-off. It does not change after that.");
     lt.style.cssText = "font-weight:600;color:" + (shownLock.late ? "#8a5a00" : "#3c4043");
     matchupEl.appendChild(lt);
   }
