@@ -148,11 +148,17 @@ function render(){
   }).map(g => {
     const m = mine["g" + g.game_id] || {};
     const total = g.final_away + g.final_home;
-    const lockTotal = g.lock_total == null ? null : Number(g.lock_total);
+    // Lock: the job's (shared table) and the sheet's own (your history). On-time beats late; otherwise the earlier one wins.
+    const lc = [];
+    if(g.lock_at) lc.push({ pick: g.lock_pick, total: g.lock_total == null ? null : Number(g.lock_total), spread: g.lock_spread, at: g.lock_at, late: !!g.lock_late, src: "job" });
+    if(m.lockAt) lc.push({ pick: m.lockPick, total: m.lockTotal == null ? null : Number(m.lockTotal), spread: m.lockSpread, at: m.lockAt, late: !!m.lockLate, src: m.lockSource || "job" });
+    lc.sort((a, b) => ((a.late ? 1 : 0) - (b.late ? 1 : 0)) || (a.at < b.at ? -1 : 1));
+    const lk = lc[0] || null;
+    const lockTotal = lk ? lk.total : null;
     const vsLock = lockTotal != null ? resultOf(total, lockTotal) : "";
-    const lockMins = (g.lock_at && g.start_time) ? Math.round((new Date(g.start_time).getTime() - new Date(g.lock_at).getTime()) / 60000) : null;
-    return { ...g, lockTotal, vsLock, lockMins, lockLate: !!g.lock_late,
-             lockHit: (g.lock_pick && vsLock && vsLock !== "Push") ? (g.lock_pick === vsLock ? "Y" : "N") : null, total, ruleHit: (g.rule_pick && resultOf(total, g.pre_odds) && resultOf(total, g.pre_odds) !== 'Push') ? (g.rule_pick === resultOf(total, g.pre_odds) ? 'Y' : 'N') : null,
+    const lockMins = (lk && g.start_time) ? Math.round((new Date(g.start_time).getTime() - new Date(lk.at).getTime()) / 60000) : null;
+    return { ...g, lock_at: lk ? lk.at : null, lock_pick: lk ? lk.pick : null, lock_spread: lk ? lk.spread : null, lockSrc: lk ? lk.src : null, lockTotal, vsLock, lockMins, lockLate: !!(lk && lk.late),
+             lockHit: (lk && lk.pick && vsLock && vsLock !== "Push") ? (lk.pick === vsLock ? "Y" : "N") : null, total, ruleHit: (g.rule_pick && resultOf(total, g.pre_odds) && resultOf(total, g.pre_odds) !== 'Push') ? (g.rule_pick === resultOf(total, g.pre_odds) ? 'Y' : 'N') : null,
              favSide: g.pre_favorite ? (g.pre_favorite === g.home || a3(g.pre_favorite) === a3(g.home) ? 'home' : 'road') : null, vsPre: resultOf(total, g.pre_odds), my5: m.odds5min, vs5: resultOf(total, m.odds5min),
              pPpm: m.pick5Ppm, pCons: m.pick5Cons, proj: m.projTotal5, j5p: m.j5Pre, j5pAuto: m.j5PreAuto, j5: m.j5At6, l4: m.l4At6, k5f: m.k5Final, j5f: m.j5Final, l4f: m.l4Final,
              vsK5f: resultOf(total, m.k5Final != null ? m.k5Final : m.odds5min),
@@ -222,7 +228,7 @@ function render(){
     <td>${r.final_away}–${r.final_home}</td><td><b>${r.total}</b></td>
     <td>${f1(r.pre_odds)}</td><td>${resCell(r.vsPre)}</td>
     <td>${r.pre_favorite ? a3(r.pre_favorite) + (r.pre_spread != null ? ' −' + r.pre_spread : '') + ' <span style="color:#80868b">(' + (r.favSide || '') + ')</span>' : '–'}</td><td>${pickCell(r.rule_pick, r.vsPre)}</td>
-    <td>${r.lock_at ? pickCell(r.lock_pick, r.vsLock) + ' <span style="color:#80868b">@ ' + f1(r.lockTotal) + '</span>' + (r.lockLate ? ' <span class="badge" title="No saved line in the last hour before tip-off, so this is the last line before the game. Left out of the scorecard.">LATE</span>' : (r.lockMins != null ? ' <span style="color:#80868b">(' + Math.max(r.lockMins, 0) + ' min)</span>' : '')) : '–'}</td>
+    <td>${r.lock_at ? pickCell(r.lock_pick, r.vsLock) + ' <span style="color:#80868b">@ ' + f1(r.lockTotal) + '</span>' + (r.lockLate ? ' <span class="badge" title="No saved line in the last hour before tip-off, so this is the last line before the game. Left out of the scorecard.">LATE</span>' : (r.lockMins != null ? ' <span style="color:#80868b" title="' + (r.lockSrc === 'sheet' ? 'Saved by your live sheet' : 'Saved by the server job') + '">(' + Math.max(r.lockMins, 0) + ' min' + (r.lockSrc === 'sheet' ? ', sheet' : '') + ')</span>' : '')) : '–'}</td>
     <td>${f1(r.my5)}</td><td>${resCell(r.vs5)}</td>
     <td>${pickCell(r.pPpm, r.vs5)}</td><td>${pickCell(r.pCons, r.vs5)}</td><td>${f1(r.k5f)}</td><td>${pickCell(r.j5p, r.vs5)}${r.j5pAuto ? ' <span title="filled in by the rule" style="color:#80868b">(rule)</span>' : ''} | ${pickCell(r.j5, r.vs5)} | ${pickCell(r.j5f, r.vsK5f)}</td><td>${f1(r.l4)}${r.l4pick ? " " + pickCell(r.l4pick, r.vs5) : ""} | ${f1(r.l4f)}${r.l4fpick ? " " + pickCell(r.l4fpick, r.vsK5f) : ""}</td><td>${f1(r.proj)}</td>
   </tr>`).join("") || '<tr><td colspan="16" style="color:#80868b">No finished games match yet. The server job saves them as games end.</td></tr>';
@@ -233,11 +239,11 @@ function render(){
 
 function exportCsv(){
   const q = v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
-  const head = ["Date","Away","Home","AwayScore","HomeScore","Total","Type","PreGameOU","VsPreGame","Favorite","Spread","FavoriteSide","RulePick","LockPick","LockTotal","LockSpread","LockMinsBefore","LockLate","VsLock","MyOddsAtQ4_6min","VsMyOdds","MyPickPPM","MyPickConsensus","MyK5Final","MyJ5Pre","MyJ5At6","MyJ5Final","L4At6","L4Final","MyProjTotal"];
+  const head = ["Date","Away","Home","AwayScore","HomeScore","Total","Type","PreGameOU","VsPreGame","Favorite","Spread","FavoriteSide","RulePick","LockPick","LockTotal","LockSpread","LockMinsBefore","LockLate","LockSource","VsLock","MyOddsAtQ4_6min","VsMyOdds","MyPickPPM","MyPickConsensus","MyK5Final","MyJ5Pre","MyJ5At6","MyJ5Final","L4At6","L4Final","MyProjTotal"];
   const lines = [head.join(",")].concat(VIEW.map(r => [
     r.game_date, a3(r.away), a3(r.home), r.final_away, r.final_home, r.total,
     r.season_type === 1 ? "PRE" : (r.season_type === 3 ? "PLAYOFFS" : "REG"),
-    r.pre_odds, r.vsPre, r.pre_favorite ? a3(r.pre_favorite) : '', r.pre_spread, r.favSide, r.rule_pick, r.lock_pick, r.lockTotal, r.lock_spread, r.lockMins, r.lock_at ? (r.lockLate ? 'late' : 'on time') : '', r.vsLock, r.my5, r.vs5, r.pPpm, r.pCons, r.k5f, r.j5p, r.j5, r.j5f, r.l4, r.l4f, r.proj
+    r.pre_odds, r.vsPre, r.pre_favorite ? a3(r.pre_favorite) : '', r.pre_spread, r.favSide, r.rule_pick, r.lock_pick, r.lockTotal, r.lock_spread, r.lockMins, r.lock_at ? (r.lockLate ? 'late' : 'on time') : '', r.lockSrc, r.vsLock, r.my5, r.vs5, r.pPpm, r.pCons, r.k5f, r.j5p, r.j5, r.j5f, r.l4, r.l4f, r.proj
   ].map(q).join(",")));
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
