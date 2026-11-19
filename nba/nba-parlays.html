@@ -111,6 +111,7 @@
   <div class="card">
     <h2>Build parlays</h2>
     <div class="status-line" id="poolStatus">Loading…</div>
+    <div class="status-line" id="updatedLine"></div>
     <div class="controls">
       <div class="control-group">
         <label>Pick basis</label>
@@ -395,7 +396,7 @@ async function fetchTodayGames(){
         const a = abbr3(away.team.abbreviation), h = abbr3(home.team.abbreviation);
         let as = Number(away.score), hs = Number(home.score);
         if(state === 'pre'){ as = null; hs = null; } else { if(isNaN(as)) as = 0; if(isNaN(hs)) hs = 0; }
-        games.push({ away: a, home: h, state, start: ev.date, statusText: (comp.status && comp.status.type && comp.status.type.shortDetail) || '',
+        games.push({ id: String(ev.id || ''), away: a, home: h, state, start: ev.date, statusText: (comp.status && comp.status.type && comp.status.type.shortDetail) || '',
           awayScore: as, homeScore: hs, odds: parseOdds(comp.odds && comp.odds[0], a, h), playoff: st === 3 });
       });
       return games;
@@ -403,6 +404,57 @@ async function fetchTodayGames(){
   }
   return null;
 }
+
+// ---------- keep lines through ESPN glitches ----------
+const LAST_ODDS = {};          // "AWAY@HOME" -> last sportsbook line seen this session
+let LAST_OK = null, REFRESH_FAIL = 0;
+async function savedLines(games){
+  const c = await cloudReady();
+  if(!c) return {};
+  try{
+    const ids = games.map(g => g.id).filter(Boolean);
+    if(!ids.length) return {};
+    const r = await c.sb.from('games').select('game_id,pre_favorite,pre_spread,pre_home_ml,pre_away_ml').eq('league','NBA').in('game_id', ids);
+    const out = {};
+    (Array.isArray(r.data) ? r.data : []).forEach(x => { out[x.game_id] = x; });
+    return out;
+  }catch(e){ return {}; }
+}
+async function keepLines(games){
+  const need = games.filter(g => g.state === 'pre' && !g.odds);
+  const saved = need.length ? await savedLines(need) : {};
+  games.forEach(g => {
+    const k = g.away + '@' + g.home;
+    if(g.odds){ LAST_ODDS[k] = g.odds; return; }
+    if(g.state !== 'pre') return;
+    if(LAST_ODDS[k]){ g.odds = { ...LAST_ODDS[k], stale: true }; return; }
+    const s = saved[g.id];
+    if(s && s.pre_favorite && s.pre_spread != null){
+      const fav = abbr3(String(s.pre_favorite).toUpperCase()), sp = Math.abs(Number(s.pre_spread));
+      const pFav = normCdf(sp / SPREAD_SD);
+      const nm = v => (v == null || isNaN(Number(v)) || Number(v) === 0) ? null : Number(v);
+      g.odds = { favorite: fav, spread: sp, homeProb: sp === 0 ? 0.5 + HOME_EDGE : (fav === g.home ? pFav : 1 - pFav),
+        text: sp > 0 ? `${fav} -${sp}` : 'Pick’em', homeMl: nm(s.pre_home_ml), awayMl: nm(s.pre_away_ml), stale: true };
+    }
+  });
+  return games;
+}
+function setUpdated(){
+  const el = document.getElementById('updatedLine'); if(!el) return;
+  if(!LAST_OK){ el.textContent = ''; return; }
+  const t = LAST_OK.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const age = (Date.now() - LAST_OK.getTime()) / 60000;
+  if(REFRESH_FAIL > 0 || age > 3){
+    el.innerHTML = `Last updated ${t} · <b style="color:#c0392b">refresh failed${REFRESH_FAIL > 1 ? ' ' + REFRESH_FAIL + ' times' : ''} — data may be old. Reload the page.</b>`;
+  } else el.textContent = `Last updated ${t}`;
+}
+async function refreshToday(){
+  const g = await fetchTodayGames();
+  if(g){ await keepLines(g); TODAY_GAMES = g; LAST_OK = new Date(); REFRESH_FAIL = 0; rebuildPool(); }
+  else REFRESH_FAIL++;
+  setUpdated();
+}
+setInterval(setUpdated, 30000);
 
 // ---------- picking ----------
 const shrink = (w, l) => (w + PRIOR_GAMES / 2) / (w + l + PRIOR_GAMES);
@@ -468,7 +520,7 @@ function renderPool(){
     const fmtMl = v => v == null ? '–' : (v > 0 ? '+' + v : String(v));
     const ml = g.odds && (g.odds.homeMl != null || g.odds.awayMl != null)
       ? `<span class="ml">Moneyline: <b>${g.away} ${fmtMl(g.odds.awayMl)}</b> / <b>${g.home} ${fmtMl(g.odds.homeMl)}</b></span> · ` : '';
-    const fav = g.odds ? `<span class="fav">Sportsbook: ${g.odds.text}</span> · ` : '<span style="color:var(--sub)">No sportsbook line yet</span> · ';
+    const fav = g.odds ? `<span class="fav">Sportsbook: ${g.odds.text}${g.odds.stale ? " (last known)" : ""}</span> · ` : '<span style="color:var(--sub)">No sportsbook line yet</span> · ';
     const skipped = !eligible(g);
     return `<div class="pool-row"${skipped ? ' style="opacity:.55"' : ''}>
       <div class="pool-teams">${g.away} @ ${g.home}${score} ${badge}</div>
@@ -773,12 +825,15 @@ async function init(){
   document.getElementById('rangeSub').textContent = `${counted} regular-season games so far · live from ESPN`;
   const games = await fetchTodayGames();
   if(games === null){ document.getElementById('poolList').innerHTML = '<div class="empty-state">Couldn’t reach ESPN for today’s games. Try again in a moment.</div>'; document.getElementById('poolStatus').textContent = 'Live fetch failed.'; return; }
+  await keepLines(games); LAST_OK = new Date();
   TODAY_GAMES = games;
   await migrateHistory();
   rebuildPool();
   histInit();
   // refresh scores/lines every 60 seconds while the page is open (parlays you generated stay as they are)
-  setInterval(async () => { const g = await fetchTodayGames(); if(g){ TODAY_GAMES = g; rebuildPool(); } }, 60000);
+  setInterval(refreshToday, 60000);
+  document.addEventListener('visibilitychange', () => { if(!document.hidden) refreshToday(); });
+  setUpdated();
 }
 
 document.getElementById('basis').addEventListener('change', rebuildPool);
