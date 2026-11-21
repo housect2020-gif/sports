@@ -57,8 +57,8 @@
   <div class="status" id="status">Loading…</div>
 
   <div class="card">
-    <h2>Tonight’s games — model vs sportsbook line</h2>
-    <p class="hint">Projected total = first three quarters from each team’s scoring and what its opponent allows, plus a 4th quarter that blends both teams’ own 4th-quarter habits with the average for this matchup type. “Gap” is the model total minus the sportsbook total (ESPN posts the line only before tip-off).</p>
+    <h2>Tonight’s verdicts</h2>
+    <p class="hint"><b>BET</b> = the rule and the model agree and the model is 3+ points from the sportsbook total. <b>LEAN</b> = they agree but the model is closer. <b>SKIP</b> = they disagree. <b>NO EDGE</b> = the model is within 1 point of the book. The rule: favorite at home → Under, favorite on the road → Over. The model total is each team’s scoring plus its 4th-quarter habits by matchup type. Experimental: the model has no track record yet (see History).</p>
     <div id="tonight"><div class="empty-state">Loading…</div></div>
   </div>
 
@@ -84,20 +84,25 @@ function render(P, TS, todays, failed, standingsOk){
   document.getElementById('status').innerHTML = `${teams.reduce((s, p) => s + p.g, 0) / 2} finished regular-season games · ESPN standings ${standingsOk ? 'loaded' : '<b>unavailable — using records from games</b>'}${failed ? ` · <b>${failed} day(s) failed to load</b>` : ''}`;
   document.getElementById('rangeSub').textContent = 'Live from ESPN · quarter-by-quarter scoring';
 
-  // tonight
+  // tonight: one verdict per game
   const rows = todays.filter(g => g.state !== 'post' && !g.playoff).map(g => {
     const pr = project(P, TS, g.away, g.home);
     const A = P[g.away], B = P[g.home];
-    const gap = pr && g.line != null ? pr.total - g.line : null;
-    const lean = gap == null ? '' : (gap >= 3 ? '<span class="over">Over</span>' : (gap <= -3 ? '<span class="under">Under</span>' : '<span class="none">close</span>'));
-    return `<tr><td class="l">${g.away} @ ${g.home}<br><small style="color:var(--sub)">${g.text}</small></td>
-      <td class="l">${A ? `<span class="tier t-${A.tier}">${A.tier}</span>` : ''} ${A ? '#' + A.rank : ''} / ${B ? `<span class="tier t-${B.tier}">${B.tier}</span>` : ''} ${B ? '#' + B.rank : ''}</td>
-      <td class="l">${pr ? TYPE_NAMES[pr.type] : '–'}</td>
-      <td>${pr ? f1(pr.f3) : '–'}</td><td>${pr ? f1(pr.q4) : '–'}</td><td><b>${pr ? f1(pr.total) : '–'}</b></td>
-      <td>${g.line != null ? g.line : '–'}</td><td>${gap != null ? (gap > 0 ? '+' : '') + gap.toFixed(1) : '–'}</td><td class="l">${lean}</td></tr>`;
+    const rule = L.rulePick(g.details, g.away, g.home);
+    const v = L.verdict(rule, pr ? pr.total : null, g.line);
+    const gap = v.gap;
+    const col = { BET:'#fff;background:#0a7d3f', LEAN:'#0a7d3f;background:rgba(10,125,63,.14)', SKIP:'#6b5200;background:#fff2c9', NONE:'var(--sub);background:#eceff5' }[v.code];
+    const det = pr ? `<details><summary style="cursor:pointer;color:var(--accent);font-size:11px">details</summary><div style="font-size:11.5px;color:var(--sub);line-height:1.6;padding:4px 0">
+      ${g.away} <span class="tier t-${A.tier}">${A.tier}</span> #${A.rank} · ${g.home} <span class="tier t-${B.tier}">${B.tier}</span> #${B.rank}<br>
+      ${TYPE_NAMES[pr.type]} · Q1–Q3 est ${f1(pr.f3)} + Q4 est ${f1(pr.q4)}<br>${v.why}</div></details>` : '';
+    return `<tr><td class="l">${g.away} @ ${g.home} <small style="color:var(--sub)">${g.text.replace(/^\d+\/\d+ - /, '')}</small>${det}</td>
+      <td>${g.line != null ? g.line : '–'}</td>
+      <td class="l">${rule ? (rule === 'Over' ? '<span class="over">Over</span>' : '<span class="under">Under</span>') : '<span class="none">–</span>'}</td>
+      <td>${pr ? '<b>' + f1(pr.total) + '</b>' : '–'}<br><small style="color:var(--sub)">${gap != null ? (gap > 0 ? '+' : '') + gap.toFixed(1) : ''}</small></td>
+      <td class="l"><span style="display:inline-block;padding:3px 10px;border-radius:6px;font-weight:700;font-family:var(--font-ui);color:${col}">${v.label}</span></td></tr>`;
   });
   document.getElementById('tonight').innerHTML = rows.length
-    ? `<table><tr><th class="l">Game</th><th class="l">Tier / rank (away / home)</th><th class="l">Matchup type</th><th>Q1–Q3 est</th><th>Q4 est</th><th>Model total</th><th>Book total</th><th>Gap</th><th class="l">Lean</th></tr>${rows.join('')}</table>`
+    ? `<table><tr><th class="l">Game</th><th>Book total</th><th class="l">Rule</th><th>Model total<br>(gap)</th><th class="l">Verdict</th></tr>${rows.join('')}</table>`
     : '<div class="empty-state">No upcoming or live games on today’s slate.</div>';
 
   // matchup types

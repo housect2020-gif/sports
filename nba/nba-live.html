@@ -706,6 +706,10 @@ function makeGameRowsHtml(gid){
       <td class="rownum"></td>
       <td colspan="${13 + extraOTCount}" class="matchup-label" id="${gid}-matchup">—</td>
     </tr>
+    <tr class="verdict-row">
+      <td class="rownum"></td>
+      <td colspan="${13 + extraOTCount}" id="${gid}-verdict" style="background:#f7f9fd;text-align:left"></td>
+    </tr>
     <tr>
       <td class="rownum">${r2}</td>
       <td class="team" id="${gid}-awayName">—</td>
@@ -1459,28 +1463,54 @@ function applyGameData(gid, away, home, status, overUnder, seasonType, gameDateI
     lt.style.cssText = "font-weight:600;color:" + (shownLock.late ? "#8a5a00" : "#3c4043");
     matchupEl.appendChild(lt);
   }
-  // Matchup: Good / Mid / Bad type from the standings, and the Matchup Lab's projected total next to the book line.
-  // Saved to history while the game is pre-game so History can score it. (Needs lab.js; if it is missing the sheet works as before.)
+  // Verdict box (BET / LEAN / SKIP / NO EDGE): rule pick + Matchup Lab model total vs the book total.
+  // The model total is saved to history while the game is pre-game so History can score the verdicts.
+  // (Needs lab.js; if it is missing the sheet works as before.)
   try{
-    const LB = window.__lab;
-    if(LB && window.NBALab){
-      const a3 = window.NBALab.abbr3, pr = window.NBALab.project(LB.P, LB.TS, a3(away.name), a3(home.name));
-      const mt = window.NBALab.typeOf(LB.P, a3(away.name), a3(home.name));
-      const sh = (loadHistory()[gid] || {});
-      const type = mt || sh.matchType || null, proj = pr ? Math.round(pr.total * 10) / 10 : (sh.matchProj != null ? sh.matchProj : null);
+    const LB = window.__lab, NL = window.NBALab, vEl = eg(gid, "verdict");
+    if(vEl && NL){
+      const a3 = NL.abbr3, sh = (loadHistory()[gid] || {});
+      const pr = LB ? NL.project(LB.P, LB.TS, a3(away.name), a3(home.name)) : null;
+      const mt = LB ? NL.typeOf(LB.P, a3(away.name), a3(home.name)) : null;
+      const type = mt || sh.matchType || null;
+      const projLive = pr ? Math.round(pr.total * 10) / 10 : null;
+      const proj = status.state === "pre" ? (projLive != null ? projLive : (sh.matchProj != null ? sh.matchProj : null))
+                                          : (sh.matchProj != null ? sh.matchProj : projLive);
       if(status.state === "pre" && (type || proj != null)) updateHistory(gid, cur => (cur.matchType === type && cur.matchProj === proj) ? null : { matchType: type, matchProj: proj });
-      if(type){
-        const refTotal = (shownLock && shownLock.total != null) ? shownLock.total : (typeof overUnder === "number" ? overUnder : null);
-        const gap = (proj != null && refTotal != null) ? proj - refTotal : null;
-        const mtag = document.createElement("span");
-        mtag.className = "matchup-tag";
-        mtag.textContent = ` · ${window.NBALab.TYPE_NAMES[type]}` + (proj != null ? ` · Model ${proj.toFixed(1)}` + (gap != null ? ` (${gap >= 3 ? "Over" : (gap <= -3 ? "Under" : "close")} ${gap > 0 ? "+" : ""}${gap.toFixed(1)})` : "") : "");
-        mtag.title = "Matchup Lab: team quality (top / middle / bottom third by win %) and projected total from each team's scoring and 4th-quarter habits. Experimental; it does not change your picks.";
-        mtag.style.cssText = "font-weight:600;color:#1d428a";
-        matchupEl.appendChild(mtag);
-      }
+      const refTotal = (shownLock && shownLock.total != null) ? shownLock.total : (typeof overUnder === "number" ? overUnder : (sh.lockTotal != null ? sh.lockTotal : null));
+      const rulePk = (shownRule && shownRule.pick) || null;
+      const v = NL.verdict(rulePk, proj, refTotal);
+      const colors = { BET:["#fff","#0a7d3f"], LEAN:["#0a7d3f","#dff3e6"], SKIP:["#6b5200","#fff2c9"], NONE:["#5f6368","#eceff5"] }[v.code];
+      const gapTxt = v.gap == null ? "" : ` (${v.gap > 0 ? "+" : ""}${v.gap.toFixed(1)})`;
+      const st0 = gameState[gid];
+      const open = st0 && (st0.detailsOpen != null ? st0.detailsOpen : status.state !== "pre");
+      vEl.innerHTML = "";
+      const wrap = document.createElement("div");
+      wrap.style.cssText = "display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:6px 4px";
+      const badge = document.createElement("span");
+      badge.textContent = v.label;
+      badge.style.cssText = `font-weight:800;font-size:15px;padding:5px 14px;border-radius:7px;color:${colors[0]};background:${colors[1]}`;
+      const txt = document.createElement("span");
+      txt.style.cssText = "font-size:13px;color:#333;flex:1;min-width:240px";
+      txt.textContent = [
+        rulePk ? `Rule: ${rulePk}` : "Rule: no pick",
+        proj != null ? `Model ${proj.toFixed(1)}` : "Model: loading…",
+        refTotal != null ? `Book ${refTotal}${gapTxt}` : "Book: no line yet",
+        type ? NL.TYPE_NAMES[type] : null
+      ].filter(Boolean).join("  ·  ") + (v.code === "SKIP" || v.code === "NONE" || v.code === "LEAN" ? "   —   " + v.why : "");
+      txt.title = "BET = rule and model agree and the model is 3+ points from the book. LEAN = agree but closer. SKIP = they disagree. Experimental: the model has no track record yet.";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = open ? "Hide details ▴" : "Show details ▾";
+      btn.style.cssText = "font-size:12px;padding:3px 10px;border:1px solid #c8cdd8;border-radius:6px;background:#fff;cursor:pointer;color:#1d428a";
+      btn.onclick = () => { st0.detailsOpen = !open; applyGameData(gid, away, home, status, overUnder, seasonType, gameDateIso, cloudPreOdds, rule, lock); };
+      wrap.append(badge, txt, btn);
+      vEl.appendChild(wrap);
+      // Before tip-off the grid is all zeros: show only the header + verdict, unless you open the details.
+      const trs = document.querySelectorAll(`#gamesBody tr[data-gid="${gid}"]`);
+      trs.forEach((tr, idx) => { if(idx >= 2) tr.style.display = open ? "" : "none"; });
     }
-  }catch(e){ console.warn('matchup-tag error', e && e.message); }
+  }catch(e){ console.warn('verdict error', e && e.message); }
   const badgeText = seasonType === 1 ? "PRE" : (seasonType === 3 ? "PLAYOFFS" : "");
   if(badgeText){
     const badge = document.createElement("span");

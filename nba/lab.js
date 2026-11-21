@@ -51,7 +51,7 @@ function parseDay(json, dateStr){
     let line = null;
     const o = comp.odds && comp.odds[0];
     if(o && typeof o.overUnder === 'number') line = o.overUnder;
-    all.push({ id: String(ev.id || ''), away: a, home: h, state, start: ev.date, line, playoff: st === 3, text: (comp.status && comp.status.type && comp.status.type.shortDetail) || '' });
+    all.push({ id: String(ev.id || ''), away: a, home: h, state, start: ev.date, line, details: (o && o.details) || '', playoff: st === 3, text: (comp.status && comp.status.type && comp.status.type.shortDetail) || '' });
     if(state !== 'post' || st === 3) return;
     const q = c => (c.linescores || []).slice(0, 4).map(x => Number(x.value));
     const qa = q(away), qh = q(home);
@@ -154,6 +154,31 @@ async function standingsRows(){
 }
 
 
+
+// ---------- the pre-game verdict ----------
+// Rule: favorite (from the spread text) at home -> Under, on the road -> Over. No pick when the spread is 0 / even.
+function rulePick(details, away, home){
+  const m = /([A-Za-z]{2,4})\s*([+-]?\d+(?:\.\d+)?)/.exec(details || '');
+  if(!m) return null;
+  const spread = Math.abs(parseFloat(m[2]));
+  if(!spread) return null;
+  const fav = abbr3(m[1].toUpperCase());
+  if(fav === home) return 'Under';
+  if(fav === away) return 'Over';
+  return null;
+}
+// BET = rule and model agree and the model is 3+ points from the book total; LEAN = agree but closer;
+// SKIP = they disagree; NONE = no edge (model within 1 point of the book) or something missing.
+function verdict(rule, proj, ref){
+  if(proj == null || ref == null) return { code:'NONE', side:null, gap:null, label:'NO DATA', why:'Not enough data yet for a model total or book total.' };
+  const gap = proj - ref, mside = Math.abs(gap) < 1 ? null : (gap > 0 ? 'Over' : 'Under');
+  if(!rule) return { code:'NONE', side:null, gap, mside, label:'NO EDGE', why:'The rule has no pick (even spread).' };
+  if(!mside) return { code:'NONE', side:null, gap, mside, label:'NO EDGE', why:'The model total is within 1 point of the book total.' };
+  if(mside === rule) return Math.abs(gap) >= 3
+    ? { code:'BET', side:rule, gap, mside, label:'BET ' + rule.toUpperCase(), why:'Rule and model agree, and the model is ' + Math.abs(gap).toFixed(1) + ' points ' + (gap > 0 ? 'above' : 'below') + ' the book.' }
+    : { code:'LEAN', side:rule, gap, mside, label:'LEAN ' + rule.toUpperCase(), why:'Rule and model agree, but the model is only ' + Math.abs(gap).toFixed(1) + ' points from the book.' };
+  return { code:'SKIP', side:null, gap, mside, label:'SKIP', why:'Mixed signals: the rule says ' + rule + ', the model says ' + mside + '.' };
+}
 let CACHEDLAB = null, CACHEDAT = 0, PENDING = null;
 async function load(force){
   if(!force && CACHEDLAB && Date.now() - CACHEDAT < 5 * 60 * 1000) return CACHEDLAB;
@@ -172,5 +197,5 @@ async function load(force){
   })();
   return PENDING;
 }
-window.NBALab = { load, project, typeOf, parseDay, getJson, f1, TYPE_NAMES, TYPE_ORDER, BASE, sportsDay, ymd, abbr3 };
+window.NBALab = { load, project, typeOf, rulePick, verdict, parseDay, getJson, f1, TYPE_NAMES, TYPE_ORDER, BASE, sportsDay, ymd, abbr3 };
 })();
