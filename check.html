@@ -101,10 +101,12 @@ async function run(){
   // 2. deployed files
   group("2. Files on your site");
   const files = [
-    ["nba/nba-live.html", ["rulePick", "j5Pre", "lock-tag", "cleanHistory"], "live sheet with rule, J5 auto-fill and lock"],
-    ["history.html", ["j5Pre", "Rule @ lock"], "History with rule, pre-game J5 and lock columns"],
+    ["nba/nba-live.html", ["rulePick", "j5Pre", "lock-tag", "cleanHistory", "matchup-tag"], "live sheet with rule, J5 auto-fill and lock"],
+    ["history.html", ["j5Pre", "Rule @ lock", "mtype"], "History with rule, pre-game J5 and lock columns"],
     ["nba/nba-live-archive.html", ["save-cells"], "Day archive with the Save changes button"],
     ["nba/nba-parlays.html", ["minWin"], "Parlay page with the coin-flip filter"],
+    ["nba/lab.js", ["NBALab"], "shared Matchup Lab code"],
+    ["nba/nba-matchups.html", ["NBALab"], "Matchup Lab page"],
     ["cloud.js", ["snap_", "fetchLocks"], "login/sync file"]
   ];
   for(const [path, marks, what] of files){
@@ -162,6 +164,10 @@ async function run(){
   if(lk.error) add("FAIL", "Lock columns are missing from the games table", lk.error.message + " — run 1-run-this-in-supabase.sql (lock version) in Supabase.");
   else add("PASS", "Games table has the lock columns");
 
+  const mx = await sb.from("games").select("game_id,lock_type,lock_away_rank,lock_home_rank").eq("league", "NBA").limit(1);
+  if(mx.error) add("FAIL", "Matchup columns are missing from the games table", mx.error.message + " — run 2-run-this-in-supabase.sql in Supabase.");
+  else add("PASS", "Games table has the matchup columns");
+
   const last = await sb.from("games").select("updated_at").eq("league", "NBA").order("updated_at", { ascending: false }).limit(1);
   if(last.error || !last.data || !last.data.length) add("FAIL", "No NBA rows in the games table", "The server job may not be running.");
   else{
@@ -200,6 +206,11 @@ async function run(){
     const c2 = await sb.from("games").select("game_id", { count: "exact", head: true }).eq("league", "NBA").not("lock_at", "is", null).eq("lock_late", true);
     if(!c1.error && !c2.error) add((c1.count || 0) + (c2.count || 0) ? "PASS" : "INFO", `Locks saved so far: ${c1.count || 0} on time, ${c2.count || 0} late`,
       "An on-time lock is saved by the job in the last hour before tip-off. A late lock means no job run landed in that window.");
+  }
+
+  if(!mx.error){
+    const t1 = await sb.from("games").select("game_id", { count: "exact", head: true }).eq("league", "NBA").not("lock_type", "is", null);
+    if(!t1.error) add((t1.count || 0) ? "PASS" : "INFO", `Games saved with a matchup type: ${t1.count || 0}`, "The type (e.g. GB = Good vs Bad) is saved by the job together with the lock, so it fills in as new games are locked.");
   }
 
   // finished games and rule scorecard
