@@ -59,6 +59,7 @@
   </div>
   <div class="cards" id="cards"></div>
   <div class="card" style="margin:0 0 14px;overflow-x:auto"><div class="k" style="margin-bottom:6px">Over / Under by matchup type (G = good team, M = mid, B = bad; top / middle / bottom third by win %)</div><div id="typeTable" style="font-size:13px"></div></div>
+  <div class="card" style="margin:0 0 14px;overflow-x:auto"><div class="k" style="margin-bottom:6px">Pre-game verdicts: how often they were right (BET = rule and model agree and the model is 3+ points from the book; LEAN = agree but closer; SKIP = they disagree)</div><div id="verdictTable" style="font-size:13px"></div></div>
   <div class="tablewrap">
     <table>
       <thead><tr>
@@ -82,6 +83,13 @@ const a3 = c => ABBR3[c] || c || "?";
 let ROWS = [];   // finished games from the shared database
 let VIEW = [];   // rows after filters
 
+function verdictOf(rule, proj, ref){
+  if(proj == null || ref == null) return { code:"NONE", side:null, mside:null };
+  const gap = proj - ref, mside = Math.abs(gap) < 1 ? null : (gap > 0 ? "Over" : "Under");
+  if(!rule || !mside) return { code:"NONE", side:null, mside };
+  if(mside === rule) return { code: Math.abs(gap) >= 3 ? "BET" : "LEAN", side:rule, mside };
+  return { code:"SKIP", side:null, mside };
+}
 function resultOf(total, line){
   if(total == null || line == null) return "";
   return total > line ? "Over" : (total < line ? "Under" : "Push");
@@ -160,7 +168,12 @@ function render(){
     const vsLock = lockTotal != null ? resultOf(total, lockTotal) : "";
     const lockMins = (lk && g.start_time) ? Math.round((new Date(g.start_time).getTime() - new Date(lk.at).getTime()) / 60000) : null;
     const mtype = g.lock_type || m.matchType || null;
-    return { ...g, mtype, lock_at: lk ? lk.at : null, lock_pick: lk ? lk.pick : null, lock_spread: lk ? lk.spread : null, lockSrc: lk ? lk.src : null, lockTotal, vsLock, lockMins, lockLate: !!(lk && lk.late),
+    const mproj = m.matchProj != null ? Number(m.matchProj) : null;
+    const vref = lockTotal != null ? lockTotal : (g.pre_odds != null ? Number(g.pre_odds) : null);
+    const vrule = (lk && lk.pick) || g.rule_pick || null;
+    const vd = verdictOf(vrule, mproj, vref);
+    const vres = vref != null ? resultOf(total, vref) : "";
+    return { ...g, mtype, mproj, vd, vres, vrule, lock_at: lk ? lk.at : null, lock_pick: lk ? lk.pick : null, lock_spread: lk ? lk.spread : null, lockSrc: lk ? lk.src : null, lockTotal, vsLock, lockMins, lockLate: !!(lk && lk.late),
              lockHit: (lk && lk.pick && vsLock && vsLock !== "Push") ? (lk.pick === vsLock ? "Y" : "N") : null, total, ruleHit: (g.rule_pick && resultOf(total, g.pre_odds) && resultOf(total, g.pre_odds) !== 'Push') ? (g.rule_pick === resultOf(total, g.pre_odds) ? 'Y' : 'N') : null,
              favSide: g.pre_favorite ? (g.pre_favorite === g.home || a3(g.pre_favorite) === a3(g.home) ? 'home' : 'road') : null, vsPre: resultOf(total, g.pre_odds), my5: m.odds5min, vs5: resultOf(total, m.odds5min),
              pPpm: m.pick5Ppm, pCons: m.pick5Cons, proj: m.projTotal5, j5p: m.j5Pre, j5pAuto: m.j5PreAuto, j5: m.j5At6, l4: m.l4At6, k5f: m.k5Final, j5f: m.j5Final, l4f: m.l4Final,
@@ -170,6 +183,19 @@ function render(){
   });
 
   const withLine = VIEW.filter(r => r.pre_odds != null);
+  // Verdict scorecard: BET / LEAN / SKIP / NO EDGE, scored against the locked total (or the last pre-game line).
+  const vpct = (h, n) => n ? `${h} / ${n} (${Math.round(h / n * 100)}%)` : "–";
+  const vrows = [["BET","BET"],["LEAN","LEAN"],["SKIP","SKIP"],["NONE","NO EDGE"]].map(([code, name]) => {
+    const rs = VIEW.filter(r => r.vd && r.vd.code === code && r.vres && r.vres !== "Push");
+    const pickD = rs.filter(r => r.vd.side), pickH = pickD.filter(r => r.vd.side === r.vres).length;
+    const ruleD = rs.filter(r => r.vrule), ruleH = ruleD.filter(r => r.vrule === r.vres).length;
+    const modD = rs.filter(r => r.vd.mside), modH = modD.filter(r => r.vd.mside === r.vres).length;
+    return `<tr><td class="l"><b>${name}</b></td><td>${rs.length}</td><td>${code === "BET" || code === "LEAN" ? vpct(pickH, pickD.length) : "–"}</td><td>${vpct(ruleH, ruleD.length)}</td><td>${vpct(modH, modD.length)}</td></tr>`;
+  });
+  $("verdictTable").innerHTML = VIEW.some(r => r.mproj != null)
+    ? `<table><thead><tr><th class="l">Verdict</th><th>Games</th><th>Pick right</th><th>Rule alone right</th><th>Model alone right</th></tr></thead><tbody>${vrows.join("")}</tbody></table><div style="color:#80868b;margin-top:6px">Break-even is about 52.4%. Verdicts need the model total, which the live sheet saves when it is open before tip-off, so only those games are counted. Wait for roughly 100 games before trusting any of these numbers.</div>`
+    : '<span style="color:#80868b">No verdicts yet. They appear for games where the live sheet was open before tip-off, once the matchup update is installed.</span>';
+
   const cnt = k => withLine.filter(r => r.vsPre === k).length;
   const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0) / arr.length : null;
   const ruleHits = rows => {
