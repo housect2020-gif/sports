@@ -171,6 +171,13 @@
   .ou-over{font-weight:800; color:var(--win); font-family:var(--font-ui); font-size:11px;}
   .ou-under{font-weight:800; color:var(--accent); font-family:var(--font-ui); font-size:11px;}
   .ou-push{font-weight:800; color:var(--sub); font-family:var(--font-ui); font-size:11px;}
+  td.oupick{font-size:12px; font-weight:800; white-space:nowrap;}
+  .oupick-over{color:var(--win);}
+  .oupick-under{color:var(--accent);}
+  .oupick-conf{font-weight:600; font-size:10px; color:var(--sub); margin-left:3px;}
+  .oupick-hit{background:var(--win-soft) !important;}
+  .oupick-miss{background:var(--live-soft) !important;}
+  .oupick-mark{font-size:11px; margin-left:4px;}
   .error-row td{padding:28px; text-align:center; color:var(--sub); white-space:normal;}
 
   footer{padding:12px 18px; font-size:11px; color:#8189a0; background:var(--colhead-bg); border-top:1px solid var(--grid);}
@@ -208,6 +215,7 @@
   <div class="h2h-stat-box" id="last3StatBox">Loading…</div>
   <div class="h2h-stat-box" id="seasonStatBox">Loading…</div>
   <div class="h2h-stat-box" id="ouStatBox">Loading…</div>
+  <div class="h2h-stat-box" id="ouPickStatBox">Loading…</div>
 </div>
 
 <div class="toolbar">
@@ -242,7 +250,7 @@
   <thead>
     <tr class="colletters">
       <th></th>
-      <th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th><th>G</th><th>H</th>
+      <th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th><th>G</th><th>H</th><th>I</th>
     </tr>
     <tr class="headers">
       <th></th>
@@ -254,6 +262,7 @@
       <th>Head-to-Head Record</th>
       <th>H2H Outcome Winner</th>
       <th>Over / Under</th>
+      <th title="Pre-game Over/Under pick: fades the two teams' combined over/under tendency this season">O/U Pick</th>
     </tr>
   </thead>
   <tbody id="sheetBody"></tbody>
@@ -261,16 +270,13 @@
 </div>
 
 <footer>
-  Season results are pulled live from ESPN's public NFL scoreboard each time this page loads (through <span id="histThrough">—</span>). This week's games refresh every 30 seconds while a game is live or about to kick off, and less often otherwise. Head-to-head counts only meetings <em>before</em> each game, this season. Over/Under lines come from ESPN's sportsbook partner: upcoming games show the current line; finished games use the closing line, fetched once per game and saved in this browser. No API key required.
+  Season results are pulled live from ESPN's public NFL scoreboard each time this page loads (through <span id="histThrough">—</span>). This week's games refresh every 30 seconds while a game is live or about to kick off, and less often otherwise. Head-to-head counts only meetings <em>before</em> each game, this season. Over/Under lines come from ESPN's sportsbook partner: upcoming games show the current line; finished games use the closing line, fetched once per game and saved in this browser. The O/U Pick column (I) is a pre-game BET / LEAN / SKIP verdict that goes against the two teams' combined over/under trend this season; it uses only games played before each kickoff, so past rows show exactly what it would have said beforehand. No API key required.
   <div style="margin-top:6px; color:#a7b2c2;" id="versionTag">version: loading…</div>
 </footer>
 
 </div>
 </div>
 
-<script>window.CLOUD_RELOAD_ON_REMOTE=true;</script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="../cloud.js"></script>
 <script>
 /* ===================== Shared NFL data helpers (same on every page) ===================== */
 const ESPN_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
@@ -525,6 +531,7 @@ async function fetchClosingLines(){
 }
 
 function renderOUStatBox(){
+  renderOUPickStatBox();
   let over = 0, under = 0, push = 0;
   SEASON_DATA.forEach(g => {
     const r = ouResult(g);
@@ -550,6 +557,73 @@ function ouCellHtml(r){
     return `${line} <span class="ou-total">· now ${live.awayScore + live.homeScore}</span>`;
   }
   return `O/U ${line}${r.spread ? ` <span class="ou-total">${r.spread}</span>` : ''}`;
+}
+
+/* ---------- Pre-game O/U pick ----------
+   Rule: count how often each team's finished games this season (before this
+   kickoff) went OVER their closing line, combine the two teams, and pick the
+   OPPOSITE. The market tends to over-react to teams' over/under runs.
+   The verdict depends on how lopsided that combined trend is:
+     BET  — 60%+ one way   → backtest wk 1–11: 26-18 (59.1%)
+     LEAN — 55–60%         → backtest: 16-13 (55%)
+     SKIP — under 55%      → backtest: ~40%, so no pick is scored
+   Break-even at standard -110 odds is 52.4%. Small sample — treat it as a
+   test and re-check once more weeks are in. Uses only games played before
+   each kickoff, so past rows show exactly what it would have said beforehand. */
+const OU_PICK_MIN_GAMES = 3;   // each team needs this many finished games with a line
+const OU_BET_EDGE = 0.10;      // 60/40 or more
+const OU_LEAN_EDGE = 0.05;     // 55/45 or more
+function ouPick(g){
+  const before = g.eventTime;
+  const tally = (team) => {
+    let over = 0, n = 0;
+    SEASON_DATA.forEach(x => {
+      if(x.eventTime >= before || (x.away !== team && x.home !== team)) return;
+      const res = ouResult(x);
+      if(!res || res === 'PUSH') return;
+      n++; if(res === 'OVER') over++;
+    });
+    return { over, n };
+  };
+  const a = tally(g.away), h = tally(g.home);
+  if(a.n < OU_PICK_MIN_GAMES || h.n < OU_PICK_MIN_GAMES) return null;
+  const n = a.n + h.n, over = a.over + h.over, rate = over / n, edge = Math.abs(rate - 0.5);
+  const pick = rate > 0.5 ? 'UNDER' : (rate < 0.5 ? 'OVER' : null);
+  const verdict = edge >= OU_BET_EDGE ? 'BET' : (edge >= OU_LEAN_EDGE ? 'LEAN' : 'SKIP');
+  return {
+    pick: verdict === 'SKIP' ? null : pick, lean: pick, verdict, rate, over, n,
+    why: `${g.away}+${g.home} games went OVER ${over} of ${n} (${(rate * 100).toFixed(0)}%)` +
+      (verdict === 'SKIP' ? ' — too close to 50/50, no pick' : ` → fade: ${pick}`)
+  };
+}
+
+function ouPickCellHtml(r){
+  const p = ouPick(r);
+  if(!p) return `<td class="oupick" title="Each team needs ${OU_PICK_MIN_GAMES}+ finished games with a line"><span style="color:var(--sub); font-weight:400;">—</span></td>`;
+  if(p.verdict === 'SKIP') return `<td class="oupick" title="${p.why}"><span style="color:var(--sub); font-weight:600;">SKIP</span></td>`;
+  const res = ouResult(r);
+  let cls = '', mark = '';
+  if(res && res !== 'PUSH'){ const hit = res === p.pick; cls = hit ? 'oupick-hit' : 'oupick-miss'; mark = `<span class="oupick-mark">${hit ? '✓' : '✗'}</span>`; }
+  else if(res === 'PUSH') mark = '<span class="oupick-mark" style="color:var(--sub);">push</span>';
+  const style = p.verdict === 'LEAN' ? ' style="opacity:.7;"' : '';
+  return `<td class="oupick ${cls}" title="${p.why}"><span class="oupick-conf" style="margin:0 4px 0 0;">${p.verdict}</span><span class="oupick-${p.pick.toLowerCase()}"${style}>${p.pick}</span>${mark}</td>`;
+}
+
+function renderOUPickStatBox(){
+  const t = { BET: [0, 0], LEAN: [0, 0] };
+  SEASON_DATA.forEach(g => {
+    const res = ouResult(g); if(!res || res === 'PUSH') return;
+    const p = ouPick(g); if(!p || !p.pick) return;
+    t[p.verdict][p.pick === res ? 0 : 1]++;
+  });
+  const pctTxt = ([a, b]) => a + b ? (a / (a + b) * 100).toFixed(1) + '%' : '—';
+  const cls = ([a, b]) => a + b ? (a / (a + b) >= 0.524 ? 'good' : 'bad') : '';
+  const both = [t.BET[0] + t.LEAN[0], t.BET[1] + t.LEAN[1]];
+  const el = document.getElementById('ouPickStatBox');
+  if(!el) return;
+  el.innerHTML = `<span class="stat-label">O/U Pick · Bet</span>${t.BET[0]}-${t.BET[1]} <span class="stat-pct ${cls(t.BET)}">${pctTxt(t.BET)}</span>` +
+    ` <span class="stat-label" style="margin-left:6px;">Bet+Lean</span>${both[0]}-${both[1]} <span class="stat-pct ${cls(both)}">${pctTxt(both)}</span>`;
+  el.title = 'Season record of the pre-game O/U pick (column I) vs. each game\'s closing line. SKIP games are not counted. Break-even at -110 odds is 52.4%.';
 }
 /* ===================== end Over / Under ===================== */
 
@@ -710,7 +784,7 @@ function render(){
     const msg = viewFilter === 'week' && !CURRENT_KEY
       ? 'No NFL week is in progress right now (preseason or offseason). Switch "Show" to All games to see results.'
       : 'No games match these filters.';
-    tbody.innerHTML = `<tr class="error-row"><td colspan="9">${msg}</td></tr>`;
+    tbody.innerHTML = `<tr class="error-row"><td colspan="10">${msg}</td></tr>`;
   }
 
   filtered.forEach((r, i) => {
@@ -784,6 +858,7 @@ function render(){
       <td class="h2h">${pickCheckbox} ${r.h2h || ''}${actualWinner ? ' <span class="h2h-actual-winner">(' + winnerDisplay(actualWinner) + ')</span>' : ''}</td>
       <td class="team ${h2hCellClass}">${gMain}</td>
       <td class="ou">${ouCellHtml(r)}</td>
+      ${ouPickCellHtml(r)}
     `;
     tbody.appendChild(tr);
   });
@@ -840,7 +915,7 @@ function wireCellInspector(){
     const rn = tr.querySelector('.rownum');
     if(!rn) return;
     const colIdx = Array.from(tr.children).indexOf(td);
-    const colLetters = ['', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+    const colLetters = ['', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
     document.getElementById('cellRef').textContent = colLetters[colIdx] + (parseInt(rn.textContent, 10) + 1);
     document.getElementById('cellContent').textContent = td.textContent.trim();
   });
@@ -862,7 +937,7 @@ function csvField(val){
 
 // Exports exactly what's on screen (same filters and order) as plain text.
 function exportCsv(){
-  const header = ['Week', 'Kickoff', 'Away', 'Home', 'Winner', 'Current / Winner Record', 'Head-to-Head Record', 'H2H Outcome Winner', 'Over/Under Line', 'Total Points', 'O/U Result'];
+  const header = ['Week', 'Kickoff', 'Away', 'Home', 'Winner', 'Current / Winner Record', 'Head-to-Head Record', 'H2H Outcome Winner', 'Over/Under Line', 'Total Points', 'O/U Result', 'O/U Pick', 'Pick Verdict', 'Pick Hit'];
   const lines = [header.map(csvField).join(',')];
   CURRENT_FILTERED.forEach(r => {
     const live = r._live;
@@ -884,7 +959,7 @@ function exportCsv(){
     const h2hText = (r.h2h || '') + (r.winner ? ` (${winnerDisplay(r.winner)})` : '');
     const ouRes = ouResult(r);
     const totalPts = r.awayScore != null && r.homeScore != null && (r.winner || (live && live.state === 'in')) ? r.awayScore + r.homeScore : '';
-    lines.push([weekLabel(r.weekKey), kickoff, r.away, r.home, winnerText, r.record || '', h2hText, gText, r.ou ?? '', totalPts, ouRes || ''].map(csvField).join(','));
+    lines.push([weekLabel(r.weekKey), kickoff, r.away, r.home, winnerText, r.record || '', h2hText, gText, r.ou ?? '', totalPts, ouRes || '', ...(() => { const p = ouPick(r); const hit = p && ouRes && ouRes !== 'PUSH' ? (p.pick === ouRes ? 'HIT' : 'MISS') : ''; return [p ? (p.pick || '') : '', p ? p.verdict : '', hit]; })()].map(csvField).join(','));
   });
   const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -959,8 +1034,8 @@ async function init(){
   if(!ctx){
     document.getElementById('rangeSub').textContent = "Couldn't reach ESPN's NFL data — try refreshing in a minute.";
     document.getElementById('lastUpdated').textContent = 'ESPN fetch failed';
-    ['lastWeekStatBox', 'last3StatBox', 'seasonStatBox', 'ouStatBox'].forEach(id => document.getElementById(id).textContent = '—');
-    document.getElementById('sheetBody').innerHTML = `<tr class="error-row"><td colspan="9">ESPN's scoreboard couldn't be reached from this browser. If this keeps happening, ESPN may be blocking browser requests — let me know and we can switch to a scraper-fed data file.</td></tr>`;
+    ['lastWeekStatBox', 'last3StatBox', 'seasonStatBox', 'ouStatBox', 'ouPickStatBox'].forEach(id => document.getElementById(id).textContent = '—');
+    document.getElementById('sheetBody').innerHTML = `<tr class="error-row"><td colspan="10">ESPN's scoreboard couldn't be reached from this browser. If this keeps happening, ESPN may be blocking browser requests — let me know and we can switch to a scraper-fed data file.</td></tr>`;
     return;
   }
   CURRENT_KEY = ctx.currentKey;
