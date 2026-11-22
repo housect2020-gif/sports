@@ -212,9 +212,6 @@
   <div id="versionTag">version: loading…</div>
 </footer>
 
-<script>window.CLOUD_RELOAD_ON_REMOTE=true;</script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="../cloud.js"></script>
 <script>
 /* ===================== Shared NFL data helpers (same on every page) ===================== */
 const ESPN_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
@@ -637,7 +634,22 @@ function scoreNote(g){
   return g.state === 'in' && g.awayScore !== null ? `<span class="score-note">(${g.away} ${g.awayScore}-${g.homeScore} ${g.home})</span>` : '';
 }
 
-function currentLocks(){ return WEEK_GAMES.map(g => pickLockedGame(g, SELECTED_TOP)).filter(Boolean); }
+// Lock picks ordered best to worst by the picked team's hit rate (the % chip).
+// Ties go to the bigger sample, then the better-ranked team; picks with no
+// history yet ("—") go last. Combos list their locked legs in this same order.
+function lockSortValue(g){
+  const t = LOCK_TEAM_PICK_RATES[g.pick];
+  return t && t.total > 0 ? { rate: t.correct / t.total, n: t.total } : { rate: -1, n: 0 };
+}
+function currentLocks(){
+  return WEEK_GAMES.map(g => pickLockedGame(g, SELECTED_TOP)).filter(Boolean).sort((a, b) => {
+    const A = lockSortValue(a), B = lockSortValue(b);
+    if(B.rate !== A.rate) return B.rate - A.rate;
+    if(B.n !== A.n) return B.n - A.n;
+    const rA = rankOf(a.pick), rB = rankOf(b.pick);
+    return (typeof rA === 'number' ? rA : 99) - (typeof rB === 'number' ? rB : 99);
+  });
+}
 
 function renderLocks(){
   const wrap = document.getElementById('lockList');
@@ -650,7 +662,7 @@ function renderLocks(){
   const colorByPair = updateMatchupColors();
   const n = colorByPair.size;
   document.getElementById('lockStatus').textContent =
-    `${locks.length} locked pick${locks.length === 1 ? '' : 's'} for ${weekLabel(CURRENT_KEY)}` +
+    `${locks.length} locked pick${locks.length === 1 ? '' : 's'} for ${weekLabel(CURRENT_KEY)}, sorted by hit rate (best first)` +
     (n > 0 ? ` — ${n} ranked-vs-ranked matchup${n === 1 ? '' : 's'} color-coded below.` : '.');
   wrap.innerHTML = locks.map(g => {
     const rowClass = g.bothTop ? `matchup-${colorByPair.get(pairKey(g.away, g.home))}` : 'standard';
