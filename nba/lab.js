@@ -179,6 +179,84 @@ function verdict(rule, proj, ref){
     : { code:'LEAN', side:rule, gap, mside, label:'LEAN ' + rule.toUpperCase(), why:'Rule and model agree, but the model is only ' + Math.abs(gap).toFixed(1) + ' points from the book.' };
   return { code:'SKIP', side:null, gap, mside, label:'SKIP', why:'Mixed signals: the rule says ' + rule + ', the model says ' + mside + '.' };
 }
+
+// ---------- injuries (ESPN injuries feed + player minutes from the players table) ----------
+const INJ_KEY = 'nba_inj_v1', INJ_URL = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/injuries', PL_KEY = 'nba_players_v1';
+let PLAYERS = null;   // { playerId: [gp, starts, minutes, points] } built by the server job from box scores
+async function loadPlayers(){
+  try{
+    if(PLAYERS) return PLAYERS;
+    const c = JSON.parse(localStorage.getItem(PL_KEY) || 'null');
+    if(c && Date.now() - c.t < 6 * 3600 * 1000){ PLAYERS = c.data; return PLAYERS; }
+  }catch(e){}
+  try{
+    const sb = window.cloud && window.cloud.sb; if(!sb) return null;
+    if(window.cloud.whenApproved) await Promise.race([ window.cloud.whenApproved(), new Promise(r => setTimeout(r, 8000)) ]);
+    const r = await sb.from('players').select('player_id,gp,starts,min,pts').eq('league', 'NBA').limit(2000);
+    if(!r || r.error || !Array.isArray(r.data) || !r.data.length) return null;
+    const data = {}; r.data.forEach(x => { data[x.player_id] = [Number(x.gp), Number(x.starts), Number(x.min), Number(x.pts)]; });
+    PLAYERS = data;
+    try{ localStorage.setItem(PL_KEY, JSON.stringify({ t: Date.now(), data })); }catch(e){}
+    return PLAYERS;
+  }catch(e){ return null; }
+}
+// "Core" player = started at least half his games, or plays 24+ minutes a game (needs 3+ games on file).
+function impact(o){
+  const st = PLAYERS && o.id ? PLAYERS[o.id] : null;
+  if(!st || st[0] < 3) return { ...o, core: null };
+  const mpg = st[2] / st[0], ppg = st[3] / st[0], sr = st[1] / st[0];
+  return { ...o, mpg: Math.round(mpg * 10) / 10, ppg: Math.round(ppg * 10) / 10, core: sr >= 0.5 || mpg >= 24 };
+}
+// { ABBR: { out:[{n,id,p}], dtd:[names], long: n } } -- "Out" players posted in the last 48h; older ones are counted in long.
+async function loadInjuries(force){
+  try{ await loadPlayers(); }catch(e){}
+  try{
+    if(!force){ const c = JSON.parse(localStorage.getItem(INJ_KEY) || 'null'); if(c && c.v === 2 && Date.now() - c.t < 20 * 60 * 1000) return c.data; }
+  }catch(e){}
+  const j = await getJson(INJ_URL);
+  if(!j || !j.injuries) return null;
+  const data = {}, fresh = Date.now() - 48 * 3600 * 1000;
+  j.injuries.forEach(t => (t.injuries || []).forEach(i => {
+    const ab = i.athlete && i.athlete.team && i.athlete.team.abbreviation; if(!ab) return;
+    const k = abbr3(ab), e = data[k] = data[k] || { out: [], dtd: [], long: 0 };
+    const isFresh = !i.date || new Date(i.date).getTime() >= fresh;
+    const name = i.athlete.shortName || i.athlete.displayName;
+    let pid = null;
+    for(const l of i.athlete.links || []){ const m = /\/id\/(\d+)\//.exec(l.href || ''); if(m){ pid = m[1]; break; } }
+    if(i.status === 'Out'){ if(isFresh) e.out.push({ n: name, id: pid, p: i.athlete.position && i.athlete.position.abbreviation }); else e.long++; }
+    else if(isFresh) e.dtd.push(name);
+  }));
+  try{ localStorage.setItem(INJ_KEY, JSON.stringify({ t: Date.now(), v: 2, data })); }catch(e){}
+  return data;
+}
+const NOINJ = { out: [], dtd: [], long: 0 };
+const withImpact = e => ({ ...e, out: (e.out || []).map(o => impact(typeof o === 'string' ? { n: o } : o)) });
+function injSnapshot(data, a, b){ return data ? { at: new Date().toISOString(), a: withImpact(data[a] || NOINJ), h: withImpact(data[b] || NOINJ) } : null; }
+// Players who matter: core players. If no player stats are loaded yet, fall back to "2 or more out".
+function coreOut(e){
+  const out = (e && e.out) || [];
+  const known = out.some(o => o && typeof o === 'object' && o.core != null);
+  return known ? out.filter(o => o && o.core === true) : (out.length >= 2 ? out : []);
+}
+function injWarn(snap){
+  if(!snap) return null;
+  const w = [];
+  if(coreOut(snap.a).length) w.push('away');
+  if(coreOut(snap.h).length) w.push('home');
+  return w.length ? w : null;
+}
+const nm = o => typeof o === 'string' ? o : o.n;
+function injWarnText(snap, away, home){
+  const w = injWarn(snap); if(!w) return '';
+  const part = (ab, e) => `${ab}: ${coreOut(e).map(nm).join(', ')} out`;
+  return '⚠ ' + [w.includes('away') ? part(away, snap.a) : null, w.includes('home') ? part(home, snap.h) : null].filter(Boolean).join(' | ');
+}
+function injText(snap, away, home){
+  if(!snap) return '';
+  const d = o => typeof o === 'string' ? o : (o.core === true ? `${o.n} (${o.p || ''} ${o.mpg} min, ${o.ppg} pts)` : (o.core === false ? `${o.n} (bench ${o.mpg} min)` : o.n));
+  const one = (ab, e) => `${ab}: ` + ((e.out || []).length ? e.out.map(d).join(', ') + ' out' : 'no one out') + ((e.dtd || []).length ? ' · ' + e.dtd.join(', ') + ' day-to-day' : '');
+  return one(away, snap.a) + '  |  ' + one(home, snap.h);
+}
 let CACHEDLAB = null, CACHEDAT = 0, PENDING = null;
 async function load(force){
   if(!force && CACHEDLAB && Date.now() - CACHEDAT < 5 * 60 * 1000) return CACHEDLAB;
@@ -197,5 +275,5 @@ async function load(force){
   })();
   return PENDING;
 }
-window.NBALab = { load, project, typeOf, rulePick, verdict, parseDay, getJson, f1, TYPE_NAMES, TYPE_ORDER, BASE, sportsDay, ymd, abbr3 };
+window.NBALab = { load, project, typeOf, rulePick, verdict, loadInjuries, loadPlayers, injSnapshot, injWarn, injWarnText, coreOut, injText, parseDay, getJson, f1, TYPE_NAMES, TYPE_ORDER, BASE, sportsDay, ymd, abbr3 };
 })();

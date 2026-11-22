@@ -1480,6 +1480,24 @@ function applyGameData(gid, away, home, status, overUnder, seasonType, gameDateI
       const refTotal = (shownLock && shownLock.total != null) ? shownLock.total : (typeof overUnder === "number" ? overUnder : (sh.lockTotal != null ? sh.lockTotal : null));
       const rulePk = (shownRule && shownRule.pick) || null;
       const v = NL.verdict(rulePk, proj, refTotal);
+      // Injuries: ESPN's list of players ruled out, fetched in the browser; saved with the game while it is pre-game.
+      const A3 = a3(away.name), H3 = a3(home.name);
+      if(status.state === "pre"){
+        window.__hasPre = true;
+        if(!window.__inj && !window.__injBusy){
+          window.__injBusy = true;
+          NL.loadInjuries(false).then(d => { window.__inj = d; window.__injBusy = false; if(d && typeof fetchScores === "function") fetchScores(); }).catch(() => { window.__injBusy = false; });
+        }
+      }
+      const liveSnap = (status.state === "pre" && window.__inj) ? NL.injSnapshot(window.__inj, A3, H3) : null;
+      const savedSnap = sh.injuries || null;
+      const snap = liveSnap || savedSnap;
+      if(liveSnap && gameDateIso){
+        const mins = (new Date(gameDateIso).getTime() - Date.now()) / 60000;
+        const sig = x => x ? JSON.stringify([x.a, x.h]) : "";
+        if(mins <= 90 && sig(liveSnap) !== sig(savedSnap)) updateHistory(gid, { injuries: liveSnap });
+      }
+      const warn = NL.injWarn(snap);
       const colors = { BET:["#fff","#0a7d3f"], LEAN:["#0a7d3f","#dff3e6"], SKIP:["#6b5200","#fff2c9"], NONE:["#5f6368","#eceff5"] }[v.code];
       const gapTxt = v.gap == null ? "" : ` (${v.gap > 0 ? "+" : ""}${v.gap.toFixed(1)})`;
       const st0 = gameState[gid];
@@ -1496,16 +1514,35 @@ function applyGameData(gid, away, home, status, overUnder, seasonType, gameDateI
         rulePk ? `Rule: ${rulePk}` : "Rule: no pick",
         proj != null ? `Model ${proj.toFixed(1)}` : "Model: loading…",
         refTotal != null ? `Book ${refTotal}${gapTxt}` : "Book: no line yet",
-        type ? NL.TYPE_NAMES[type] : null
+        type ? NL.TYPE_NAMES[type] : null,
+        warn ? NL.injWarnText(snap, A3, H3) : null
       ].filter(Boolean).join("  ·  ") + (v.code === "SKIP" ? "  ·  mixed signals" : "");
+      if(warn) txt.style.color = "#8a4b00";
       txt.title = v.why + "  |  BET = rule and model agree and the model is 3+ points from the book. LEAN = agree but closer. SKIP = they disagree. Experimental: the model has no track record yet.";
       const btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = open ? "Hide ▴" : "Details ▾";
       btn.style.cssText = "font-size:10.5px;padding:1px 8px;flex:none;border:1px solid #c8cdd8;border-radius:6px;background:#fff;cursor:pointer;color:#1d428a";
       btn.onclick = () => { st0.detailsOpen = !open; applyGameData(gid, away, home, status, overUnder, seasonType, gameDateIso, cloudPreOdds, rule, lock); };
-      wrap.append(badge, txt, btn);
+      const ib = document.createElement("button");
+      ib.type = "button";
+      ib.textContent = "Injuries";
+      ib.style.cssText = "font-size:10.5px;padding:1px 8px;flex:none;border:1px solid #c8cdd8;border-radius:6px;background:#fff;cursor:pointer;color:" + (warn ? "#8a4b00" : "#1d428a");
+      ib.onclick = async () => {
+        st0.injOpen = !st0.injOpen;
+        if(st0.injOpen && status.state === "pre"){ ib.textContent = "Checking…"; try{ const d = await NL.loadInjuries(true); if(d) window.__inj = d; }catch(e){} }
+        applyGameData(gid, away, home, status, overUnder, seasonType, gameDateIso, cloudPreOdds, rule, lock);
+      };
+      wrap.append(badge, txt, ib, btn);
       vEl.appendChild(wrap);
+      if(st0.injOpen){
+        const pn = document.createElement("div");
+        pn.style.cssText = "font-size:11px;color:#444;padding:0 6px 4px;white-space:normal";
+        const sn = (status.state === "pre" && window.__inj) ? NL.injSnapshot(window.__inj, A3, H3) : savedSnap;
+        pn.textContent = sn ? "Injuries (ESPN, " + new Date(sn.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + "): " + NL.injText(sn, A3, H3)
+                            : "No injury information saved for this game.";
+        vEl.appendChild(pn);
+      }
       // Before tip-off the grid is all zeros: show only the header + verdict, unless you open the details.
       const trs = document.querySelectorAll(`#gamesBody tr[data-gid="${gid}"]`);
       trs.forEach((tr, idx) => { if(idx >= 2) tr.style.display = open ? "" : "none"; });
@@ -2596,6 +2633,7 @@ fetchScores();
 // Matchup Lab data for the matchup tag on each game (loads in the background, refreshes every 10 minutes).
 (function(){
   async function go(){
+    try{ if(window.NBALab && window.__hasPre){ const d = await window.NBALab.loadInjuries(false); if(d) window.__inj = d; } }catch(e){}
     try{ if(window.NBALab){ const l = await window.NBALab.load(); if(l){ const first = !window.__lab; window.__lab = l; if(first && typeof fetchScores === "function") fetchScores(); } } }catch(e){}
   }
   setTimeout(go, 3000); setInterval(go, 10 * 60 * 1000);

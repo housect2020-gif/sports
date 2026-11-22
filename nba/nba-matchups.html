@@ -98,6 +98,8 @@
   <div class="status" id="updated"></div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="../cloud.js"></script>
 <script src="lab.js"></script>
 <script>
 const L = window.NBALab, f1 = L.f1, TYPE_NAMES = L.TYPE_NAMES, TYPE_ORDER = L.TYPE_ORDER, project = L.project;
@@ -113,16 +115,25 @@ function render(P, TS, todays, failed, standingsOk){
     const rule = L.rulePick(g.details, g.away, g.home);
     const v = L.verdict(rule, pr ? pr.total : null, g.line);
     const col = { BET:'#fff;background:#0a7d3f', LEAN:'#0a7d3f;background:rgba(10,125,63,.14)', SKIP:'#6b5200;background:#fff2c9', NONE:'var(--sub);background:#eceff5' }[v.code];
+    const snap = window.__inj ? L.injSnapshot(window.__inj, g.away, g.home) : null;
+    const warn = L.injWarn(snap);
     const gap = v.gap != null ? ` (${v.gap > 0 ? '+' : ''}${v.gap.toFixed(1)})` : '';
     const det = pr ? `<details><summary>details</summary><div class="g3">
       ${g.away} <span class="tier t-${A.tier}">${A.tier}</span> #${A.rank} · ${g.home} <span class="tier t-${B.tier}">${B.tier}</span> #${B.rank} · ${TYPE_NAMES[pr.type]}<br>
-      Q1–Q3 est ${f1(pr.f3)} + Q4 est ${f1(pr.q4)}<br>${v.why}</div></details>` : '';
+      Q1–Q3 est ${f1(pr.f3)} + Q4 est ${f1(pr.q4)}<br>${v.why}${snap ? '<br>Injuries: ' + L.injText(snap, g.away, g.home) : ''}</div></details>` : '';
     return `<div class="g"><div class="g1"><span><b>${g.away} @ ${g.home}</b><small>${g.text.replace(/^\d+\/\d+ - /, '')}</small></span><span class="vb" style="color:${col}">${v.label}</span></div>
-      <div class="g2">Rule ${rule ? (rule === 'Over' ? '<span class="over">Over</span>' : '<span class="under">Under</span>') : '–'} · Model ${pr ? '<b>' + f1(pr.total) + '</b>' : '–'} · Book ${g.line != null ? g.line : '–'}${gap}</div>${det}</div>`;
+      <div class="g2">Rule ${rule ? (rule === 'Over' ? '<span class="over">Over</span>' : '<span class="under">Under</span>') : '–'} · Model ${pr ? '<b>' + f1(pr.total) + '</b>' : '–'} · Book ${g.line != null ? g.line : '–'}${gap}${warn ? ' · <span style="color:#8a4b00">' + L.injWarnText(snap, g.away, g.home) + '</span>' : ''}</div>${det}</div>`;
   });
   document.getElementById('tonight').innerHTML = rows.length
-    ? rows.join('')
+    ? `<div style="margin-bottom:6px"><button id="injBtn" type="button" style="font-size:11.5px;padding:3px 10px;border:1px solid #c8cdd8;border-radius:6px;background:#fff;cursor:pointer;color:#1d428a">Check injuries</button> <span id="injStamp" style="font-size:11px;color:var(--sub)">${window.__injAt ? 'checked ' + window.__injAt : (window.__inj ? '' : 'not checked yet')}</span></div>` + rows.join('')
     : '<div class="empty-state">No upcoming or live games on today’s slate.</div>';
+  const ib = document.getElementById('injBtn');
+  if(ib) ib.onclick = async () => {
+    ib.textContent = 'Checking…';
+    const d = await L.loadInjuries(true);
+    if(d){ window.__inj = d; window.__injAt = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
+    render(P, TS, todays, failed, standingsOk);
+  };
 
   // matchup types
   const tr = TYPE_ORDER.map(k => {
@@ -153,10 +164,12 @@ function drawTeams(){
 
 async function main(){
   try{
+    L.loadInjuries(false).then(d => { if(d && !window.__inj){ window.__inj = d; if(window.__lastArgs) render(...window.__lastArgs); } }).catch(() => {});
     const [lab, todayJson] = await Promise.all([ L.load(true), L.getJson(`${L.BASE}?dates=${L.ymd(L.sportsDay())}`) ]);
     if(!lab){ document.getElementById('status').textContent = 'No finished games found yet.'; return; }
     const todays = todayJson ? L.parseDay(todayJson, L.sportsDay()).all : [];
-    render(lab.P, lab.TS, todays, lab.failed, lab.standingsOk);
+    window.__lastArgs = [lab.P, lab.TS, todays, lab.failed, lab.standingsOk];
+    render(...window.__lastArgs);
     document.getElementById('updated').textContent = 'Last updated ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   }catch(e){
     document.getElementById('status').innerHTML = '<b>Something went wrong loading the data. Reload the page.</b>';
