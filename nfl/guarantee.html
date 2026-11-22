@@ -142,6 +142,21 @@
   .combo-legs .leg-rate{font-family:var(--font-mono); font-size:11px; color:var(--sub); font-weight:500; margin-left:6px;}
   .best-card{border-color:var(--win); background:var(--win-soft);}
   .best-card .combo-rank{color:var(--win);}
+  .parlay-controls{display:flex; flex-wrap:wrap; gap:18px; align-items:flex-end; margin-bottom:14px;}
+  .parlay-controls .ctl{display:flex; flex-direction:column; gap:6px;}
+  .parlay-controls .ctl > label{font-size:11px; font-weight:700; color:var(--sub); text-transform:uppercase; letter-spacing:.3px;}
+  .parlay-controls select{font-family:var(--font-ui); font-size:13px; padding:6px 10px; border:1px solid var(--grid-strong); border-radius:var(--radius-sm); background:var(--surface); color:var(--text);}
+  .leg-tabs{display:flex; gap:6px; flex-wrap:wrap;}
+  .leg-tab{font-family:var(--font-ui); font-size:13px; font-weight:700; padding:7px 14px; border:1px solid var(--grid-strong); border-radius:99px; background:var(--surface); color:var(--accent); cursor:pointer;}
+  .leg-tab.active{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .leg-tab:disabled{opacity:.35; cursor:not-allowed;}
+  .toggle{display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--text); cursor:pointer;}
+  .pool-list{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px;}
+  .pool-chip{font-size:11.5px; padding:4px 10px; border-radius:99px; border:1px solid var(--grid); background:var(--colhead-bg); white-space:nowrap;}
+  .pool-chip b{font-weight:800;}
+  .pool-chip.lock{border-color:var(--win); background:var(--win-soft);}
+  .pool-chip.wild{border-color:var(--warn); background:var(--warn-soft);}
+  .combo-rank .rank-num{font-family:var(--font-mono); color:var(--accent); margin-right:2px;}
   .best-tag{font-size:9.5px; font-weight:700; text-transform:uppercase; padding:1px 6px; border-radius:99px; margin-left:6px; background:var(--surface); color:var(--sub); border:1px solid var(--grid-strong);}
 
   .empty-state{color:var(--sub); font-size:13px; padding:20px; text-align:center;}
@@ -211,8 +226,46 @@
   </div>
 
   <div class="card">
-    <h2>Best parlays this week</h2>
+    <h2>Parlay builder</h2>
+    <div class="parlay-controls">
+      <div class="ctl">
+        <label>Legs</label>
+        <div class="leg-tabs" id="legTabs">
+          <button class="leg-tab" data-legs="2">2 legs</button>
+          <button class="leg-tab active" data-legs="3">3 legs</button>
+          <button class="leg-tab" data-legs="4">4 legs</button>
+          <button class="leg-tab" data-legs="5">5 legs</button>
+          <button class="leg-tab" data-legs="6">6 legs</button>
+          <button class="leg-tab" data-legs="7">7 legs</button>
+          <button class="leg-tab" data-legs="8">8 legs</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <label>Show top</label>
+        <select id="parlayShow"><option>5</option><option selected>10</option><option>20</option></select>
+      </div>
+      <div class="ctl">
+        <label>Min. leg hit rate</label>
+        <select id="parlayMinRate">
+          <option value="0" selected>Any</option><option value="0.6">60%+</option>
+          <option value="0.7">70%+</option><option value="0.8">80%+</option>
+        </select>
+      </div>
+      <div class="ctl">
+        <label>Picks to use</label>
+        <select id="parlaySource">
+          <option value="all" selected>Locks + wildcards</option>
+          <option value="lock">Locks only</option>
+          <option value="wild">Wildcards only</option>
+        </select>
+      </div>
+      <div class="ctl">
+        <label>&nbsp;</label>
+        <label class="toggle"><input type="checkbox" id="parlaySkipNoHist" checked> Skip picks with no history</label>
+      </div>
+    </div>
     <div class="status-line" id="bestStatus">Loading…</div>
+    <div class="pool-list" id="parlayPool"></div>
     <div class="combo-grid" id="bestParlays"></div>
   </div>
 
@@ -783,7 +836,6 @@ function renderCombos(){
 // pick is scored by its season hit rate (smoothed, so 11/11 beats 2/2), and the
 // best N-leg parlay is simply the N highest-scoring picks. Combined estimate =
 // the leg rates multiplied together, same as the Guarantee combos above.
-const BEST_MAX_LEGS = 6;
 function parlayCandidates(){
   const out = [];
   WEEK_GAMES.forEach(g => {
@@ -807,34 +859,82 @@ function legRateText(leg){
   return leg.raw && leg.raw.total ? `${(leg.raw.correct / leg.raw.total * 100).toFixed(0)}% (${leg.raw.correct}/${leg.raw.total})` : 'no history';
 }
 
+let PARLAY_LEGS = 3;
+const MAX_POOL = 18; // only the 18 strongest picks are combined, keeping the page fast
+
+// All size-k combinations of `arr` (index order kept, so best legs come first).
+function* combinations(arr, k, start = 0, acc = []){
+  if(acc.length === k){ yield acc.slice(); return; }
+  for(let i = start; i <= arr.length - (k - acc.length); i++){
+    acc.push(arr[i]); yield* combinations(arr, k, i + 1, acc); acc.pop();
+  }
+}
+
+function rawRate(l){ return l.raw && l.raw.total ? l.raw.correct / l.raw.total : null; }
+
+function parlayPool(){
+  const minRate = parseFloat(document.getElementById('parlayMinRate').value);
+  const source = document.getElementById('parlaySource').value;
+  const skipNoHist = document.getElementById('parlaySkipNoHist').checked;
+  return parlayCandidates().filter(l => {
+    if(source !== 'all' && l.kind !== source) return false;
+    const r = rawRate(l);
+    if(r === null) return !skipNoHist && minRate === 0;
+    return r >= minRate;
+  });
+}
+
 function renderBestParlays(){
   const wrap = document.getElementById('bestParlays');
   const status = document.getElementById('bestStatus');
-  const legs = parlayCandidates();
-  if(legs.length < 2){
+  const poolEl = document.getElementById('parlayPool');
+  const all = parlayCandidates();
+  const pool = parlayPool();
+
+  // Leg buttons: disable sizes the pool can't fill; fall back to the largest that fits.
+  document.querySelectorAll('.leg-tab').forEach(btn => {
+    const n = parseInt(btn.dataset.legs, 10);
+    btn.disabled = n > pool.length;
+  });
+  if(PARLAY_LEGS > pool.length && pool.length >= 2) PARLAY_LEGS = Math.min(pool.length, 8);
+  document.querySelectorAll('.leg-tab').forEach(btn => btn.classList.toggle('active', parseInt(btn.dataset.legs, 10) === PARLAY_LEGS));
+
+  poolEl.innerHTML = pool.map(l => `<span class="pool-chip ${l.kind}"><b>${l.pick}</b> ${l.away}@${l.home} · ${legRateText(l)}</span>`).join('');
+
+  if(pool.length < 2){
     wrap.innerHTML = '';
-    status.textContent = legs.length
-      ? 'Only one game with a pick hasn\'t kicked off yet — a parlay needs at least two.'
-      : 'No games left this week that haven\'t kicked off.';
+    status.textContent = all.length < 2
+      ? 'Not enough games left this week that haven\'t kicked off.'
+      : `Only ${pool.length} pick${pool.length === 1 ? ' passes' : 's pass'} the filters above — loosen them to build a parlay.`;
     return;
   }
-  const maxLegs = Math.min(BEST_MAX_LEGS, legs.length);
-  status.textContent = `Built from ${legs.length} pick${legs.length === 1 ? '' : 's'} in games that haven't kicked off yet, ranked by season hit rate. ` +
-    `Each card is the strongest combination for that number of legs. Changing the top-team selection above updates these.`;
+
+  const k = Math.min(PARLAY_LEGS, pool.length);
+  const show = parseInt(document.getElementById('parlayShow').value, 10);
+  const top = pool.slice(0, MAX_POOL);
+  const results = [];
+  for(const legs of combinations(top, k)){
+    results.push({ legs, combined: legs.reduce((p, l) => p * l.rate, 1) });
+  }
+  results.sort((a, b) => b.combined - a.combined);
+  const shown = results.slice(0, show);
+
+  status.textContent = `${pool.length} eligible pick${pool.length === 1 ? '' : 's'} (games not yet kicked off, after filters) · ` +
+    `${results.length.toLocaleString()} possible ${k}-leg parlays · showing the top ${shown.length} by combined estimate.` +
+    (pool.length > MAX_POOL ? ` Only the ${MAX_POOL} strongest picks are combined.` : '');
+
   const dateLabel = weekLabel(CURRENT_KEY);
-  let html = '';
-  for(let n = 2; n <= maxLegs; n++){
-    const chosen = legs.slice(0, n).sort((a, b) => a.eventTime.localeCompare(b.eventTime));
-    const combined = chosen.reduce((p, l) => p * l.rate, 1);
+  wrap.innerHTML = shown.map((p, i) => {
+    const chosen = p.legs.slice().sort((a, b) => a.eventTime.localeCompare(b.eventTime) || a.pick.localeCompare(b.pick));
     const sig = chosen.map(l => `${l.away}${l.home}${l.pick}`).join('_');
     const id = `best-parlay-${CURRENT_KEY}-${sig}`;
     const legsJson = JSON.stringify(chosen.map(l => ({ away: l.away, home: l.home, pick: l.pick }))).replace(/"/g, '&quot;');
-    html += `
-    <div class="combo-card${n === 2 ? ' best-card' : ''}">
+    return `
+    <div class="combo-card${i === 0 ? ' best-card' : ''}">
       <div class="combo-rank">
         <label style="display:flex; align-items:center; gap:6px; cursor:pointer; text-transform:none; letter-spacing:normal;">
-          <input type="checkbox" class="combo-pick-checkbox" data-pick-id="${id}" data-date="${dateLabel} · best ${n}-leg" data-legs="${legsJson}" data-combined="${combined}" ${isPickSaved(id) ? 'checked' : ''} title="Add to My Picks">
-          Best ${n}-leg parlay
+          <input type="checkbox" class="combo-pick-checkbox" data-pick-id="${id}" data-date="${dateLabel} · ${k}-leg parlay" data-legs="${legsJson}" data-combined="${p.combined}" ${isPickSaved(id) ? 'checked' : ''} title="Add to My Picks">
+          <span class="rank-num">#${i + 1}</span> ${k}-leg parlay${i === 0 ? ' · best' : ''}
         </label>
       </div>
       <ul class="combo-legs">
@@ -842,11 +942,21 @@ function renderBestParlays(){
       </ul>
       <div style="display:flex; justify-content:space-between; padding-top:8px; margin-top:8px; border-top:1px solid var(--grid-strong); font-size:12.5px;">
         <span style="color:var(--sub);">Combined estimate</span>
-        <span style="font-weight:700; font-family:var(--font-mono); color:var(--win);">${(combined * 100).toFixed(1)}%</span>
+        <span style="font-weight:700; font-family:var(--font-mono); color:var(--win);">${(p.combined * 100).toFixed(1)}%</span>
       </div>
     </div>`;
-  }
-  wrap.innerHTML = html;
+  }).join('');
+}
+
+function wireParlayControls(){
+  document.getElementById('legTabs').addEventListener('click', (e) => {
+    const btn = e.target.closest('.leg-tab');
+    if(!btn || btn.disabled) return;
+    PARLAY_LEGS = parseInt(btn.dataset.legs, 10);
+    renderBestParlays();
+  });
+  ['parlayShow', 'parlayMinRate', 'parlaySource', 'parlaySkipNoHist'].forEach(id =>
+    document.getElementById(id).addEventListener('change', renderBestParlays));
 }
 
 // Recomputes everything that depends on how many teams are locked.
@@ -896,6 +1006,7 @@ async function init(){
     `Ranked by winning percentage (ties count as half a win) across ${SEASON_DATA.length} completed games.`;
 
   document.getElementById('lockCount').addEventListener('change', applyTopN);
+  wireParlayControls();
   applyTopN();
 
   const saveCombo = (e) => {
