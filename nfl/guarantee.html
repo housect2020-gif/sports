@@ -139,6 +139,10 @@
   .combo-legs .leg-pick{font-weight:700;}
   .combo-legs li.wildcard .leg-pick{color:var(--warn);}
   .combo-legs li.locked .leg-pick{color:var(--win);}
+  .combo-legs .leg-rate{font-family:var(--font-mono); font-size:11px; color:var(--sub); font-weight:500; margin-left:6px;}
+  .best-card{border-color:var(--win); background:var(--win-soft);}
+  .best-card .combo-rank{color:var(--win);}
+  .best-tag{font-size:9.5px; font-weight:700; text-transform:uppercase; padding:1px 6px; border-radius:99px; margin-left:6px; background:var(--surface); color:var(--sub); border:1px solid var(--grid-strong);}
 
   .empty-state{color:var(--sub); font-size:13px; padding:20px; text-align:center;}
   .status-badge{
@@ -204,6 +208,12 @@
   <div class="card">
     <h2>Guarantee combos</h2>
     <div class="combo-grid" id="comboResults"><div class="empty-state">Select at least one wildcard game above to see combos.</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Best parlays this week</h2>
+    <div class="status-line" id="bestStatus">Loading…</div>
+    <div class="combo-grid" id="bestParlays"></div>
   </div>
 
 </div>
@@ -548,7 +558,7 @@ function renderTopChecks(){
       if(el.querySelector('input').checked){ SELECTED_TOP.add(team); el.classList.add('picked'); }
       else { SELECTED_TOP.delete(team); el.classList.remove('picked'); }
       updateMatchupColors();
-      renderLocks(); renderWildcards(); renderCombos();
+      renderLocks(); renderWildcards(); renderCombos(); renderBestParlays();
     });
   });
 }
@@ -767,6 +777,78 @@ function renderCombos(){
   }).join('');
 }
 
+// ---------- Best parlays ----------
+// One pick per game that hasn't kicked off yet: the lock pick for games with a
+// selected top team, otherwise the H2H Outcome Winner (wildcard games). Each
+// pick is scored by its season hit rate (smoothed, so 11/11 beats 2/2), and the
+// best N-leg parlay is simply the N highest-scoring picks. Combined estimate =
+// the leg rates multiplied together, same as the Guarantee combos above.
+const BEST_MAX_LEGS = 6;
+function parlayCandidates(){
+  const out = [];
+  WEEK_GAMES.forEach(g => {
+    if(g.state !== 'pre') return; // already kicked off — can't be bet as a parlay leg
+    const lock = pickLockedGame(g, SELECTED_TOP);
+    if(lock){
+      const t = LOCK_TEAM_PICK_RATES[lock.pick];
+      out.push({ away: g.away, home: g.home, pick: lock.pick, kind: 'lock', rate: legRate(lock.pick, LOCK_TEAM_PICK_RATES), raw: t, eventTime: g.eventTime });
+      return;
+    }
+    const pick = leaderTeam(computeH2HOutcome(g.away, g.home, g.eventTime).leader);
+    if(!pick) return;
+    const t = WILD_TEAM_PICK_RATES[pick];
+    out.push({ away: g.away, home: g.home, pick, kind: 'wild', rate: legRate(pick, WILD_TEAM_PICK_RATES), raw: t, eventTime: g.eventTime });
+  });
+  // Best first; ties go to the bigger sample.
+  return out.sort((a, b) => b.rate - a.rate || ((b.raw && b.raw.total) || 0) - ((a.raw && a.raw.total) || 0));
+}
+
+function legRateText(leg){
+  return leg.raw && leg.raw.total ? `${(leg.raw.correct / leg.raw.total * 100).toFixed(0)}% (${leg.raw.correct}/${leg.raw.total})` : 'no history';
+}
+
+function renderBestParlays(){
+  const wrap = document.getElementById('bestParlays');
+  const status = document.getElementById('bestStatus');
+  const legs = parlayCandidates();
+  if(legs.length < 2){
+    wrap.innerHTML = '';
+    status.textContent = legs.length
+      ? 'Only one game with a pick hasn\'t kicked off yet — a parlay needs at least two.'
+      : 'No games left this week that haven\'t kicked off.';
+    return;
+  }
+  const maxLegs = Math.min(BEST_MAX_LEGS, legs.length);
+  status.textContent = `Built from ${legs.length} pick${legs.length === 1 ? '' : 's'} in games that haven't kicked off yet, ranked by season hit rate. ` +
+    `Each card is the strongest combination for that number of legs. Changing the top-team selection above updates these.`;
+  const dateLabel = weekLabel(CURRENT_KEY);
+  let html = '';
+  for(let n = 2; n <= maxLegs; n++){
+    const chosen = legs.slice(0, n).sort((a, b) => a.eventTime.localeCompare(b.eventTime));
+    const combined = chosen.reduce((p, l) => p * l.rate, 1);
+    const sig = chosen.map(l => `${l.away}${l.home}${l.pick}`).join('_');
+    const id = `best-parlay-${CURRENT_KEY}-${sig}`;
+    const legsJson = JSON.stringify(chosen.map(l => ({ away: l.away, home: l.home, pick: l.pick }))).replace(/"/g, '&quot;');
+    html += `
+    <div class="combo-card${n === 2 ? ' best-card' : ''}">
+      <div class="combo-rank">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; text-transform:none; letter-spacing:normal;">
+          <input type="checkbox" class="combo-pick-checkbox" data-pick-id="${id}" data-date="${dateLabel} · best ${n}-leg" data-legs="${legsJson}" data-combined="${combined}" ${isPickSaved(id) ? 'checked' : ''} title="Add to My Picks">
+          Best ${n}-leg parlay
+        </label>
+      </div>
+      <ul class="combo-legs">
+        ${chosen.map(l => `<li class="${l.kind === 'lock' ? 'locked' : 'wildcard'}"><span class="leg-teams">${l.away} @ ${l.home}<span class="best-tag">${l.kind === 'lock' ? 'Lock' : 'Wildcard'}</span></span><span><span class="leg-pick">${l.pick}</span><span class="leg-rate">${legRateText(l)}</span></span></li>`).join('')}
+      </ul>
+      <div style="display:flex; justify-content:space-between; padding-top:8px; margin-top:8px; border-top:1px solid var(--grid-strong); font-size:12.5px;">
+        <span style="color:var(--sub);">Combined estimate</span>
+        <span style="font-weight:700; font-family:var(--font-mono); color:var(--win);">${(combined * 100).toFixed(1)}%</span>
+      </div>
+    </div>`;
+  }
+  wrap.innerHTML = html;
+}
+
 // Recomputes everything that depends on how many teams are locked.
 function applyTopN(){
   TOP_N = parseInt(document.getElementById('lockCount').value, 10);
@@ -779,6 +861,7 @@ function applyTopN(){
   renderLocks();
   renderWildcards();
   renderCombos();
+  renderBestParlays();
 }
 
 async function init(){
@@ -815,7 +898,7 @@ async function init(){
   document.getElementById('lockCount').addEventListener('change', applyTopN);
   applyTopN();
 
-  document.getElementById('comboResults').addEventListener('change', (e) => {
+  const saveCombo = (e) => {
     if(!e.target.classList.contains('combo-pick-checkbox')) return;
     const cb = e.target;
     let legs = [];
@@ -824,7 +907,9 @@ async function init(){
       id: cb.dataset.pickId, type: 'combo', source: 'guarantee',
       date: cb.dataset.date, legs, combinedEstimate: parseFloat(cb.dataset.combined)
     }, cb.checked);
-  });
+  };
+  document.getElementById('comboResults').addEventListener('change', saveCombo);
+  document.getElementById('bestParlays').addEventListener('change', saveCombo);
 }
 
 function renderVersionTag(){
