@@ -1486,23 +1486,23 @@ function applyGameData(gid, away, home, status, overUnder, seasonType, gameDateI
       const open = st0 && (st0.detailsOpen != null ? st0.detailsOpen : status.state !== "pre");
       vEl.innerHTML = "";
       const wrap = document.createElement("div");
-      wrap.style.cssText = "display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:6px 4px";
+      wrap.style.cssText = "display:flex;align-items:center;gap:10px;flex-wrap:nowrap;padding:2px 4px;white-space:nowrap";
       const badge = document.createElement("span");
       badge.textContent = v.label;
-      badge.style.cssText = `font-weight:800;font-size:15px;padding:5px 14px;border-radius:7px;color:${colors[0]};background:${colors[1]}`;
+      badge.style.cssText = `font-weight:800;font-size:11px;padding:2px 8px;border-radius:5px;flex:none;color:${colors[0]};background:${colors[1]}`;
       const txt = document.createElement("span");
-      txt.style.cssText = "font-size:13px;color:#333;flex:1;min-width:240px";
+      txt.style.cssText = "font-size:11px;color:#333;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis";
       txt.textContent = [
         rulePk ? `Rule: ${rulePk}` : "Rule: no pick",
         proj != null ? `Model ${proj.toFixed(1)}` : "Model: loading…",
         refTotal != null ? `Book ${refTotal}${gapTxt}` : "Book: no line yet",
         type ? NL.TYPE_NAMES[type] : null
-      ].filter(Boolean).join("  ·  ") + (v.code === "SKIP" || v.code === "NONE" || v.code === "LEAN" ? "   —   " + v.why : "");
-      txt.title = "BET = rule and model agree and the model is 3+ points from the book. LEAN = agree but closer. SKIP = they disagree. Experimental: the model has no track record yet.";
+      ].filter(Boolean).join("  ·  ") + (v.code === "SKIP" ? "  ·  mixed signals" : "");
+      txt.title = v.why + "  |  BET = rule and model agree and the model is 3+ points from the book. LEAN = agree but closer. SKIP = they disagree. Experimental: the model has no track record yet.";
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.textContent = open ? "Hide details ▴" : "Show details ▾";
-      btn.style.cssText = "font-size:12px;padding:3px 10px;border:1px solid #c8cdd8;border-radius:6px;background:#fff;cursor:pointer;color:#1d428a";
+      btn.textContent = open ? "Hide ▴" : "Details ▾";
+      btn.style.cssText = "font-size:10.5px;padding:1px 8px;flex:none;border:1px solid #c8cdd8;border-radius:6px;background:#fff;cursor:pointer;color:#1d428a";
       btn.onclick = () => { st0.detailsOpen = !open; applyGameData(gid, away, home, status, overUnder, seasonType, gameDateIso, cloudPreOdds, rule, lock); };
       wrap.append(badge, txt, btn);
       vEl.appendChild(wrap);

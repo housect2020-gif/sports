@@ -38,6 +38,28 @@
   .empty-state{color:var(--sub);font-size:13px;padding:14px;text-align:center;}
   .status{font-size:12.5px;color:var(--sub);margin-bottom:14px;}
   .status b{color:var(--live);}
+  /* compact / phone-friendly */
+  .titlebar{padding:10px 12px;} .titlebar h1{font-size:14px;} .titlebar .sub{font-size:11px;margin-top:1px;}
+  .navlinks{gap:12px;} .back-link{font-size:12px;}
+  .page-wrap{margin:10px auto;padding:0 8px 24px;}
+  .note{padding:7px 10px;font-size:11.5px;margin-bottom:10px;}
+  .card{padding:10px;margin-bottom:10px;}
+  .card h2{font-size:12px;margin-bottom:4px;}
+  .card .hint{font-size:11.5px;margin:0 0 8px;}
+  details.how summary{cursor:pointer;color:var(--accent);font-size:11.5px;font-weight:600;margin-bottom:6px;}
+  details.how .hint{margin-top:4px;}
+  table{font-size:11.5px;} th{padding:4px 5px;font-size:10px;} td{padding:4px 5px;}
+  th:first-child,td:first-child{position:sticky;left:0;background:#fff;}
+  th:first-child{background:var(--colhead-bg);}
+  .status{font-size:11.5px;margin-bottom:8px;}
+  .g{border-bottom:1px solid var(--grid);padding:6px 0;}
+  .g:last-child{border-bottom:0;}
+  .g1{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .g1 b{font-size:13px;} .g1 small{color:var(--sub);font-size:11px;margin-left:4px;}
+  .vb{display:inline-block;padding:2px 8px;border-radius:5px;font-weight:700;font-size:11px;white-space:nowrap;}
+  .g2{font-size:11.5px;color:var(--text);margin-top:3px;font-family:var(--font-mono);}
+  .g3{font-size:11px;color:var(--sub);line-height:1.5;padding:3px 0 0;}
+  .g summary{cursor:pointer;color:var(--accent);font-size:11px;}
 </style>
 </head>
 <body>
@@ -53,24 +75,24 @@
   </div>
 </div>
 <div class="page-wrap">
-  <div class="note"><b>Experimental, view-only.</b> This page measures how teams score in the 4th quarter and how that changes by matchup type (Good = top 10 by win %, Mid = middle 10, Bad = bottom 10). Early in the season each team has few games, so treat the numbers as a trend, not a fact. Nothing here changes your picks.</div>
+  <div class="note"><b>Experimental, view-only.</b> Good / Mid / Bad = top / middle / bottom third by win %. Early-season samples are small. Nothing here changes your picks.</div>
   <div class="status" id="status">Loading…</div>
 
   <div class="card">
     <h2>Tonight’s verdicts</h2>
-    <p class="hint"><b>BET</b> = the rule and the model agree and the model is 3+ points from the sportsbook total. <b>LEAN</b> = they agree but the model is closer. <b>SKIP</b> = they disagree. <b>NO EDGE</b> = the model is within 1 point of the book. The rule: favorite at home → Under, favorite on the road → Over. The model total is each team’s scoring plus its 4th-quarter habits by matchup type. Experimental: the model has no track record yet (see History).</p>
+    <details class="how"><summary>How to read this</summary><p class="hint"><b>BET</b> = the rule and the model agree and the model is 3+ points from the sportsbook total. <b>LEAN</b> = they agree but the model is closer. <b>SKIP</b> = they disagree. <b>NO EDGE</b> = the model is within 1 point of the book. The rule: favorite at home → Under, favorite on the road → Over. The model total is each team’s scoring plus its 4th-quarter habits by matchup type. Experimental: the model has no track record yet (see History).</p></details>
     <div id="tonight"><div class="empty-state">Loading…</div></div>
   </div>
 
   <div class="card">
     <h2>Matchup types — does the 4th quarter change?</h2>
-    <p class="hint">Every finished regular-season game, grouped by the quality of the two teams. “Good team Q4” and “Weaker team Q4” show how many points each side scored in the 4th quarter on average, which tests whether better teams (deeper benches) finish stronger.</p>
+    <details class="how"><summary>How to read this</summary><p class="hint">Every finished regular-season game, grouped by the quality of the two teams. “Good team Q4” and “Weaker team Q4” show how many points each side scored in the 4th quarter on average, which tests whether better teams (deeper benches) finish stronger.</p></details>
     <div id="types"><div class="empty-state">Loading…</div></div>
   </div>
 
   <div class="card">
     <h2>Team profiles</h2>
-    <p class="hint">Averages per game. “Q4 net” = points scored minus points allowed in the 4th quarter alone (positive = wins the 4th). “Q4 share” = 4th-quarter points as a percent of the team’s game points. Click a column heading to sort.</p>
+    <details class="how"><summary>How to read this</summary><p class="hint">Averages per game. “Q4 net” = points scored minus points allowed in the 4th quarter alone (positive = wins the 4th). “Q4 share” = 4th-quarter points as a percent of the team’s game points. Click a column heading to sort.</p></details>
     <div id="teams"><div class="empty-state">Loading…</div></div>
   </div>
   <div class="status" id="updated"></div>
@@ -84,25 +106,22 @@ function render(P, TS, todays, failed, standingsOk){
   document.getElementById('status').innerHTML = `${teams.reduce((s, p) => s + p.g, 0) / 2} finished regular-season games · ESPN standings ${standingsOk ? 'loaded' : '<b>unavailable — using records from games</b>'}${failed ? ` · <b>${failed} day(s) failed to load</b>` : ''}`;
   document.getElementById('rangeSub').textContent = 'Live from ESPN · quarter-by-quarter scoring';
 
-  // tonight: one verdict per game
+  // tonight: one compact block per game (works well on a phone)
   const rows = todays.filter(g => g.state !== 'post' && !g.playoff).map(g => {
     const pr = project(P, TS, g.away, g.home);
     const A = P[g.away], B = P[g.home];
     const rule = L.rulePick(g.details, g.away, g.home);
     const v = L.verdict(rule, pr ? pr.total : null, g.line);
-    const gap = v.gap;
     const col = { BET:'#fff;background:#0a7d3f', LEAN:'#0a7d3f;background:rgba(10,125,63,.14)', SKIP:'#6b5200;background:#fff2c9', NONE:'var(--sub);background:#eceff5' }[v.code];
-    const det = pr ? `<details><summary style="cursor:pointer;color:var(--accent);font-size:11px">details</summary><div style="font-size:11.5px;color:var(--sub);line-height:1.6;padding:4px 0">
-      ${g.away} <span class="tier t-${A.tier}">${A.tier}</span> #${A.rank} · ${g.home} <span class="tier t-${B.tier}">${B.tier}</span> #${B.rank}<br>
-      ${TYPE_NAMES[pr.type]} · Q1–Q3 est ${f1(pr.f3)} + Q4 est ${f1(pr.q4)}<br>${v.why}</div></details>` : '';
-    return `<tr><td class="l">${g.away} @ ${g.home} <small style="color:var(--sub)">${g.text.replace(/^\d+\/\d+ - /, '')}</small>${det}</td>
-      <td>${g.line != null ? g.line : '–'}</td>
-      <td class="l">${rule ? (rule === 'Over' ? '<span class="over">Over</span>' : '<span class="under">Under</span>') : '<span class="none">–</span>'}</td>
-      <td>${pr ? '<b>' + f1(pr.total) + '</b>' : '–'}<br><small style="color:var(--sub)">${gap != null ? (gap > 0 ? '+' : '') + gap.toFixed(1) : ''}</small></td>
-      <td class="l"><span style="display:inline-block;padding:3px 10px;border-radius:6px;font-weight:700;font-family:var(--font-ui);color:${col}">${v.label}</span></td></tr>`;
+    const gap = v.gap != null ? ` (${v.gap > 0 ? '+' : ''}${v.gap.toFixed(1)})` : '';
+    const det = pr ? `<details><summary>details</summary><div class="g3">
+      ${g.away} <span class="tier t-${A.tier}">${A.tier}</span> #${A.rank} · ${g.home} <span class="tier t-${B.tier}">${B.tier}</span> #${B.rank} · ${TYPE_NAMES[pr.type]}<br>
+      Q1–Q3 est ${f1(pr.f3)} + Q4 est ${f1(pr.q4)}<br>${v.why}</div></details>` : '';
+    return `<div class="g"><div class="g1"><span><b>${g.away} @ ${g.home}</b><small>${g.text.replace(/^\d+\/\d+ - /, '')}</small></span><span class="vb" style="color:${col}">${v.label}</span></div>
+      <div class="g2">Rule ${rule ? (rule === 'Over' ? '<span class="over">Over</span>' : '<span class="under">Under</span>') : '–'} · Model ${pr ? '<b>' + f1(pr.total) + '</b>' : '–'} · Book ${g.line != null ? g.line : '–'}${gap}</div>${det}</div>`;
   });
   document.getElementById('tonight').innerHTML = rows.length
-    ? `<table><tr><th class="l">Game</th><th>Book total</th><th class="l">Rule</th><th>Model total<br>(gap)</th><th class="l">Verdict</th></tr>${rows.join('')}</table>`
+    ? rows.join('')
     : '<div class="empty-state">No upcoming or live games on today’s slate.</div>';
 
   // matchup types
