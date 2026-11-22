@@ -101,7 +101,7 @@ async function run(){
   // 2. deployed files
   group("2. Files on your site");
   const files = [
-    ["nba/nba-live.html", ["rulePick", "j5Pre", "lock-tag", "cleanHistory", "matchup-tag"], "live sheet with rule, J5 auto-fill and lock"],
+    ["nba/nba-live.html", ["rulePick", "j5Pre", "lock-tag", "cleanHistory", "verdict-row", "loadInjuries"], "live sheet with rule, J5 auto-fill and lock"],
     ["history.html", ["j5Pre", "Rule @ lock", "mtype"], "History with rule, pre-game J5 and lock columns"],
     ["nba/nba-live-archive.html", ["save-cells"], "Day archive with the Save changes button"],
     ["nba/nba-parlays.html", ["minWin"], "Parlay page with the coin-flip filter"],
@@ -167,6 +167,10 @@ async function run(){
   const mx = await sb.from("games").select("game_id,lock_type,lock_away_rank,lock_home_rank").eq("league", "NBA").limit(1);
   if(mx.error) add("FAIL", "Matchup columns are missing from the games table", mx.error.message + " — run 2-run-this-in-supabase.sql in Supabase.");
   else add("PASS", "Games table has the matchup columns");
+
+  const ij = await sb.from("games").select("game_id,lock_injuries").eq("league", "NBA").limit(1);
+  if(ij.error) add("FAIL", "Injuries column is missing from the games table", ij.error.message + " — run 3-run-this-in-supabase.sql in Supabase.");
+  else add("PASS", "Games table has the injuries column");
 
   const last = await sb.from("games").select("updated_at").eq("league", "NBA").order("updated_at", { ascending: false }).limit(1);
   if(last.error || !last.data || !last.data.length) add("FAIL", "No NBA rows in the games table", "The server job may not be running.");
