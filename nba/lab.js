@@ -181,7 +181,7 @@ function verdict(rule, proj, ref){
 }
 
 // ---------- injuries (ESPN injuries feed + player minutes from the players table) ----------
-const INJ_KEY = 'nba_inj_v1', INJ_URL = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/injuries', PL_KEY = 'nba_players_v1';
+const INJ_KEY = 'nba_inj_v1', INJ_URL = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/injuries', PL_KEY = 'nba_players_v2';
 let PLAYERS = null;   // { playerId: [gp, starts, minutes, points] } built by the server job from box scores
 async function loadPlayers(){
   try{
@@ -192,9 +192,9 @@ async function loadPlayers(){
   try{
     const sb = window.cloud && window.cloud.sb; if(!sb) return null;
     if(window.cloud.whenApproved) await Promise.race([ window.cloud.whenApproved(), new Promise(r => setTimeout(r, 8000)) ]);
-    const r = await sb.from('players').select('player_id,gp,starts,min,pts').eq('league', 'NBA').limit(2000);
+    const r = await sb.from('players').select('player_id,gp,starts,min,pts,team').eq('league', 'NBA').limit(2000);
     if(!r || r.error || !Array.isArray(r.data) || !r.data.length) return null;
-    const data = {}; r.data.forEach(x => { data[x.player_id] = [Number(x.gp), Number(x.starts), Number(x.min), Number(x.pts)]; });
+    const data = {}; r.data.forEach(x => { data[x.player_id] = [Number(x.gp), Number(x.starts), Number(x.min), Number(x.pts), abbr3(x.team || '')]; });
     PLAYERS = data;
     try{ localStorage.setItem(PL_KEY, JSON.stringify({ t: Date.now(), data })); }catch(e){}
     return PLAYERS;
@@ -257,6 +257,59 @@ function injText(snap, away, home){
   const one = (ab, e) => `${ab}: ` + ((e.out || []).length ? e.out.map(d).join(', ') + ' out' : 'no one out') + ((e.dtd || []).length ? ' · ' + e.dtd.join(', ') + ' day-to-day' : '');
   return one(away, snap.a) + '  |  ' + one(home, snap.h);
 }
+
+// ---------- who is on the court right now (from ESPN's summary: box score starters + substitution plays) ----------
+// Returns { teams: [{ abbr, onCourt: [names], starters: n, bench: [names] }], ok } or null.
+function courtFromSummary(d){
+  try{
+    const ct = {}, byTeam = {};
+    ((d.boxscore && d.boxscore.players) || []).forEach(t => {
+      const id = String(t.team.id), st = (t.statistics || [])[0]; if(!st) return;
+      ct[id] = { abbr: abbr3(t.team.abbreviation), on: new Set(), starters: new Set(), names: {} };
+      (st.athletes || []).forEach(a => {
+        const aid = String(a.athlete.id); ct[id].names[aid] = a.athlete.shortName || a.athlete.displayName;
+        if(a.starter){ ct[id].on.add(aid); ct[id].starters.add(aid); }
+      });
+      byTeam[id] = true;
+    });
+    const plays = (d.plays || []).slice().sort((a, b) => Number(a.sequenceNumber) - Number(b.sequenceNumber));
+    plays.forEach(p => {
+      if(!p.type || p.type.text !== 'Substitution' || !p.team || !p.participants || p.participants.length < 2) return;
+      const t = ct[String(p.team.id)]; if(!t) return;
+      t.on.delete(String(p.participants[1].athlete.id));
+      t.on.add(String(p.participants[0].athlete.id));
+    });
+    const teams = Object.values(ct).map(t => {
+      const on = [...t.on];
+      return { abbr: t.abbr, ids: on, n: on.length, starters: on.filter(i => t.starters.has(i)).length,
+               bench: on.filter(i => !t.starters.has(i)).map(i => t.names[i] || '?'), onCourt: on.map(i => t.names[i] || '?') };
+    });
+    if(teams.length !== 2) return null;
+    return { teams, ok: teams.every(t => t.n === 5) };
+  }catch(e){ return null; }
+}
+
+// ---------- lineup projection: points the five players on the floor are expected to score in the time left ----------
+// Each player's scoring rate = season points / minutes (from the players table). The five on the floor are added up and
+// multiplied by the minutes left; beyond the next 6 minutes the team's usual scoring pace is used.
+function lineupProjection(court, P, awayAbbr, homeAbbr, scoreA, scoreH, period, minsLeftInPeriod){
+  if(!court || !PLAYERS) return null;
+  const remaining = Math.max(0, (period >= 4 ? 0 : (4 - period) * 12) + minsLeftInPeriod);
+  if(remaining <= 0) return null;
+  const lineMin = Math.min(6, remaining), restMin = remaining - lineMin;
+  const one = (abbr, side) => {
+    const t = court.teams.find(x => x.abbr === abbr); if(!t || !P[abbr]) return null;
+    const teamPpm = P[abbr].ppg / 48;
+    let known = 0, sum = 0;
+    t.ids.forEach(id => { const st = PLAYERS[id]; if(st && st[0] >= 3 && st[2] > 0){ sum += st[3] / st[2]; known++; } else sum += teamPpm / 5 * 0.8; });
+    const lineRate = sum;                        // points per minute with these five
+    const add = lineRate * lineMin + teamPpm * restMin;
+    return { abbr, rate: lineRate, teamPpm, add, known, bench: t.bench, starters: t.starters };
+  };
+  const a = one(awayAbbr), h = one(homeAbbr); if(!a || !h) return null;
+  return { a, h, remaining, final: scoreA + scoreH + a.add + h.add, scoreNow: scoreA + scoreH };
+}
+
 let CACHEDLAB = null, CACHEDAT = 0, PENDING = null;
 async function load(force){
   if(!force && CACHEDLAB && Date.now() - CACHEDAT < 5 * 60 * 1000) return CACHEDLAB;
@@ -275,5 +328,5 @@ async function load(force){
   })();
   return PENDING;
 }
-window.NBALab = { load, project, typeOf, rulePick, verdict, loadInjuries, loadPlayers, injSnapshot, injWarn, injWarnText, coreOut, injText, parseDay, getJson, f1, TYPE_NAMES, TYPE_ORDER, BASE, sportsDay, ymd, abbr3 };
+window.NBALab = { courtFromSummary, lineupProjection, load, project, typeOf, rulePick, verdict, loadInjuries, loadPlayers, injSnapshot, injWarn, injWarnText, coreOut, injText, parseDay, getJson, f1, TYPE_NAMES, TYPE_ORDER, BASE, sportsDay, ymd, abbr3 };
 })();

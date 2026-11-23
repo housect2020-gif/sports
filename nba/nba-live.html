@@ -385,6 +385,9 @@
     <span id="dayNote" style="margin-left:8px;color:#5f6368;"></span>
   </div>
 
+  <div id="expandBar" style="display:flex;justify-content:flex-end;gap:8px;padding:2px 4px 4px">
+    <button id="expandAllBtn" type="button" style="font-size:12px;padding:3px 12px;border:1px solid #1d428a;border-radius:6px;background:#fff;color:#1d428a;font-weight:600;cursor:pointer">Expand all</button>
+  </div>
   <div class="sheet-scroll">
     <table>
       <colgroup id="mainColgroup">
@@ -1290,6 +1293,59 @@ function recalcGame(gid){
   }
 }
 
+// ---- who is on the court right now (starters vs bench), from ESPN's box score + substitutions ----
+async function fetchCourt(gid){
+  const eventId = gid.slice(1);
+  const target = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${eventId}`;
+  for(const wrap of PROXIES){
+    try{
+      const res = await fetch(wrap(target + "&_=" + Date.now()), { cache: "no-store" });
+      if(!res.ok) continue;
+      const c = window.NBALab ? window.NBALab.courtFromSummary(await res.json()) : null;
+      if(c) return c;
+    }catch(e){}
+  }
+  return null;
+}
+function paintLineup(gid, vEl){
+  const st = gameState[gid]; if(!st || !vEl) return;
+  const old = vEl.querySelector(".lineup-line"); if(old) old.remove();
+  if(!st.lineupOpen || !st.ctx) return;
+  const NL = window.NBALab, LB = window.__lab, x = st.ctx;
+  const d = document.createElement("div");
+  d.className = "lineup-line";
+  d.style.cssText = "font-size:12px;padding:3px 8px;margin:2px 4px 4px;background:#eef3ff;border-left:3px solid #1d428a;border-radius:4px;white-space:normal;color:#14213b";
+  let txt;
+  if(!st.court) txt = "Lineup projection: waiting for the box score…";
+  else if(!LB || !NL) txt = "Lineup projection: Matchup Lab data is still loading, try again in a minute.";
+  else {
+    const r = NL.lineupProjection(st.court, LB.P, x.A3, x.H3, x.scoreA, x.scoreH, x.period, x.mins == null ? 0 : x.mins);
+    if(!r) txt = "Lineup projection: needs the player stats table (run the players update) and a game in progress.";
+    else {
+      const f = r.final, gap = x.refTotal != null ? f - x.refTotal : null;
+      const call = gap == null ? "" : (gap >= 3 ? "  →  OVER" : (gap <= -3 ? "  →  UNDER" : "  →  close to the line"));
+      const side = t => `${t.abbr} +${t.add.toFixed(1)} (${t.starters}/5 starters, ${t.rate.toFixed(2)} pts/min)`;
+      txt = `Lineup projection with the players on the floor now: ${side(r.a)} · ${side(r.h)} in the next ${r.remaining.toFixed(1)} min → final ≈ ${f.toFixed(1)} (now ${r.scoreNow})` +
+            (gap != null ? ` · Book ${x.refTotal} (${gap > 0 ? "+" : ""}${gap.toFixed(1)})${call}` : "") +
+            (r.a.known < 5 || r.h.known < 5 ? "  ·  some players have too few games, team average used" : "");
+    }
+  }
+  d.textContent = txt;
+  d.title = "Each player's season points per minute added up for the five on the floor, times the minutes left (next 6 minutes at that lineup, the rest at the team's usual pace). An estimate: substitutions change it.";
+  vEl.appendChild(d);
+}
+function paintCourt(gid, vEl){
+  const st = gameState[gid]; if(!st || !st.court || !vEl) return;
+  const c = st.court;
+  const old = vEl.querySelector(".court-line"); if(old) old.remove();
+  const bench = c.teams.some(t => t.starters <= 2);
+  const d = document.createElement("div");
+  d.className = "court-line";
+  d.style.cssText = "font-size:11px;padding:0 6px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:" + (bench ? "#8a4b00" : "#444") + (bench ? ";font-weight:600" : "");
+  d.textContent = (bench ? "⚠ Bench lineup · " : "On court · ") + c.teams.map(t => `${t.abbr} ${t.starters}/5 starters` + (t.bench.length ? ` (bench: ${t.bench.join(", ")})` : "")).join("  |  ") + (c.margin != null ? `  ·  margin ${c.margin}` : "");
+  d.title = "Who is on the floor right now, from ESPN's box score and substitutions. When a team has 2 or fewer starters on the floor late, the game is often in bench / garbage-time mode.";
+  vEl.appendChild(d);
+}
 function applyGameData(gid, away, home, status, overUnder, seasonType, gameDateIso, cloudPreOdds, rule, lock){
   ensureGameBlock(gid);
   const st = gameState[gid];
@@ -1533,8 +1589,42 @@ function applyGameData(gid, away, home, status, overUnder, seasonType, gameDateI
         if(st0.injOpen && status.state === "pre"){ ib.textContent = "Checking…"; try{ const d = await NL.loadInjuries(true); if(d) window.__inj = d; }catch(e){} }
         applyGameData(gid, away, home, status, overUnder, seasonType, gameDateIso, cloudPreOdds, rule, lock);
       };
-      wrap.append(badge, txt, ib, btn);
+      const lb = document.createElement("button");
+      lb.type = "button";
+      lb.textContent = "Lineup";
+      lb.title = "Projection from the five players on the floor right now";
+      lb.style.cssText = "font-size:10.5px;padding:1px 8px;flex:none;border:1px solid #c8cdd8;border-radius:6px;background:#fff;cursor:pointer;color:#1d428a";
+      lb.onclick = async () => {
+        st0.lineupOpen = !st0.lineupOpen;
+        if(st0.lineupOpen){
+          lb.textContent = "Checking…";
+          const c = await fetchCourt(gid);
+          if(c){ if(st0.court){ c.margin = st0.court.margin; } st0.court = c; st0.courtAt = Date.now(); }
+        }
+        lb.textContent = "Lineup";
+        const v2 = eg(gid, "verdict"); if(v2){ paintCourt(gid, v2); paintLineup(gid, v2); }
+      };
+      st0.ctx = { A3, H3, refTotal, scoreA: away.q1 + away.q2 + away.q3 + away.q4, scoreH: home.q1 + home.q2 + home.q3 + home.q4, period: status.period, mins: parseClockRemaining(status.clock) };
+      if(status.state === "in") wrap.append(badge, txt, lb, ib, btn); else wrap.append(badge, txt, ib, btn);
       vEl.appendChild(wrap);
+      paintCourt(gid, vEl);
+      paintLineup(gid, vEl);
+      if(status.state === "in" && status.period >= 3 && !st0.courtBusy && (!st0.courtAt || Date.now() - st0.courtAt > 60000)){
+        st0.courtBusy = true;
+        const remNow = parseClockRemaining(status.clock), perNow = status.period, scoreDiff = Math.abs((away.q1 + away.q2 + away.q3 + away.q4) - (home.q1 + home.q2 + home.q3 + home.q4));
+        fetchCourt(gid).then(c => {
+          st0.courtBusy = false; st0.courtAt = Date.now();
+          if(!c) return;
+          c.margin = scoreDiff; c.period = perNow; c.clock = status.clock;
+          st0.court = c;
+          const v2 = eg(gid, "verdict"); if(v2) paintCourt(gid, v2);
+          // keep what the court looked like at the 6:00 mark of Q4 in history
+          const sh2 = loadHistory()[gid] || {};
+          if(perNow === 4 && remNow != null && remNow <= 6.6 && !sh2.court6 && c.ok){
+            updateHistory(gid, { court6: { t: status.clock, m: scoreDiff, teams: c.teams.map(t => ({ a: t.abbr, s: t.starters, b: t.bench })) } });
+          }
+        }).catch(() => { st0.courtBusy = false; st0.courtAt = Date.now(); });
+      }
       if(st0.injOpen){
         const pn = document.createElement("div");
         pn.style.cssText = "font-size:11px;color:#444;padding:0 6px 4px;white-space:normal";
@@ -2637,6 +2727,21 @@ fetchScores();
     try{ if(window.NBALab){ const l = await window.NBALab.load(); if(l){ const first = !window.__lab; window.__lab = l; if(first && typeof fetchScores === "function") fetchScores(); } } }catch(e){}
   }
   setTimeout(go, 3000); setInterval(go, 10 * 60 * 1000);
+})();
+
+// Expand / collapse the Details of every game at once.
+(function(){
+  const b = document.getElementById("expandAllBtn"); if(!b) return;
+  let expanded = false;
+  b.onclick = () => {
+    expanded = !expanded;
+    document.querySelectorAll(".verdict-row button").forEach(x => {
+      const t = x.textContent;
+      if(expanded && t.startsWith("Details")) x.click();
+      if(!expanded && t.startsWith("Hide")) x.click();
+    });
+    b.textContent = expanded ? "Collapse all" : "Expand all";
+  };
 })();
 </script>
 </body>
