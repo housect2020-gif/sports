@@ -66,9 +66,9 @@
       <thead><tr>
         <th class="l">Date</th><th class="l">Game</th><th>Final</th><th>Total</th>
         <th>Pre-game O/U</th><th>vs pre-game</th>
-        <th>Type</th><th>Out</th><th>Favorite (spread)</th><th>Rule pick</th><th>Rule @ lock</th><th>My odds @ Q4 6:00</th><th>vs my odds</th><th>My pick (PPM)</th><th>My pick (Cons.)</th><th>My K5 (final)</th><th>My J5 (pre-game | 6:00 | final)</th><th>L4 (6:00 | final)</th><th>My proj.</th>
+        <th>Type</th><th>Out</th><th>Starters on court @6:00</th><th>Favorite (spread)</th><th>Rule pick</th><th>Rule @ lock</th><th>My odds @ Q4 6:00</th><th>vs my odds</th><th>My pick (PPM)</th><th>My pick (Cons.)</th><th>My K5 (final)</th><th>My J5 (pre-game | 6:00 | final)</th><th>L4 (6:00 | final)</th><th>My proj.</th>
       </tr></thead>
-      <tbody id="body"><tr><td colspan="17" style="color:#80868b">Loading…</td></tr></tbody>
+      <tbody id="body"><tr><td colspan="20" style="color:#80868b">Loading…</td></tr></tbody>
     </table>
   </div>
   <div class="note" id="note"></div>
@@ -122,7 +122,7 @@ async function load(){
   await window.cloud.whenApproved();
   const sb = window.cloud.sb;
   const league = $("league").value;
-  $("body").innerHTML = '<tr><td colspan="17" style="color:#80868b">Loading…</td></tr>';
+  $("body").innerHTML = '<tr><td colspan="20" style="color:#80868b">Loading…</td></tr>';
   let all = [], from = 0;
   while(true){
     const q = cols => sb.from("games").select(cols).eq("league", league).eq("state", "post")
@@ -132,7 +132,7 @@ async function load(){
     if(r.error) r = await q("game_id,game_date,start_time,away,home,season_type,pre_odds,final_away,final_home,pre_favorite,pre_spread,rule_pick,pre_home_ml,pre_away_ml,lock_pick,lock_total,lock_spread,lock_favorite,lock_at,lock_late");   // matchup columns not added yet
     if(r.error) r = await q("game_id,game_date,start_time,away,home,season_type,pre_odds,final_away,final_home,pre_favorite,pre_spread,rule_pick,pre_home_ml,pre_away_ml");   // lock columns not added yet
     if(r.error) r = await q("game_id,game_date,start_time,away,home,season_type,pre_odds,final_away,final_home");   // spread columns not added yet
-    if(r.error){ $("body").innerHTML = `<tr><td colspan="17">${r.error.message}</td></tr>`; return; }
+    if(r.error){ $("body").innerHTML = `<tr><td colspan="20">${r.error.message}</td></tr>`; return; }
     all = all.concat(r.data || []);
     if(!r.data || r.data.length < 1000) break;
     from += 1000;
@@ -177,13 +177,15 @@ function render(){
     const injN = inj ? injA + injH : null;
     const nmI = o => typeof o === "string" ? o : (o.core === true ? o.n + " (core)" : (o.core === false ? o.n + " (bench)" : o.n));
     const injTxt = inj ? `${a3(g.away)}: ${inj.a.out.map(nmI).join(", ") || "none"} | ${a3(g.home)}: ${inj.h.out.map(nmI).join(", ") || "none"}` : "";
+    const c6 = m.court6 ? m.court6.teams.map(t => `${a3(t.a)} ${t.s}/5`).join(" · ") + (m.court6.m != null ? ` (margin ${m.court6.m})` : "") : "";
+    const c6bench = m.court6 ? m.court6.teams.some(t => t.s <= 2) : false;
     const mtype = g.lock_type || m.matchType || null;
     const mproj = m.matchProj != null ? Number(m.matchProj) : null;
     const vref = lockTotal != null ? lockTotal : (g.pre_odds != null ? Number(g.pre_odds) : null);
     const vrule = (lk && lk.pick) || g.rule_pick || null;
     const vd = verdictOf(vrule, mproj, vref);
     const vres = vref != null ? resultOf(total, vref) : "";
-    return { ...g, inj, injA, injH, injN, injTxt, mtype, mproj, vd, vres, vrule, lock_at: lk ? lk.at : null, lock_pick: lk ? lk.pick : null, lock_spread: lk ? lk.spread : null, lockSrc: lk ? lk.src : null, lockTotal, vsLock, lockMins, lockLate: !!(lk && lk.late),
+    return { ...g, c6, c6bench, inj, injA, injH, injN, injTxt, mtype, mproj, vd, vres, vrule, lock_at: lk ? lk.at : null, lock_pick: lk ? lk.pick : null, lock_spread: lk ? lk.spread : null, lockSrc: lk ? lk.src : null, lockTotal, vsLock, lockMins, lockLate: !!(lk && lk.late),
              lockHit: (lk && lk.pick && vsLock && vsLock !== "Push") ? (lk.pick === vsLock ? "Y" : "N") : null, total, ruleHit: (g.rule_pick && resultOf(total, g.pre_odds) && resultOf(total, g.pre_odds) !== 'Push') ? (g.rule_pick === resultOf(total, g.pre_odds) ? 'Y' : 'N') : null,
              favSide: g.pre_favorite ? (g.pre_favorite === g.home || a3(g.pre_favorite) === a3(g.home) ? 'home' : 'road') : null, vsPre: resultOf(total, g.pre_odds), my5: m.odds5min, vs5: resultOf(total, m.odds5min),
              pPpm: m.pick5Ppm, pCons: m.pick5Cons, proj: m.projTotal5, j5p: m.j5Pre, j5pAuto: m.j5PreAuto, j5: m.j5At6, l4: m.l4At6, k5f: m.k5Final, j5f: m.j5Final, l4f: m.l4Final,
@@ -295,12 +297,13 @@ function render(){
     <td>${r.final_away}–${r.final_home}</td><td><b>${r.total}</b></td>
     <td>${f1(r.pre_odds)}</td><td>${resCell(r.vsPre)}</td>
     <td>${r.mtype || '–'}</td>
+    <td${r.c6bench ? ' style="color:#8a4b00;font-weight:600"' : ''}>${r.c6 ? (r.c6bench ? '⚠ ' : '') + r.c6 : '–'}</td>
     <td title="${(r.injTxt || '').replace(/"/g, '')}">${r.injN == null ? '–' : (r.injN >= 1 ? '⚠ ' : '') + r.injA + ' · ' + r.injH}</td>
     <td>${r.pre_favorite ? a3(r.pre_favorite) + (r.pre_spread != null ? ' −' + r.pre_spread : '') + ' <span style="color:#80868b">(' + (r.favSide || '') + ')</span>' : '–'}</td><td>${pickCell(r.rule_pick, r.vsPre)}</td>
     <td>${r.lock_at ? pickCell(r.lock_pick, r.vsLock) + ' <span style="color:#80868b">@ ' + f1(r.lockTotal) + '</span>' + (r.lockLate ? ' <span class="badge" title="No saved line in the last hour before tip-off, so this is the last line before the game. Left out of the scorecard.">LATE</span>' : (r.lockMins != null ? ' <span style="color:#80868b" title="' + (r.lockSrc === 'sheet' ? 'Saved by your live sheet' : 'Saved by the server job') + '">(' + Math.max(r.lockMins, 0) + ' min' + (r.lockSrc === 'sheet' ? ', sheet' : '') + ')</span>' : '')) : '–'}</td>
     <td>${f1(r.my5)}</td><td>${resCell(r.vs5)}</td>
     <td>${pickCell(r.pPpm, r.vs5)}</td><td>${pickCell(r.pCons, r.vs5)}</td><td>${f1(r.k5f)}</td><td>${pickCell(r.j5p, r.vs5)}${r.j5pAuto ? ' <span title="filled in by the rule" style="color:#80868b">(rule)</span>' : ''} | ${pickCell(r.j5, r.vs5)} | ${pickCell(r.j5f, r.vsK5f)}</td><td>${f1(r.l4)}${r.l4pick ? " " + pickCell(r.l4pick, r.vs5) : ""} | ${f1(r.l4f)}${r.l4fpick ? " " + pickCell(r.l4fpick, r.vsK5f) : ""}</td><td>${f1(r.proj)}</td>
-  </tr>`).join("") || '<tr><td colspan="16" style="color:#80868b">No finished games match yet. The server job saves them as games end.</td></tr>';
+  </tr>`).join("") || '<tr><td colspan="20" style="color:#80868b">No finished games match yet. The server job saves them as games end.</td></tr>';
   $("note").textContent = $("league").value === "NBA"
     ? "Game results and pre-game lines are shared. The “My …” columns are your own entries and picks, saved from the live sheet while it was open." + ppmNote.long
     : "Game results and pre-game lines are shared. “My …” columns are only recorded for NBA.";
@@ -308,11 +311,11 @@ function render(){
 
 function exportCsv(){
   const q = v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
-  const head = ["Date","Away","Home","AwayScore","HomeScore","Total","Type","PreGameOU","VsPreGame","Favorite","Spread","FavoriteSide","RulePick","MatchType","OutAway","OutHome","OutNames","LockPick","LockTotal","LockSpread","LockMinsBefore","LockLate","LockSource","VsLock","MyOddsAtQ4_6min","VsMyOdds","MyPickPPM","MyPickConsensus","MyK5Final","MyJ5Pre","MyJ5At6","MyJ5Final","L4At6","L4Final","MyProjTotal"];
+  const head = ["Date","Away","Home","AwayScore","HomeScore","Total","Type","PreGameOU","VsPreGame","Favorite","Spread","FavoriteSide","RulePick","MatchType","OutAway","OutHome","OutNames","CourtAt6","LockPick","LockTotal","LockSpread","LockMinsBefore","LockLate","LockSource","VsLock","MyOddsAtQ4_6min","VsMyOdds","MyPickPPM","MyPickConsensus","MyK5Final","MyJ5Pre","MyJ5At6","MyJ5Final","L4At6","L4Final","MyProjTotal"];
   const lines = [head.join(",")].concat(VIEW.map(r => [
     r.game_date, a3(r.away), a3(r.home), r.final_away, r.final_home, r.total,
     r.season_type === 1 ? "PRE" : (r.season_type === 3 ? "PLAYOFFS" : "REG"),
-    r.pre_odds, r.vsPre, r.pre_favorite ? a3(r.pre_favorite) : '', r.pre_spread, r.favSide, r.rule_pick, r.mtype, r.injA, r.injH, r.injTxt, r.lock_pick, r.lockTotal, r.lock_spread, r.lockMins, r.lock_at ? (r.lockLate ? 'late' : 'on time') : '', r.lockSrc, r.vsLock, r.my5, r.vs5, r.pPpm, r.pCons, r.k5f, r.j5p, r.j5, r.j5f, r.l4, r.l4f, r.proj
+    r.pre_odds, r.vsPre, r.pre_favorite ? a3(r.pre_favorite) : '', r.pre_spread, r.favSide, r.rule_pick, r.mtype, r.injA, r.injH, r.injTxt, r.c6, r.lock_pick, r.lockTotal, r.lock_spread, r.lockMins, r.lock_at ? (r.lockLate ? 'late' : 'on time') : '', r.lockSrc, r.vsLock, r.my5, r.vs5, r.pPpm, r.pCons, r.k5f, r.j5p, r.j5, r.j5f, r.l4, r.l4f, r.proj
   ].map(q).join(",")));
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
