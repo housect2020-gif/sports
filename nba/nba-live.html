@@ -429,7 +429,7 @@
         <thead><tr>
           <th>Date</th><th>Game</th><th>Type</th>
           <th>Pre-game O/U</th><th>Your odds at Q4 6:00</th><th>Final total</th>
-          <th>Final vs pre-game</th><th>Final vs 6:00 odds</th><th>Pick @6:00 PPM</th><th>Pick @6:00 Cons.</th>
+          <th>Final vs pre-game</th><th>Rule result</th><th>Model result</th><th>Final vs 6:00 odds</th><th>Pick @6:00 PPM</th><th>Pick @6:00 Cons.</th>
           <th>Proj. away</th><th>Proj. home</th><th>Proj. total</th>
         </tr></thead>
         <tbody id="histBody"></tbody>
@@ -638,27 +638,84 @@ function renderHistory(){
     return `<span style="color:${c};font-weight:700">${pick}</span>${mark}`;
   };
   body.innerHTML = rows.map(r => {
-    const vsPre = overUnderResult(r.finalTotal, r.preOdds);
+    const book = r.lockTotal != null ? r.lockTotal : r.preOdds;
+    const vsPre = overUnderResult(r.finalTotal, book);
+    const modelSide = (r.matchProj != null && book != null && Math.abs(r.matchProj - book) >= 1) ? (r.matchProj > book ? "Over" : "Under") : null;
+    const rulePk = r.rulePick || r.lockPick || null;
     const vs5 = overUnderResult(r.finalTotal, r.odds5min);
     return `<tr>
       <td>${r.date || "–"}</td>
       <td style="text-align:left">${r.away || "?"} @ ${r.home || "?"}</td>
       <td>${typeLabel(r.seasonType)}</td>
-      <td>${f1(r.preOdds)}</td><td>${f1(r.odds5min)}</td>
+      <td>${f1(book)}</td><td>${f1(r.odds5min)}</td>
       <td>${r.finalTotal == null ? "–" : r.finalTotal}</td>
-      <td>${resCell(vsPre)}</td><td>${resCell(vs5)}</td>
+      <td>${resCell(vsPre)}</td><td>${pickCell(rulePk, vsPre)}</td><td>${pickCell(modelSide, vsPre)}</td><td>${resCell(vs5)}</td>
       <td>${pickCell(r.pick5Ppm, vs5)}</td><td>${pickCell(r.pick5Cons, vs5)}</td>
       <td>${f1(r.projAway5)}</td><td>${f1(r.projHome5)}</td><td>${f1(r.projTotal5)}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="13" style="color:#80868b">No games recorded yet.</td></tr>`;
+  }).join("") || `<tr><td colspan="15" style="color:#80868b">No games recorded yet.</td></tr>`;
+}
+
+// ---------- History backfill: games that finished while this page was closed ----------
+// For the last few days, fills in the final score, the book total, the Rule pick and the model total for any game
+// that has no final score in your history yet, so the Rule/Model/book results are kept even for games you did not play.
+async function backfillHistory(){
+  if(window.__bfRunning) return; window.__bfRunning = true;
+  try{
+    const NL = window.NBALab;
+    const base = new Date(Date.now() - 4*3600*1000);
+    for(let back = 1; back <= 4; back++){
+      const d = new Date(base.getTime() - back*86400000);
+      const ds = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(d).replaceAll("-", "");
+      const target = `${SCOREBOARD_URL}?dates=${ds}`;
+      let events = null;
+      for(const wrap of PROXIES){
+        try{ const res = await fetch(wrap(target + "&_=" + Date.now()), { cache: "no-store" }); if(!res.ok) continue; events = (await res.json()).events || []; break; }catch(e){}
+      }
+      if(!events) continue;
+      const done = events.filter(ev => { const c = ev.competitions && ev.competitions[0]; return c && c.status && c.status.type && c.status.type.state === "post"; });
+      if(!done.length) continue;
+      const h = loadHistory();
+      const need = done.filter(ev => { const r = h["g" + ev.id]; return !r || r.finalTotal == null || (r.rulePick == null && r.lockPick == null) || (r.preOdds == null && r.lockTotal == null); });
+      if(!need.length) continue;
+      let locks = {}, pre = {};
+      try{ if(window.cloud && window.cloud.fetchLocks) locks = await window.cloud.fetchLocks("NBA", need.map(e => e.id)); }catch(e){}
+      try{ if(window.cloud && window.cloud.fetchPreOdds) pre = await window.cloud.fetchPreOdds("NBA", need.map(e => e.id)); }catch(e){}
+      for(const ev of need){
+        let g; try{ g = parseEvent(ev); }catch(e){ continue; }
+        const gid = "g" + ev.id, cur = h[gid] || {};
+        const sum = t => (t.linescores || []).reduce((x, l) => x + (num(l.value) || 0), 0);
+        const fa = sum(g.away), fh = sum(g.home);
+        const lk = locks[ev.id];
+        const patch = { date: etDate(g.date), start: g.date, away: g.away.name, home: g.home.name, seasonType: g.seasonType || cur.seasonType || null };
+        if(cur.finalTotal == null && fa + fh > 0){ patch.finalAway = fa; patch.finalHome = fh; patch.finalTotal = fa + fh; }
+        if(cur.preOdds == null){
+          const po = pre[ev.id] != null ? pre[ev.id] : (lk && lk.total != null ? lk.total : g.overUnder);
+          if(typeof po === "number") patch.preOdds = po;
+        }
+        if(cur.rulePick == null){
+          if(g.rule){ patch.ruleFav = g.rule.fav; patch.ruleSpread = g.rule.spread; patch.ruleSide = g.rule.side; patch.rulePick = g.rule.pick; }
+          else if(lk && lk.pick){ patch.rulePick = lk.pick; }
+        }
+        if(cur.matchProj == null && NL && window.__lab){
+          try{
+            const pr = NL.project(window.__lab.P, window.__lab.TS, g.away.name, g.home.name);
+            if(pr){ patch.matchProj = pr.total; patch.matchType = pr.type; patch.matchBackfill = true; }
+          }catch(e){}
+        }
+        updateHistory(gid, patch);
+      }
+    }
+  }catch(e){ console.warn("history backfill", e); }
+  window.__bfRunning = false;
 }
 function exportHistoryCsv(){
-  const head = ["Date","Away","Home","Type","PreGameOU","YourOddsAtQ4_5min","FinalAway","FinalHome","FinalTotal","FinalVsPre","FinalVs5min","PickAt5_PPM","PickAt5_Consensus","ProjAway","ProjHome","ProjTotal"];
+  const head = ["Date","Away","Home","Type","PreGameOU","YourOddsAtQ4_5min","FinalAway","FinalHome","FinalTotal","FinalVsPre","RulePick","ModelProj","FinalVs5min","PickAt5_PPM","PickAt5_Consensus","ProjAway","ProjHome","ProjTotal"];
   const q = v => `"${String(v == null ? "" : v).replace(/"/g,'""')}"`;
   const lines = [head.join(",")].concat(historyRows().map(r => [
-    r.date, r.away, r.home, typeLabel(r.seasonType), r.preOdds, r.odds5min,
+    r.date, r.away, r.home, typeLabel(r.seasonType), (r.lockTotal != null ? r.lockTotal : r.preOdds), r.odds5min,
     r.finalAway, r.finalHome, r.finalTotal,
-    overUnderResult(r.finalTotal, r.preOdds), overUnderResult(r.finalTotal, r.odds5min),
+    overUnderResult(r.finalTotal, r.lockTotal != null ? r.lockTotal : r.preOdds), r.rulePick || r.lockPick, r.matchProj, overUnderResult(r.finalTotal, r.odds5min),
     r.pick5Ppm, r.pick5Cons,
     r.projAway5, r.projHome5, r.projTotal5
   ].map(q).join(",")));
@@ -2726,6 +2783,8 @@ $("dayPick").addEventListener("change", showDay);
 loadDays();
 
 fetchScores();
+setTimeout(() => { try{ (window.cloud && window.cloud.whenApproved ? window.cloud.whenApproved() : Promise.resolve()).then(() => setTimeout(backfillHistory, 3000)); }catch(e){ setTimeout(backfillHistory, 8000); } }, 2000);
+setTimeout(backfillHistory, 25000);
 
 // Matchup Lab data for the matchup tag on each game (loads in the background, refreshes every 10 minutes).
 (function(){
