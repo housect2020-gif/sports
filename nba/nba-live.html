@@ -676,7 +676,7 @@ async function backfillHistory(){
       const done = events.filter(ev => { const c = ev.competitions && ev.competitions[0]; return c && c.status && c.status.type && c.status.type.state === "post"; });
       if(!done.length) continue;
       const h = loadHistory();
-      const need = done.filter(ev => { const r = h["g" + ev.id]; return !r || r.finalTotal == null || (r.rulePick == null && r.lockPick == null) || (r.preOdds == null && r.lockTotal == null); });
+      const need = done.filter(ev => { const r = h["g" + ev.id]; return !r || r.finalTotal == null || (r.rulePick == null && r.lockPick == null) || (r.preOdds == null && r.lockTotal == null) || r.matchProj == null; });
       if(!need.length) continue;
       let locks = {}, pre = {};
       try{ if(window.cloud && window.cloud.fetchLocks) locks = await window.cloud.fetchLocks("NBA", need.map(e => e.id)); }catch(e){}
@@ -1635,7 +1635,15 @@ function applyGameData(gid, away, home, status, overUnder, seasonType, gameDateI
         proj != null ? `Model ${proj.toFixed(1)}` : "Model: loading…",
         refTotal != null ? `Book ${refTotal}${gapTxt}` : "Book: no line yet",
         type ? (NL.typeLabel(window.__lab.P, A3, H3, type)) : null,
-        warn ? NL.injWarnText(snap, A3, H3) : null
+        warn ? NL.injWarnText(snap, A3, H3) : null,
+        (status.state === "post" && refTotal != null) ? (() => {
+          const fin = away.q1 + away.q2 + away.q3 + away.q4 + (away.linescores || []).filter(l => l.period > 4).reduce((x, l) => x + num(l.value), 0) + home.q1 + home.q2 + home.q3 + home.q4 + (home.linescores || []).filter(l => l.period > 4).reduce((x, l) => x + num(l.value), 0);
+          if(!fin) return null;
+          const res = fin > refTotal ? "Over" : (fin < refTotal ? "Under" : "Push");
+          const mk = pk => !pk || res === "Push" ? "–" : (pk === res ? "✓" : "✗");
+          const ms = (proj != null && Math.abs(proj - refTotal) >= 1) ? (proj > refTotal ? "Over" : "Under") : null;
+          return `Final ${fin} (${res}) · Rule ${mk(rulePk)} · Model ${mk(ms)}`;
+        })() : null
       ].filter(Boolean).join("  ·  ") + (v.code === "SKIP" ? "  ·  mixed signals" : "");
       if(warn) txt.style.color = "#8a4b00";
       txt.title = v.why + "  |  BET = rule and model agree and the model is 3+ points from the book. LEAN = agree but closer. SKIP = they disagree. Experimental: the model has no track record yet.";
@@ -1668,6 +1676,15 @@ function applyGameData(gid, away, home, status, overUnder, seasonType, gameDateI
         lb.textContent = "Lineup";
         const v2 = eg(gid, "verdict"); if(v2){ paintCourt(gid, v2); paintLineup(gid, v2); }
       };
+      if(status.state === "post"){
+        updateHistory(gid, cur => {
+          const add = {};
+          if(cur.preOdds == null && cur.lockTotal == null && refTotal != null) add.preOdds = refTotal;
+          if(cur.rulePick == null && rulePk) add.rulePick = rulePk;
+          if(cur.matchProj == null && proj != null){ add.matchProj = proj; add.matchType = type; add.matchBackfill = true; }
+          return Object.keys(add).length ? add : null;
+        });
+      }
       st0.ctx = { A3, H3, refTotal, scoreA: away.q1 + away.q2 + away.q3 + away.q4, scoreH: home.q1 + home.q2 + home.q3 + home.q4, period: status.period, mins: parseClockRemaining(status.clock) };
       if(status.state === "in") wrap.append(badge, txt, lb, ib, btn); else wrap.append(badge, txt, ib, btn);
       vEl.appendChild(wrap);
