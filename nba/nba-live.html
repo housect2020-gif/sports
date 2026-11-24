@@ -828,6 +828,7 @@ function ensureGameBlock(gid){
     const st = gameState[gid];
     if(st) st.k5Source = "manual";
     recalcGame(gid);
+    setTimeout(()=>{ const v = eg(gid, "verdict"); if(v) paintLineup(gid, v); }, 0);
   });
   eg(gid, "K5").addEventListener("change", ()=>{
     const st = gameState[gid];
@@ -838,6 +839,7 @@ function ensureGameBlock(gid){
     }
     if(st) st.k5Source = "select";
     recalcGame(gid);
+    setTimeout(()=>{ const v = eg(gid, "verdict"); if(v) paintLineup(gid, v); }, 0);
   });
   eg(gid, "J5").addEventListener("change", ()=>recalcGame(gid));
   eg(gid, "J3").addEventListener("change", ()=>recalcGame(gid));
@@ -1322,11 +1324,16 @@ function paintLineup(gid, vEl){
     const r = NL.lineupProjection(st.court, LB.P, x.A3, x.H3, x.scoreA, x.scoreH, x.period, x.mins == null ? 0 : x.mins);
     if(!r) txt = "Lineup projection: needs the player stats table (run the players update) and a game in progress.";
     else {
-      const f = r.final, gap = x.refTotal != null ? f - x.refTotal : null;
+      // Compare with the live number typed in K5 (select value + .5); fall back to the pre-game book if K5 is empty
+      const k5raw = eg(gid, "K5") ? eg(gid, "K5").value : "";
+      const k5v = k5raw === "" ? null : Number(k5raw) + 0.5;
+      const useK5 = k5v != null && k5v >= 100;
+      const refV = useK5 ? k5v : x.refTotal, refName = useK5 ? "K5" : "Book";
+      const f = r.final, gap = refV != null ? f - refV : null;
       const call = gap == null ? "" : (gap >= 3 ? "  →  OVER" : (gap <= -3 ? "  →  UNDER" : "  →  close to the line"));
       const side = t => `${t.abbr} +${t.add.toFixed(1)} (${t.starters}/5 starters, ${t.rate.toFixed(2)} pts/min)`;
       txt = `Lineup projection with the players on the floor now: ${side(r.a)} · ${side(r.h)} in the next ${r.remaining.toFixed(1)} min → final ≈ ${f.toFixed(1)} (now ${r.scoreNow})` +
-            (gap != null ? ` · Book ${x.refTotal} (${gap > 0 ? "+" : ""}${gap.toFixed(1)})${call}` : "") +
+            (gap != null ? ` · ${refName} ${refV} (${gap > 0 ? "+" : ""}${gap.toFixed(1)})${call}` : "") +
             (r.a.known < 5 || r.h.known < 5 ? "  ·  some players have too few games, team average used" : "");
     }
   }
