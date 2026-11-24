@@ -26,6 +26,16 @@
   .back-link:hover{color:#fff;}
   .page-wrap{max-width:1100px;margin:22px auto;padding:0 18px 40px;}
   .disclaimer{background:var(--live-soft);border:1px solid rgba(200,16,46,.25);color:var(--live);border-radius:var(--radius-sm);padding:10px 14px;font-size:12.5px;margin-bottom:20px;line-height:1.5;}
+  .st-card{padding:8px 10px;margin-bottom:12px;}
+  .st-card h2{font-size:12px;margin:0 0 4px;cursor:pointer;user-select:none;}
+  .st-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .st-grid table{width:100%;border-collapse:collapse;font-size:11px;line-height:1.25;}
+  .st-grid th{font-size:9.5px;color:var(--sub);text-align:left;padding:0 3px 1px;border-bottom:1px solid var(--grid-strong);text-transform:uppercase;}
+  .st-grid td{padding:0 3px;font-family:var(--font-mono);white-space:nowrap;}
+  .st-grid td.tm{font-weight:700;font-family:var(--font-ui);}
+  .st-grid td.hot{color:#0a7d3b;font-weight:700;} .st-grid td.cold{color:#c8102e;font-weight:700;}
+  .st-grid tr:nth-child(even) td{background:var(--colhead-bg);}
+  .st-note{font-size:10px;color:var(--sub);margin-top:3px;}
   .card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);border:1px solid var(--grid-strong);padding:20px;margin-bottom:20px;}
   .card h2{font-size:14px;margin:0 0 14px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.4px;}
   .status-line{font-size:13px;color:var(--sub);margin-bottom:14px;}
@@ -181,6 +191,11 @@
       <div class="hint">Tick the games to build from (at least the fewest legs you chose).</div>
       <div class="game-checks" id="gameChecks"></div>
     </div>
+  </div>
+
+  <div class="card st-card" id="standingsCard">
+    <h2 id="stToggle">Standings &amp; last 10 <span id="stArrow">▾</span></h2>
+    <div id="stBody"><div class="st-grid" id="stGrid"><div class="st-note">Loading…</div></div><div class="st-note" id="stNote"></div></div>
   </div>
 
   <div class="card">
@@ -858,6 +873,54 @@ document.getElementById('downloadPdfBtn').addEventListener('click', downloadPdf)
   document.getElementById('versionLine').textContent = `version: ${d.getFullYear()}_${months[d.getMonth()]}_${String(d.getDate()).padStart(2,'0')} ${d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}`;
 })();
 init();
+
+// ---------- compact standings box (East / West, record and last 10) ----------
+(function(){
+  const URL_ = 'https://site.api.espn.com/apis/v2/sports/basketball/nba/standings';
+  const KEY = 'nba_st_box_v1';
+  const tg = document.getElementById('stToggle'), body = document.getElementById('stBody'), arrow = document.getElementById('stArrow');
+  try{ if(localStorage.getItem('nba_st_box_open') === '0'){ body.style.display = 'none'; arrow.textContent = '▸'; } }catch(e){}
+  tg.onclick = () => { const hide = body.style.display !== 'none'; body.style.display = hide ? 'none' : ''; arrow.textContent = hide ? '▸' : '▾'; try{ localStorage.setItem('nba_st_box_open', hide ? '0' : '1'); }catch(e){} };
+  const stat = (e, n) => { const x = (e.stats || []).find(s => s.name === n); return x ? (x.displayValue != null ? x.displayValue : x.value) : null; };
+  function render(d, when){
+    const grid = document.getElementById('stGrid');
+    grid.innerHTML = d.map(c => {
+      const rows = c.rows.map((r, i) => {
+        const w = Number((r.l10 || '').split('-')[0]);
+        const cls = r.l10 ? (w >= 7 ? 'hot' : (w <= 3 ? 'cold' : '')) : '';
+        return `<tr><td>${i + 1}</td><td class="tm">${r.t}</td><td>${r.rec}</td><td class="${cls}">${r.l10 || '–'}</td><td>${r.strk || ''}</td></tr>`;
+      }).join('');
+      return `<div><table><thead><tr><th colspan="2">${c.name}</th><th>W-L</th><th>L10</th><th>Strk</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    }).join('');
+    document.getElementById('stNote').textContent = 'ESPN standings' + (when ? ' · updated ' + new Date(when).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '') + ' · L10 green = 7+ wins, red = 3 or fewer';
+  }
+  function parse(json){
+    return (json.children || []).map(c => {
+      const rows = ((c.standings && c.standings.entries) || []).map(e => ({
+        t: abbr3(e.team.abbreviation), rec: stat(e, 'overall') || (stat(e, 'wins') + '-' + stat(e, 'losses')),
+        l10: stat(e, 'Last Ten Games'), strk: stat(e, 'streak'),
+        pct: parseFloat(stat(e, 'winPercent')) || 0, diff: parseFloat(stat(e, 'pointDifferential')) || 0
+      })).sort((a, b) => b.pct - a.pct || b.diff - a.diff);
+      return { name: /east/i.test(c.name || '') ? 'East' : 'West', rows };
+    }).sort((a, b) => a.name === 'East' ? -1 : 1);
+  }
+  (async function(){
+    try{ const c = JSON.parse(localStorage.getItem(KEY) || 'null'); if(c && c.d){ render(c.d, c.t); if(Date.now() - c.t < 10 * 60 * 1000) return; } }catch(e){}
+    for(const wrap of PROXIES){
+      try{
+        const res = await fetch(wrap(URL_ + '?_=' + Date.now()), { cache: 'no-store' });
+        if(!res.ok) continue;
+        const d = parse(await res.json());
+        if(!d.length || !d[0].rows.length) continue;
+        render(d, Date.now());
+        try{ localStorage.setItem(KEY, JSON.stringify({ t: Date.now(), d })); }catch(e){}
+        return;
+      }catch(e){}
+    }
+    if(!document.querySelector('#stGrid table')) document.getElementById('stGrid').innerHTML = '<div class="st-note">Standings are not available right now.</div>';
+  })();
+})();
+
 </script>
 </body>
 </html>
