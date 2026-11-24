@@ -115,6 +115,15 @@ function typeOf(P, a, b){
   return hi + lo;
 }
 
+const TIERWORD = { G:'Good', M:'Mid', B:'Bad' };
+// Display label in game order: away team's tier first, then home team's ("Mid vs Good" for MID @ GOOD)
+function typeLabel(P, away, home, type){
+  const ta = P && P[away] && P[away].tier, tb = P && P[home] && P[home].tier;
+  const w = t => TIERWORD[String(t).charAt(0).toUpperCase()];
+  if(w(ta) && w(tb)) return w(ta) + ' vs ' + w(tb);
+  return type ? TYPE_NAMES[type] : null;
+}
+
 function buildTypeStats(P, games){
   const S = {};
   TYPE_ORDER.forEach(k => S[k] = { n:0, tot:0, f3:0, q4:0, strongQ4:0, weakQ4:0, strongN:0, margin:0 });
@@ -328,5 +337,5 @@ async function load(force){
   })();
   return PENDING;
 }
-window.NBALab = { courtFromSummary, lineupProjection, load, project, typeOf, rulePick, verdict, loadInjuries, loadPlayers, injSnapshot, injWarn, injWarnText, coreOut, injText, parseDay, getJson, f1, TYPE_NAMES, TYPE_ORDER, BASE, sportsDay, ymd, abbr3 };
+window.NBALab = { courtFromSummary, lineupProjection, load, project, typeOf, typeLabel, rulePick, verdict, loadInjuries, loadPlayers, injSnapshot, injWarn, injWarnText, coreOut, injText, parseDay, getJson, f1, TYPE_NAMES, TYPE_ORDER, BASE, sportsDay, ymd, abbr3 };
 })();

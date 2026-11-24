@@ -1577,7 +1577,7 @@ function applyGameData(gid, away, home, status, overUnder, seasonType, gameDateI
         rulePk ? `Rule: ${rulePk}` : "Rule: no pick",
         proj != null ? `Model ${proj.toFixed(1)}` : "Model: loading…",
         refTotal != null ? `Book ${refTotal}${gapTxt}` : "Book: no line yet",
-        type ? NL.TYPE_NAMES[type] : null,
+        type ? (NL.typeLabel(window.__lab.P, A3, H3, type)) : null,
         warn ? NL.injWarnText(snap, A3, H3) : null
       ].filter(Boolean).join("  ·  ") + (v.code === "SKIP" ? "  ·  mixed signals" : "");
       if(warn) txt.style.color = "#8a4b00";
