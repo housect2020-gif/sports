@@ -337,5 +337,5 @@ async function load(force){
   })();
   return PENDING;
 }
-window.NBALab = { courtFromSummary, lineupProjection, load, project, typeOf, typeLabel, rulePick, verdict, loadInjuries, loadPlayers, injSnapshot, injWarn, injWarnText, coreOut, injText, parseDay, getJson, f1, TYPE_NAMES, TYPE_ORDER, BASE, sportsDay, ymd, abbr3 };
+window.NBALab = { loadSeason, buildProfiles, assignTiers, buildTypeStats, courtFromSummary, lineupProjection, load, project, typeOf, typeLabel, rulePick, verdict, loadInjuries, loadPlayers, injSnapshot, injWarn, injWarnText, coreOut, injText, parseDay, getJson, f1, TYPE_NAMES, TYPE_ORDER, BASE, sportsDay, ymd, abbr3 };
 })();
