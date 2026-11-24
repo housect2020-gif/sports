@@ -55,6 +55,7 @@
     <label>Team <input type="text" id="team" placeholder="e.g. BOS" size="6"></label>
     <label class="chk"><input type="checkbox" id="showPre"> Include preseason</label>
     <label class="chk"><input type="checkbox" id="showPo" checked> Include playoffs</label>
+    <label class="chk"><input type="checkbox" id="useBT" checked> Rebuild the model for older games</label>
     <button id="csv">Export CSV</button>
   </div>
   <div class="cards" id="cards"></div>
@@ -77,6 +78,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="cloud.js"></script>
 <script src="sites.js"></script>
+<script src="nba/lab.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const ABBR3 = {NY:"NYK",GS:"GSW",NO:"NOP",SA:"SAS",UTAH:"UTA",WSH:"WAS"};
@@ -99,6 +101,29 @@ const cls = r => r === "Over" ? "over" : (r === "Under" ? "under" : "push");
 const f1 = v => v == null ? "–" : Number(v).toFixed(1);
 
 let EDITS = {};
+// Walk-forward backtest: for games where the live sheet did not save a model total, rebuild it from the games played BEFORE that day.
+let BT = {}, BTDONE = false, BTBUSY = false;
+async function buildBacktest(){
+  if(BTBUSY || BTDONE || !window.NBALab || $("league").value !== "NBA") return;
+  BTBUSY = true;
+  try{
+    const L = window.NBALab, season = await L.loadSeason(), games = season.games;
+    const dates = [...new Set(ROWS.map(g => g.game_date))].sort();
+    dates.forEach(d => {
+      const prior = games.filter(g => g.date < d);
+      if(prior.length < 30) return;
+      const P = L.buildProfiles(prior); L.assignTiers(P, null);
+      const TS = L.buildTypeStats(P, prior);
+      ROWS.filter(g => g.game_date === d).forEach(g => {
+        const pr = L.project(P, TS, a3(g.away), a3(g.home));
+        if(pr) BT[g.game_id] = { total: pr.total, type: pr.type };
+      });
+    });
+    BTDONE = true;
+  }catch(e){ console.warn("backtest", e); }
+  BTBUSY = false;
+  render();
+}
 function myHistory(){
   let base = {};
   try{ base = JSON.parse(localStorage.getItem("nba_history_v1") || "{}"); }catch(e){}
@@ -144,6 +169,7 @@ async function load(){
   }catch(e){}
   ROWS = all.filter(g => g.final_away != null && g.final_home != null);
   render();
+  BTDONE = false; BT = {}; buildBacktest();
 }
 
 function render(){
@@ -179,13 +205,16 @@ function render(){
     const injTxt = inj ? `${a3(g.away)}: ${inj.a.out.map(nmI).join(", ") || "none"} | ${a3(g.home)}: ${inj.h.out.map(nmI).join(", ") || "none"}` : "";
     const c6 = m.court6 ? m.court6.teams.map(t => `${a3(t.a)} ${t.s}/5`).join(" · ") + (m.court6.m != null ? ` (margin ${m.court6.m})` : "") : "";
     const c6bench = m.court6 ? m.court6.teams.some(t => t.s <= 2) : false;
-    const mtype = g.lock_type || m.matchType || null;
-    const mproj = m.matchProj != null ? Number(m.matchProj) : null;
+    const mtype = g.lock_type || m.matchType || (BT[g.game_id] && $("useBT").checked ? BT[g.game_id].type : null) || null;
+    const useBT = $("useBT").checked && BT[g.game_id];
+    const mproj = m.matchProj != null ? Number(m.matchProj) : (useBT ? BT[g.game_id].total : null);
+    const mback = m.matchProj == null && !!useBT;
     const vref = lockTotal != null ? lockTotal : (g.pre_odds != null ? Number(g.pre_odds) : null);
-    const vrule = (lk && lk.pick) || g.rule_pick || null;
+    let vrule = (lk && lk.pick) || g.rule_pick || null;
+    if(!vrule && g.pre_favorite && Number(g.pre_spread) !== 0 && g.pre_spread != null){ vrule = (g.pre_favorite === g.home || a3(g.pre_favorite) === a3(g.home)) ? "Under" : "Over"; }
     const vd = verdictOf(vrule, mproj, vref);
     const vres = vref != null ? resultOf(total, vref) : "";
-    return { ...g, c6, c6bench, inj, injA, injH, injN, injTxt, mtype, mproj, vd, vres, vrule, lock_at: lk ? lk.at : null, lock_pick: lk ? lk.pick : null, lock_spread: lk ? lk.spread : null, lockSrc: lk ? lk.src : null, lockTotal, vsLock, lockMins, lockLate: !!(lk && lk.late),
+    return { ...g, mback, c6, c6bench, inj, injA, injH, injN, injTxt, mtype, mproj, vd, vres, vrule, lock_at: lk ? lk.at : null, lock_pick: lk ? lk.pick : null, lock_spread: lk ? lk.spread : null, lockSrc: lk ? lk.src : null, lockTotal, vsLock, lockMins, lockLate: !!(lk && lk.late),
              lockHit: (lk && lk.pick && vsLock && vsLock !== "Push") ? (lk.pick === vsLock ? "Y" : "N") : null, total, ruleHit: (g.rule_pick && resultOf(total, g.pre_odds) && resultOf(total, g.pre_odds) !== 'Push') ? (g.rule_pick === resultOf(total, g.pre_odds) ? 'Y' : 'N') : null,
              favSide: g.pre_favorite ? (g.pre_favorite === g.home || a3(g.pre_favorite) === a3(g.home) ? 'home' : 'road') : null, vsPre: resultOf(total, g.pre_odds), my5: m.odds5min, vs5: resultOf(total, m.odds5min),
              pPpm: m.pick5Ppm, pCons: m.pick5Cons, proj: m.projTotal5, j5p: m.j5Pre, j5pAuto: m.j5PreAuto, j5: m.j5At6, l4: m.l4At6, k5f: m.k5Final, j5f: m.j5Final, l4f: m.l4Final,
@@ -218,7 +247,7 @@ function render(){
     return `<tr><td class="l"><b>${name}</b></td><td>${rs.length}</td><td>${code === "BET" || code === "LEAN" ? vpct(pickH, pickD.length) : "–"}</td><td>${vpct(ruleH, ruleD.length)}</td><td>${vpct(modH, modD.length)}</td></tr>`;
   });
   $("verdictTable").innerHTML = VIEW.some(r => r.mproj != null)
-    ? `<table><thead><tr><th class="l">Verdict</th><th>Games</th><th>Pick right</th><th>Rule alone right</th><th>Model alone right</th></tr></thead><tbody>${vrows.join("")}</tbody></table><div style="color:#80868b;margin-top:6px">Break-even is about 52.4%. Verdicts need the model total, which the live sheet saves when it is open before tip-off, so only those games are counted. Wait for roughly 100 games before trusting any of these numbers.</div>`
+    ? `<table><thead><tr><th class="l">Verdict</th><th>Games</th><th>Pick right</th><th>Rule alone right</th><th>Model alone right</th></tr></thead><tbody>${vrows.join("")}</tbody></table><div style="color:#80868b;margin-top:6px">Break-even is about 52.4%. ${(() => { const b = VIEW.filter(r => r.mback).length, l = VIEW.filter(r => r.mproj != null && !r.mback).length; return `Model totals: ${l} saved live before tip-off` + (b ? `, ${b} rebuilt from the games played before each day (walk-forward, no peeking, but today's tier method)` : "") + "."; })()} Wait for roughly 100 games before trusting any of these numbers.</div>`
     : '<span style="color:#80868b">No verdicts yet. They appear for games where the live sheet was open before tip-off, once the matchup update is installed.</span>';
 
   const cnt = k => withLine.filter(r => r.vsPre === k).length;
@@ -323,7 +352,7 @@ function exportCsv(){
   a.click();
 }
 
-["from","to","team","showPre","showPo"].forEach(id => $(id).addEventListener("input", render));
+["from","to","team","showPre","showPo","useBT"].forEach(id => $(id).addEventListener("input", render));
 $("league").addEventListener("change", load);
 $("csv").addEventListener("click", exportCsv);
 window.addEventListener("cloud-keys", () => { if(ROWS.length) render(); });
