@@ -436,6 +436,8 @@
       </table>
     </div>
     <div class="hist-actions">
+      <button class="refresh" id="histFillBtn" title="Looks at every finished game this season and fills in the book total, Rule pick and model total where ESPN still has them">Fill in older games</button>
+      <span id="histFillMsg" style="font-size:12px;color:#5f6368;margin:0 6px"></span>
       <button class="refresh" id="histExportBtn">Export CSV</button>
       <button class="refresh" id="histClearBtn">Clear history</button>
       <span class="hist-note">Saved in this browser only. Games are recorded only while this page is open (pre-game line, your Q4 6:00 odds, projections at 6:00, final total). Clearing your browser's site data erases it.</span>
@@ -659,12 +661,14 @@ function renderHistory(){
 // ---------- History backfill: games that finished while this page was closed ----------
 // For the last few days, fills in the final score, the book total, the Rule pick and the model total for any game
 // that has no final score in your history yet, so the Rule/Model/book results are kept even for games you did not play.
-async function backfillHistory(){
-  if(window.__bfRunning) return; window.__bfRunning = true;
+async function backfillHistory(maxBack, onMsg){
+  maxBack = maxBack || 4;
+  const stats = { days: 0, games: 0, rules: 0, books: 0, finals: 0, models: 0 };
+  if(window.__bfRunning) return stats; window.__bfRunning = true;
   try{
     const NL = window.NBALab;
     const base = new Date(Date.now() - 4*3600*1000);
-    for(let back = 1; back <= 4; back++){
+    for(let back = 1; back <= maxBack; back++){
       const d = new Date(base.getTime() - back*86400000);
       const ds = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(d).replaceAll("-", "");
       const target = `${SCOREBOARD_URL}?dates=${ds}`;
@@ -673,6 +677,7 @@ async function backfillHistory(){
         try{ const res = await fetch(wrap(target + "&_=" + Date.now()), { cache: "no-store" }); if(!res.ok) continue; events = (await res.json()).events || []; break; }catch(e){}
       }
       if(!events) continue;
+      stats.days++; if(onMsg) onMsg(`Checking ${ds} (${back} of ${maxBack} days back)…`);
       const done = events.filter(ev => { const c = ev.competitions && ev.competitions[0]; return c && c.status && c.status.type && c.status.type.state === "post"; });
       if(!done.length) continue;
       const h = loadHistory();
@@ -688,19 +693,20 @@ async function backfillHistory(){
         const fa = sum(g.away), fh = sum(g.home);
         const lk = locks[ev.id];
         const patch = { date: etDate(g.date), start: g.date, away: g.away.name, home: g.home.name, seasonType: g.seasonType || cur.seasonType || null };
-        if(cur.finalTotal == null && fa + fh > 0){ patch.finalAway = fa; patch.finalHome = fh; patch.finalTotal = fa + fh; }
+        stats.games++;
+        if(cur.finalTotal == null && fa + fh > 0){ patch.finalAway = fa; patch.finalHome = fh; patch.finalTotal = fa + fh; stats.finals++; }
         if(cur.preOdds == null){
           const po = pre[ev.id] != null ? pre[ev.id] : (lk && lk.total != null ? lk.total : g.overUnder);
-          if(typeof po === "number") patch.preOdds = po;
+          if(typeof po === "number"){ patch.preOdds = po; stats.books++; }
         }
         if(cur.rulePick == null){
-          if(g.rule){ patch.ruleFav = g.rule.fav; patch.ruleSpread = g.rule.spread; patch.ruleSide = g.rule.side; patch.rulePick = g.rule.pick; }
-          else if(lk && lk.pick){ patch.rulePick = lk.pick; }
+          if(g.rule){ patch.ruleFav = g.rule.fav; patch.ruleSpread = g.rule.spread; patch.ruleSide = g.rule.side; patch.rulePick = g.rule.pick; stats.rules++; }
+          else if(lk && lk.pick){ patch.rulePick = lk.pick; stats.rules++; }
         }
         if(cur.matchProj == null && NL && window.__lab){
           try{
             const pr = NL.project(window.__lab.P, window.__lab.TS, g.away.name, g.home.name);
-            if(pr){ patch.matchProj = pr.total; patch.matchType = pr.type; patch.matchBackfill = true; }
+            if(pr){ patch.matchProj = pr.total; patch.matchType = pr.type; patch.matchBackfill = true; stats.models++; }
           }catch(e){}
         }
         updateHistory(gid, patch);
@@ -708,6 +714,7 @@ async function backfillHistory(){
     }
   }catch(e){ console.warn("history backfill", e); }
   window.__bfRunning = false;
+  return stats;
 }
 function exportHistoryCsv(){
   const head = ["Date","Away","Home","Type","PreGameOU","YourOddsAtQ4_5min","FinalAway","FinalHome","FinalTotal","FinalVsPre","RulePick","ModelProj","FinalVs5min","PickAt5_PPM","PickAt5_Consensus","ProjAway","ProjHome","ProjTotal"];
@@ -2410,6 +2417,16 @@ $("downloadPdfBtn").addEventListener("click", ()=> window.print());
   if(el) el.textContent = `version: ${stamp}`;
 })();
 
+document.getElementById("histFillBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("histFillBtn"), msg = document.getElementById("histFillMsg");
+  btn.disabled = true; msg.textContent = "Working…";
+  const days = Math.max(1, Math.round((Date.now() - new Date("2026-10-21T00:00:00").getTime()) / 86400000));
+  try{
+    const r = await backfillHistory(days, t => { msg.textContent = t; });
+    msg.textContent = `Done: ${r.days} days read, ${r.games} games checked · added ${r.finals} final scores, ${r.books} book totals, ${r.rules} Rule picks, ${r.models} model totals.`;
+  }catch(e){ msg.textContent = "Stopped: " + (e.message || e); }
+  btn.disabled = false;
+});
 document.getElementById("histExportBtn").addEventListener("click", exportHistoryCsv);
 document.getElementById("histClearBtn").addEventListener("click", () => {
   if(confirm("Delete the saved odds & projection history from this browser?")){
