@@ -2666,6 +2666,23 @@ function updateL5(tr){
   l.classList.remove("grand-total", "pred-total"); l.classList.add(win ? "grand-total" : "pred-total");
 }
 function enableArchiveCells(root){
+  // A saved day is plain HTML, so the Details / Hide buttons have no code behind them. Wire them here and
+  // open every game (a game saved while its rows were collapsed would otherwise stay hidden).
+  root.querySelectorAll("tr.verdict-row").forEach(vr => {
+    const td = vr.querySelector("td:last-child"); if(!td) return;
+    const gid = vr.dataset.gid || (vr.nextElementSibling && vr.nextElementSibling.dataset.gid) || (vr.previousElementSibling && vr.previousElementSibling.dataset.gid);
+    if(!gid) return;
+    const trs = Array.from(root.querySelectorAll(`tr[data-gid="${gid}"]`));
+    const body = trs.slice(2).filter(tr => !tr.classList.contains("entry-row") && !tr.classList.contains("spacer-row"));
+    body.forEach(tr => { tr.style.display = ""; });
+    td.querySelectorAll("button").forEach(b => {
+      const t = b.textContent;
+      if(t.startsWith("Details") || t.startsWith("Hide")){
+        b.textContent = "Hide ▴";
+        b.onclick = () => { const open = b.textContent.startsWith("Hide"); body.forEach(tr => { tr.style.display = open ? "none" : ""; }); b.textContent = open ? "Details ▾" : "Hide ▴"; };
+      } else { b.remove(); }   // Injuries / Lineup only work on the live sheet
+    });
+  });
   root.querySelectorAll('[data-sid$="-K5manual"]').forEach(el => { el.disabled = false; el.classList.add("arch-k5"); });
   root.querySelectorAll('[data-sid$="-J5"]').forEach(el => { el.disabled = false; el.classList.add("arch-j5"); });
   // show your corrected values in the sheet cells
@@ -2829,19 +2846,17 @@ setTimeout(backfillHistory, 25000);
   setTimeout(go, 3000); setInterval(go, 10 * 60 * 1000);
 })();
 
-// Expand / collapse the Details of every game at once.
+// Expand / collapse the Details of every game at once (works on the live sheet and on a saved day).
 (function(){
   const b = document.getElementById("expandAllBtn"); if(!b) return;
-  let expanded = false;
+  const btns = () => Array.from(document.querySelectorAll(".verdict-row button")).filter(x => x.offsetParent !== null && /^(Details|Hide)/.test(x.textContent));
+  const label = () => { const any = btns().some(x => x.textContent.startsWith("Details")); b.textContent = any ? "Expand all" : "Collapse all"; };
   b.onclick = () => {
-    expanded = !expanded;
-    document.querySelectorAll(".verdict-row button").forEach(x => {
-      const t = x.textContent;
-      if(expanded && t.startsWith("Details")) x.click();
-      if(!expanded && t.startsWith("Hide")) x.click();
-    });
-    b.textContent = expanded ? "Collapse all" : "Expand all";
+    const expand = btns().some(x => x.textContent.startsWith("Details"));
+    btns().forEach(x => { const t = x.textContent; if(expand && t.startsWith("Details")) x.click(); else if(!expand && t.startsWith("Hide")) x.click(); });
+    setTimeout(label, 50);
   };
+  setInterval(label, 1500);
 })();
 </script>
 </body>
